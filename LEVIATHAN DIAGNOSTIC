@@ -87,7 +87,12 @@ local EventOrder = {"Piranha", "Shark", "Terrorshark", "SeaBeast", "PirateBrigad
 local function NameMatches(name, aliases)
     local lowered = string.lower(name)
     for _, alias in ipairs(aliases) do
-        if string.find(lowered, alias, 1, true) then return true end
+        if alias == "shark"
+        and string.find(lowered, "terror", 1, true) then
+            -- Terrorshark nao deve aparecer duplicado como Shark.
+        elseif string.find(lowered, alias, 1, true) then
+            return true
+        end
     end
     return false
 end
