@@ -452,6 +452,48 @@ do
     end)
 end
 
+-- Seleciona Marines em uma task separada. A interface já foi criada e esta
+-- rotina nunca bloqueia a inicialização enquanto aguarda a tela Pick a Side.
+do
+    task.spawn(function()
+        local deadline = os.clock() + 30
+
+        while os.clock() < deadline do
+            local team = LocalPlayer.Team
+            if team and string.find(string.lower(team.Name), "marine", 1, true) then
+                break
+            end
+
+            pcall(function()
+                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                local comm = remotes and remotes:FindFirstChild("CommF_")
+                if comm then
+                    comm:InvokeServer("SetTeam", "Marines")
+                end
+            end)
+
+            pcall(function()
+                local mainGui = PlayerGui:FindFirstChild("Main")
+                local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam")
+                local container = chooseTeam and chooseTeam:FindFirstChild("Container")
+                local marines = container and container:FindFirstChild("Marines")
+                local button = marines and marines:FindFirstChild("TextButton", true)
+
+                if button then
+                    if type(firesignal) == "function" then
+                        firesignal(button.Activated)
+                        firesignal(button.MouseButton1Click)
+                    else
+                        button:Activate()
+                    end
+                end
+            end)
+
+            task.wait(0.5)
+        end
+    end)
+end
+
 local Pages = {}
 local TabButtons = {}
 
