@@ -1,7 +1,13 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+
+-- Alguns ambientes não expõem VirtualInputManager.
+-- Não deixamos isso impedir a interface de carregar.
+local VirtualInputManager = nil
+pcall(function()
+    VirtualInputManager = game:GetService("VirtualInputManager")
+end)
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -11,18 +17,31 @@ end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+print("IKARO Leviathan: bootstrap iniciado...")
+
 local Character
 local Humanoid
 local HRP
 
 local function SetupCharacter(char)
     Character = char
-    Humanoid = char:WaitForChild("Humanoid")
-    HRP = char:WaitForChild("HumanoidRootPart")
+
+    local ok, erro = pcall(function()
+        Humanoid = char:WaitForChild("Humanoid", 15)
+        HRP = char:WaitForChild("HumanoidRootPart", 15)
+    end)
+
+    if not ok then
+        warn("IKARO Leviathan: erro configurando personagem:", erro)
+    end
 end
 
 SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
-LocalPlayer.CharacterAdded:Connect(SetupCharacter)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.spawn(function()
+        SetupCharacter(char)
+    end)
+end)
 
 -- =========================================================
 -- ESTADO / CONFIGURAÇÕES
@@ -434,14 +453,34 @@ end
 -- =========================================================
 
 local function PressSkill(keyName, hold)
-    local key = Enum.KeyCode[keyName]
-    if not key then
-        return
+    if not VirtualInputManager then
+        warn("IKARO Leviathan: VirtualInputManager indisponível neste ambiente.")
+        return false
     end
 
-    VirtualInputManager:SendKeyEvent(true, key, false, game)
-    task.wait(hold or 0.1)
-    VirtualInputManager:SendKeyEvent(false, key, false, game)
+    local key = nil
+
+    pcall(function()
+        key = Enum.KeyCode[keyName]
+    end)
+
+    if not key then
+        warn("IKARO Leviathan: tecla inválida:", keyName)
+        return false
+    end
+
+    local ok, erro = pcall(function()
+        VirtualInputManager:SendKeyEvent(true, key, false, game)
+        task.wait(hold or 0.1)
+        VirtualInputManager:SendKeyEvent(false, key, false, game)
+    end)
+
+    if not ok then
+        warn("IKARO Leviathan: erro ao enviar skill:", erro)
+        return false
+    end
+
+    return true
 end
 
 local function EquipCategory(category)
@@ -699,6 +738,6 @@ end)
 -- =========================================================
 
 ShowPage("Hunt")
-SetState("IDLE", "Configure Owner / Account Buy Boat e teste o detector.")
+SetState("IDLE", "Interface carregada. VirtualInputManager: " .. (VirtualInputManager and "OK" or "INDISPONÍVEL"))
 
 print("IKARO Leviathan Test Build carregado.")
