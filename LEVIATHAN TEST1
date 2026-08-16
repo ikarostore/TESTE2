@@ -2345,7 +2345,11 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             end
         end
 
-        local height = useBasicClick and 18 or 48
+        -- Sea Beast é muito alto e recebe dano por skills; manter grande
+        -- altitude evita contato com a água sem sair do alcance das skills.
+        local height = eventKey == "SeaBeast" and 260
+            or useBasicClick and 18
+            or 48
         local desired = target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
@@ -2458,12 +2462,17 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
     local started = os.clock()
     local okCombat, combatError = pcall(function()
-        while Running and IsEventAlive(eventModel) and os.clock() - started < 180 do
+        while Running
+        and SeaHuntState.CurrentEvent == eventModel
+        and IsEventAlive(eventModel)
+        and os.clock() - started < 180 do
             target = GetModelTargetPart(eventModel)
             if not target then break end
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
-            local attackRange = useBasicClick and 115 or 140
+            local attackRange = eventKey == "SeaBeast" and 340
+                or useBasicClick and 115
+                or 140
 
             if distance <= attackRange then
                 AimAtSeaTarget(target)
@@ -2534,9 +2543,9 @@ local function GetBeastHunterHarpoonSeat()
     return harpoon and harpoon:FindFirstChild("Seat")
 end
 
-local function BuyBeastHunter()
+local function BuyBeastHunter(forcePurchase)
     local existing = GetBeastHunter()
-    if existing then return true, existing end
+    if existing and not forcePurchase then return true, existing end
 
     local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
     local comm = remotes and remotes:FindFirstChild("CommF_")
@@ -2550,11 +2559,15 @@ local function BuyBeastHunter()
 
     if not ok then return false, tostring(result) end
 
-    local deadline = os.clock() + 8
+    local deadline = os.clock() + 10
     repeat
         task.wait(0.2)
-        existing = GetBeastHunter()
-    until existing or os.clock() >= deadline
+        local current = GetBeastHunter()
+        if current and (not forcePurchase or current ~= existing) then
+            existing = current
+            break
+        end
+    until os.clock() >= deadline
 
     if existing then return true, existing end
     return false, "A chamada ocorreu, mas o barco não apareceu."
@@ -3168,6 +3181,7 @@ end
 -- =========================================================
 
 local HuntThread = nil
+local RecoveryState = nil
 
 local function StopHunt()
     Running = false
@@ -3216,6 +3230,11 @@ local function StartHunt()
 
     HuntThread = task.spawn(function()
         while Running do
+            if RecoveryState and RecoveryState.Resetting then
+                task.wait(0.25)
+                continue
+            end
+
             -- Só eventos marcados entram aqui. Eventos desmarcados são
             -- ignorados e não interrompem barco/follow.
             local eventKey, eventModel = FindSelectedSeaEvent()
@@ -3241,6 +3260,10 @@ local function StartHunt()
                         if not okCombat then
                             SeaHuntState.CurrentEvent = nil
                             SetState("SEA_EVENT_COMBAT_ERROR", tostring(combatError))
+                        end
+
+                        if RecoveryState and RecoveryState.Resetting then
+                            return
                         end
 
                         -- depois de eventos, tenta atualizar o status do Spy.
@@ -3277,6 +3300,175 @@ local function StartHunt()
         end
     end)
 end
+
+-- =========================================================
+-- GROUP / BOAT RECOVERY
+-- =========================================================
+
+RecoveryState = {
+    Resetting = false,
+    SeenBoat = false,
+    KnownBoat = nil,
+    MissingSince = nil,
+    LastDeadOwnerCharacter = nil
+}
+
+local RecoveryDeathConnection = nil
+
+local function BindRecoveryDeath(humanoid)
+    if RecoveryDeathConnection then
+        RecoveryDeathConnection:Disconnect()
+        RecoveryDeathConnection = nil
+    end
+
+    if not humanoid then return end
+
+    RecoveryDeathConnection = humanoid.Died:Connect(function()
+        if Running then
+            RecoveryState.Resetting = true
+            RecoveryState.SeenBoat = false
+            RecoveryState.KnownBoat = nil
+            RecoveryState.MissingSince = nil
+            SeaHuntState.CurrentEvent = nil
+            StopBoatDrive(true)
+            StopFollow()
+            SetState("MAIN_CHARACTER_DIED", "Aguardando respawn para reconstruir o grupo.")
+        end
+    end)
+end
+
+local function ResetLocalForBoatRecovery(reason)
+    if not Running or RecoveryState.Resetting then return end
+
+    RecoveryState.Resetting = true
+    RecoveryState.SeenBoat = false
+    RecoveryState.KnownBoat = nil
+    RecoveryState.MissingSince = nil
+    SeaHuntState.CurrentEvent = nil
+
+    StopBoatDrive(true)
+    StopFollow()
+    SetState("GROUP_RESET", reason)
+
+    local currentCharacter = Character
+    local currentHumanoid = Humanoid
+
+    task.spawn(function()
+        task.wait(0.10)
+        if currentHumanoid and currentHumanoid.Parent then
+            pcall(function() currentHumanoid.Health = 0 end)
+        end
+        task.wait(0.10)
+        if currentCharacter and currentCharacter.Parent then
+            pcall(function() currentCharacter:BreakJoints() end)
+        end
+    end)
+end
+
+local function ResumeRoleAfterRespawn()
+    task.wait(1.5)
+    BindRecoveryDeath(Humanoid)
+
+    if not Running then
+        RecoveryState.Resetting = false
+        return
+    end
+
+    SeaHuntState.CurrentEvent = nil
+
+    if AccountBuyBoat then
+        SetState("REBUYING_BEAST_HUNTER", "Comprando Beast Hunter após respawn.")
+
+        local okBuy, boatOrError = BuyBeastHunter(true)
+        if not okBuy then
+            RecoveryState.Resetting = false
+            SetState("REBUY_BOAT_ERROR", tostring(boatOrError))
+            return
+        end
+
+        RecoveryState.KnownBoat = boatOrError
+        RecoveryState.SeenBoat = true
+
+        local okSeat, seatOrError = GoToBeastHunterSeat()
+        RecoveryState.Resetting = false
+
+        if okSeat then
+            SetState("BOAT_RECOVERED", "Novo Beast Hunter pronto. Retomando Sea 6.")
+            StartBoatDrive()
+        else
+            SetState("RECOVERY_SEAT_ERROR", tostring(seatOrError))
+        end
+    else
+        RecoveryState.Resetting = false
+        SetState("FOLLOWER_RECOVERED", "Aguardando o novo Beast Hunter do owner.")
+        StartFollowBeastHunter()
+    end
+end
+
+BindRecoveryDeath(Humanoid)
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.spawn(ResumeRoleAfterRespawn)
+end)
+
+task.spawn(function()
+    while Gui and Gui.Parent do
+        if Running then
+            -- Se a instância que já acompanhávamos foi destruída, o reset é
+            -- imediato inclusive durante Sea Event.
+            if RecoveryState.SeenBoat
+            and RecoveryState.KnownBoat
+            and not RecoveryState.KnownBoat.Parent
+            and not RecoveryState.Resetting then
+                ResetLocalForBoatRecovery("Beast Hunter destruído durante a caçada.")
+            end
+
+            -- A morte do owner reseta seguidores mesmo durante um combate.
+            if not AccountBuyBoat and OwnerPlayer then
+                local ownerCharacter = OwnerPlayer.Character
+                local ownerHumanoid = ownerCharacter and ownerCharacter:FindFirstChildOfClass("Humanoid")
+
+                if ownerCharacter
+                and ownerHumanoid
+                and ownerHumanoid.Health <= 0
+                and RecoveryState.LastDeadOwnerCharacter ~= ownerCharacter then
+                    RecoveryState.LastDeadOwnerCharacter = ownerCharacter
+                    ResetLocalForBoatRecovery("Owner do Beast Hunter morreu.")
+                end
+            end
+
+            -- Durante Sea Event, sair do barco é esperado; só monitoramos
+            -- destruição/desaparecimento fora do combate.
+            if not SeaHuntState.CurrentEvent then
+                local visibleBoat
+
+                if AccountBuyBoat then
+                    visibleBoat = GetBeastHunter()
+                else
+                    visibleBoat = GetOwnerBeastHunter()
+                    if not visibleBoat
+                    and RecoveryState.KnownBoat
+                    and RecoveryState.KnownBoat.Parent then
+                        visibleBoat = RecoveryState.KnownBoat
+                    end
+                end
+
+                if visibleBoat and visibleBoat.Parent then
+                    RecoveryState.KnownBoat = visibleBoat
+                    RecoveryState.SeenBoat = true
+                    RecoveryState.MissingSince = nil
+                elseif RecoveryState.SeenBoat and not RecoveryState.Resetting then
+                    RecoveryState.MissingSince = RecoveryState.MissingSince or os.clock()
+                    if os.clock() - RecoveryState.MissingSince >= 1.5 then
+                        ResetLocalForBoatRecovery("Beast Hunter destruído/desaparecido.")
+                    end
+                end
+            end
+        end
+
+        task.wait(0.25)
+    end
+end)
 
 ToggleRow(HuntPage, "Start Hunt Leviathan", false, function(v)
     if v then
