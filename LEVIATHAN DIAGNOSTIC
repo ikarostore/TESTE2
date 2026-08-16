@@ -266,16 +266,24 @@ while task.wait(1) do
     local tool = character and character:FindFirstChildOfClass("Tool")
     local hasBuso = character and character:FindFirstChild("HasBuso") ~= nil
     local controllerFound = false
+    local upvalueControllerFound = false
     pcall(function()
         local module = LocalPlayer.PlayerScripts:FindFirstChild("CombatFramework")
         local framework = module and require(module)
         controllerFound = type(framework) == "table" and framework.activeController ~= nil
+        local getUps = getupvalues or (debug and debug.getupvalues)
+        local ups = getUps and getUps(framework)
+        upvalueControllerFound = type(ups) == "table"
+            and type(ups[2]) == "table"
+            and ups[2].activeController ~= nil
     end)
 
     local lines = {
         "Personagem: " .. tostring(character ~= nil), "HP: " .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
         "Buso: " .. tostring(hasBuso), "Arma: " .. tostring(tool and tool.Name or "nenhuma"),
-        "CombatController: " .. tostring(controllerFound), "Auto Watcher: " .. tostring(autoWatcher)
+        "Controller direto: " .. tostring(controllerFound),
+        "Controller upvalue[2]: " .. tostring(upvalueControllerFound),
+        "Auto Watcher: " .. tostring(autoWatcher)
     }
     if root then
         for _, key in ipairs(EventOrder) do
