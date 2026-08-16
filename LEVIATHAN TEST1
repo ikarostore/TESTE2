@@ -350,6 +350,7 @@ Main.BackgroundColor3 = Color3.fromRGB(31, 31, 33)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
+Main.ClipsDescendants = true
 Main.Parent = Gui
 
 do
@@ -370,7 +371,7 @@ do
     corner.Parent = Top
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -20, 1, 0)
+    title.Size = UDim2.new(1, -58, 1, 0)
     title.Position = UDim2.new(0, 12, 0, 0)
     title.BackgroundTransparency = 1
     title.TextXAlignment = Enum.TextXAlignment.Left
@@ -405,6 +406,43 @@ do
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, 7)
     corner.Parent = PageHost
+end
+
+-- Escopo fechado para não consumir registradores permanentes no chunk.
+do
+    local button = Instance.new("TextButton")
+    button.Name = "MinimizeButton"
+    button.Size = UDim2.new(0, 30, 0, 26)
+    button.Position = UDim2.new(1, -36, 0, 6)
+    button.BackgroundColor3 = Color3.fromRGB(52, 52, 56)
+    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.fromRGB(235, 235, 235)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 18
+    button.Text = "-"
+    button.Parent = Top
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = button
+
+    local collapsed = false
+    local expandedSize = Main.Size
+
+    button.MouseButton1Click:Connect(function()
+        collapsed = not collapsed
+        Sidebar.Visible = not collapsed
+        PageHost.Visible = not collapsed
+        Main.Size = collapsed and UDim2.new(0, 500, 0, 38) or expandedSize
+        button.Text = collapsed and "+" or "-"
+    end)
+
+    game:GetService("UserInputService").InputBegan:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.LeftControl
+        or input.KeyCode == Enum.KeyCode.RightControl then
+            Gui.Enabled = not Gui.Enabled
+        end
+    end)
 end
 
 local Pages = {}
