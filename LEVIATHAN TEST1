@@ -1944,12 +1944,6 @@ local ClickSeaEvents = {
     Terrorshark = true
 }
 
-local ShipSeaEvents = {
-    PirateBrigade = true,
-    PirateGrandBrigade = true,
-    FishBoat = true
-}
-
 local function GetCombatFrameworkController()
     local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
     local module = playerScripts and playerScripts:FindFirstChild("CombatFramework")
@@ -2389,19 +2383,10 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
 
         -- Sea Beast é muito alto e recebe dano por skills; manter grande
         -- altitude evita contato com a água sem sair do alcance das skills.
-        local isShip = ShipSeaEvents[eventKey] == true
         local height = eventKey == "SeaBeast" and 260
-            or isShip and 105
             or useBasicClick and 8
             or 48
-
-        local horizontalOffset = Vector3.new(0, 0, useBasicClick and 3 or 0)
-        if isShip then
-            local backward = -target.CFrame.LookVector * 70
-            horizontalOffset = Vector3.new(backward.X, 0, backward.Z)
-        end
-
-        local desired = target.Position + Vector3.new(0, height, 0) + horizontalOffset
+        local desired = target.Position + Vector3.new(0, height, useBasicClick and 3 or 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
@@ -2493,7 +2478,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
             local attackRange = eventKey == "SeaBeast" and 340
-                or ShipSeaEvents[eventKey] and 260
                 or useBasicClick and 40
                 or 140
 
