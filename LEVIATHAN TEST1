@@ -1896,7 +1896,15 @@ end
 local ClickSeaEvents = {
     Shark = true,
     Piranha = true,
-    Terrorshark = true
+    Terrorshark = true,
+    FishCrewMember = true
+}
+
+local BringableSeaEvents = {
+    Shark = true,
+    Piranha = true,
+    Terrorshark = true,
+    FishCrewMember = true
 }
 
 local SeaVirtualUser = nil
@@ -2288,12 +2296,13 @@ local function EnsureSeaCombatHaki()
     end)
 end
 
-local function StartSeaEventFocus(eventModel, useBasicClick)
+local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     if not HRP or not Humanoid then return nil end
 
     local oldPlatformStand = Humanoid.PlatformStand
     local oldAutoRotate = Humanoid.AutoRotate
     local collisionCache = {}
+    local targetCollisionCache = {}
 
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
@@ -2355,6 +2364,32 @@ local function StartSeaEventFocus(eventModel, useBasicClick)
         if (lookPosition - HRP.Position).Magnitude > 0.01 then
             bodyGyro.CFrame = CFrame.lookAt(HRP.Position, lookPosition)
         end
+
+        -- Bring Mob é restrito a entidades vivas pequenas/bosses marítimos.
+        -- Ships e Leviathan nunca passam por esta rotina.
+        if BringableSeaEvents[eventKey]
+        and not target.Anchored
+        and (target.Position - HRP.Position).Magnitude <= 260 then
+            pcall(function()
+                if type(sethiddenproperty) == "function" then
+                    sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+                end
+
+                if targetCollisionCache[target] == nil then
+                    targetCollisionCache[target] = target.CanCollide
+                end
+                target.CanCollide = false
+                target.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                target.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+                local bringPosition =
+                    HRP.Position
+                    + HRP.CFrame.LookVector * 14
+                    - Vector3.new(0, useBasicClick and 16 or 28, 0)
+
+                target.CFrame = CFrame.lookAt(bringPosition, HRP.Position)
+            end)
+        end
     end)
 
     return function()
@@ -2368,6 +2403,13 @@ local function StartSeaEventFocus(eventModel, useBasicClick)
         end
 
         for part, oldValue in pairs(collisionCache) do
+            if part and part.Parent then
+                pcall(function() part.CanCollide = oldValue end)
+            end
+        end
+
+
+        for part, oldValue in pairs(targetCollisionCache) do
             if part and part.Parent then
                 pcall(function() part.CanCollide = oldValue end)
             end
@@ -2396,17 +2438,19 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
     local useBasicClick = ClickSeaEvents[eventKey] == true
 
-    SetState(
-        useBasicClick and "SEA_EVENT_AUTO_CLICK" or "SEA_EVENT_SKILLS",
-        SeaEventDisplayName(eventKey)
-    )
+    local combatState = useBasicClick and "SEA_EVENT_AUTO_CLICK" or "SEA_EVENT_SKILLS"
+    if BringableSeaEvents[eventKey] then
+        combatState = "SEA_EVENT_AUTO_CLICK_BRING"
+    end
+
+    SetState(combatState, SeaEventDisplayName(eventKey))
 
     -- Sea Event selecionado tem prioridade total sobre barco/follow.
     StopFollow()
     ForceExitBoatForCombat()
     EnsureSeaCombatHaki()
 
-    local stopFocus = StartSeaEventFocus(eventModel, useBasicClick)
+    local stopFocus = StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     if not stopFocus then
         SeaHuntState.CurrentEvent = nil
         error("Não foi possível iniciar o foco físico no Sea Event")
