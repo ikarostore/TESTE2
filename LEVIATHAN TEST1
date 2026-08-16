@@ -209,7 +209,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v2.9 SPY + SEA HUNT"
+AppTitle.Text = "IKARO Leviathan v3.0 FOLLOW BEAST HUNTER"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -1079,29 +1079,57 @@ end)
 UpdateSeaEventButtonText()
 
 -- =========================================================
--- FOLLOW OWNER - VOO REAL ATÉ O OWNER
+-- FOLLOW BEAST HUNTER
 --
--- IMPORTANTE:
--- Esta versão NÃO usa CFrame para "puxar" o seguidor até o owner.
--- Ela usa BodyVelocity para o personagem voar fisicamente em linha reta.
--- Isso reduz o efeito de rollback causado por teleporte/CFrame contínuo.
+-- Contas seguidoras NÃO seguem mais o personagem principal.
+-- Elas aguardam o Beast Hunter do Owner aparecer e então seguem o barco.
+--
+-- Identificação:
+-- 1) preferência para Beast Hunter cujo VehicleSeat esteja ocupado pelo Owner;
+-- 2) fallback: Beast Hunter mais próximo do Owner.
 -- =========================================================
 
 local FollowBodyVelocity = nil
 local FollowBodyGyro = nil
+local FollowParts = {}
+
+local function CacheFollowParts()
+    FollowParts = {}
+
+    if not Character then
+        return
+    end
+
+    for _, obj in ipairs(Character:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            table.insert(FollowParts, obj)
+
+            if savedCollisions[obj] == nil then
+                savedCollisions[obj] = obj.CanCollide
+            end
+        end
+    end
+end
+
+local function SetFollowNoclip()
+    for _, part in ipairs(FollowParts) do
+        if part and part.Parent then
+            part.CanCollide = false
+        end
+    end
+end
 
 local function RestoreFollowPhysics()
-    if Character then
-        for part, oldValue in pairs(savedCollisions) do
-            if part and part.Parent then
-                pcall(function()
-                    part.CanCollide = oldValue
-                end)
-            end
+    for part, oldValue in pairs(savedCollisions) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = oldValue
+            end)
         end
     end
 
     savedCollisions = {}
+    FollowParts = {}
 
     if FollowBodyVelocity then
         pcall(function()
@@ -1137,41 +1165,28 @@ local function ApplyFollowPhysics()
         return
     end
 
-    -- Noclip durante o voo.
-    for _, obj in ipairs(Character:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            if savedCollisions[obj] == nil then
-                savedCollisions[obj] = obj.CanCollide
-            end
-            obj.CanCollide = false
-        end
-    end
+    CacheFollowParts()
+    SetFollowNoclip()
 
     if Humanoid then
-        pcall(function()
-            Humanoid.PlatformStand = true
-            Humanoid.AutoRotate = false
-        end)
+        Humanoid.PlatformStand = true
+        Humanoid.AutoRotate = false
     end
 
-    if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
-        FollowBodyVelocity = Instance.new("BodyVelocity")
-        FollowBodyVelocity.Name = "IKAROFollowVelocity"
-        FollowBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-        FollowBodyVelocity.P = 9000
-        FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        FollowBodyVelocity.Parent = HRP
-    end
+    FollowBodyVelocity = Instance.new("BodyVelocity")
+    FollowBodyVelocity.Name = "IKAROFollowBoatVelocity"
+    FollowBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    FollowBodyVelocity.P = 11000
+    FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    FollowBodyVelocity.Parent = HRP
 
-    if not FollowBodyGyro or not FollowBodyGyro.Parent then
-        FollowBodyGyro = Instance.new("BodyGyro")
-        FollowBodyGyro.Name = "IKAROFollowGyro"
-        FollowBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-        FollowBodyGyro.P = 12000
-        FollowBodyGyro.D = 700
-        FollowBodyGyro.CFrame = HRP.CFrame
-        FollowBodyGyro.Parent = HRP
-    end
+    FollowBodyGyro = Instance.new("BodyGyro")
+    FollowBodyGyro.Name = "IKAROFollowBoatGyro"
+    FollowBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    FollowBodyGyro.P = 13000
+    FollowBodyGyro.D = 900
+    FollowBodyGyro.CFrame = HRP.CFrame
+    FollowBodyGyro.Parent = HRP
 end
 
 local function StopFollow()
@@ -1183,7 +1198,59 @@ local function StopFollow()
     RestoreFollowPhysics()
 end
 
-local function StartFollowOwner()
+local function GetBoatReferencePart(boat)
+    if not boat then
+        return nil
+    end
+
+    return boat:FindFirstChild("VehicleSeat")
+        or boat.PrimaryPart
+        or boat:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function GetOwnerBeastHunter()
+    if not OwnerPlayer then
+        return nil
+    end
+
+    local boats = workspace:FindFirstChild("Boats")
+    if not boats then
+        return nil
+    end
+
+    local ownerCharacter = OwnerPlayer.Character
+    local ownerHRP = ownerCharacter and ownerCharacter:FindFirstChild("HumanoidRootPart")
+
+    local nearestBoat = nil
+    local nearestDistance = math.huge
+
+    for _, boat in ipairs(boats:GetChildren()) do
+        if boat.Name == "Beast Hunter" then
+            local seat = boat:FindFirstChild("VehicleSeat")
+
+            -- Melhor caso: Owner está realmente dirigindo este Beast Hunter.
+            if seat and seat.Occupant and ownerCharacter and seat.Occupant.Parent == ownerCharacter then
+                return boat
+            end
+
+            -- Fallback: Beast Hunter mais próximo do Owner.
+            local ref = GetBoatReferencePart(boat)
+
+            if ref and ownerHRP then
+                local dist = (ref.Position - ownerHRP.Position).Magnitude
+
+                if dist < nearestDistance then
+                    nearestDistance = dist
+                    nearestBoat = boat
+                end
+            end
+        end
+    end
+
+    return nearestBoat
+end
+
+local function StartFollowBeastHunter()
     StopFollow()
 
     if not OwnerPlayer or OwnerPlayer == LocalPlayer then
@@ -1192,8 +1259,8 @@ local function StartFollowOwner()
 
     ApplyFollowPhysics()
 
-    local lastDistance = nil
-    local rollbackCount = 0
+    local nextNoclipRefresh = 0
+    local lastWaitingMessage = 0
 
     FollowConnection = RunService.Heartbeat:Connect(function()
         if not Running or EscapeActive then
@@ -1204,82 +1271,95 @@ local function StartFollowOwner()
             return
         end
 
-        local ownerChar = OwnerPlayer.Character
-        local ownerHRP = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
+        local boat = GetOwnerBeastHunter()
 
-        if not ownerHRP then
-            FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        -- IMPORTANTE:
+        -- enquanto o Owner ainda não comprou/spawnou o Beast Hunter,
+        -- a conta seguidora fica parada.
+        if not boat then
+            if FollowBodyVelocity then
+                FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+
+            if os.clock() - lastWaitingMessage > 2 then
+                lastWaitingMessage = os.clock()
+                SetState(
+                    "WAITING_BEAST_HUNTER",
+                    "Aguardando o Beast Hunter de " .. OwnerPlayer.Name
+                )
+            end
+
             return
         end
 
-        ApplyFollowPhysics()
+        local boatPart = GetBoatReferencePart(boat)
 
-        -- Ponto-alvo: um pouco atrás e acima do jogador principal.
+        if not boatPart then
+            if FollowBodyVelocity then
+                FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+            return
+        end
+
+        local now = os.clock()
+
+        if now >= nextNoclipRefresh then
+            SetFollowNoclip()
+            nextNoclipRefresh = now + 0.20
+        end
+
+        -- Fica atrás e acima do Beast Hunter.
+        -- Referência é o próprio barco, não o jogador principal.
         local target =
-            ownerHRP.Position
-            - ownerHRP.CFrame.LookVector * FollowBack
+            boatPart.Position
+            - boatPart.CFrame.LookVector * 18
             + Vector3.new(0, FollowHeight, 0)
 
         local delta = target - HRP.Position
         local distance = delta.Magnitude
 
-        if distance > 10 then
+        if distance > 9 then
             local direction = delta.Unit
-
-            -- Voo real com velocidade constante.
-            -- Sem teleporte, sem CFrame de posição.
             local dynamicSpeed = FollowSpeedNear
+
             if distance > 1000 then
                 dynamicSpeed = FollowSpeedFar
             elseif distance > 300 then
                 dynamicSpeed = FollowSpeedMid
             end
+
             FollowBodyVelocity.Velocity = direction * dynamicSpeed
 
-            -- Faz o corpo olhar para a direção do voo.
             FollowBodyGyro.CFrame = CFrame.new(
                 HRP.Position,
                 HRP.Position + direction
             )
         else
-            -- Quando chega perto, acompanha a velocidade do owner
-            -- sem ficar tentando corrigir a posição agressivamente.
-            local ownerVelocity = ownerHRP.AssemblyLinearVelocity
-            local correction = delta * 2.2
+            -- Ao chegar perto, acompanha a velocidade do próprio barco.
+            local boatVelocity = boatPart.AssemblyLinearVelocity
+            local correction = delta * 1.6
 
             FollowBodyVelocity.Velocity =
-                ownerVelocity + correction
+                boatVelocity + correction
 
             FollowBodyGyro.CFrame = CFrame.new(
                 HRP.Position,
-                HRP.Position + ownerHRP.CFrame.LookVector
+                HRP.Position + boatPart.CFrame.LookVector
             )
         end
 
-        -- Detector simples de rollback.
-        -- Se o servidor estiver devolvendo a conta repetidamente,
-        -- apenas reduz a velocidade; nunca teleporta.
-        if lastDistance then
-            if distance > lastDistance + 25 then
-                rollbackCount = rollbackCount + 1
-            else
-                rollbackCount = math.max(rollbackCount - 1, 0)
-            end
-
-            if rollbackCount >= 3 then
-                FollowSpeed = math.max(FollowSpeed * 0.75, 70)
-                rollbackCount = 0
-
-                SetState(
-                    "FOLLOW_OWNER",
-                    "Servidor corrigiu posição; reduzindo velocidade para " ..
-                    math.floor(FollowSpeed)
-                )
-            end
+        if State ~= "FOLLOW_BEAST_HUNTER" then
+            SetState(
+                "FOLLOW_BEAST_HUNTER",
+                "Seguindo o Beast Hunter de " .. OwnerPlayer.Name
+            )
         end
-
-        lastDistance = distance
     end)
+end
+
+-- Compatibilidade com chamadas antigas do script.
+local function StartFollowOwner()
+    StartFollowBeastHunter()
 end
 
 -- =========================================================
@@ -1334,7 +1414,7 @@ local function StopEscape()
     if Running and not AccountBuyBoat and OwnerPlayer then
         task.defer(function()
             if not EscapeActive and Running then
-                StartFollowOwner()
+                StartFollowBeastHunter()
             end
         end)
     end
@@ -2065,8 +2145,8 @@ local function StartHunt()
             end
         end)
     else
-        SetState("FOLLOW_OWNER", "Seguindo " .. OwnerPlayer.Name)
-        StartFollowOwner()
+        SetState("WAITING_BEAST_HUNTER", "Aguardando o Beast Hunter de " .. OwnerPlayer.Name)
+        StartFollowBeastHunter()
     end
 
     HuntThread = task.spawn(function()
@@ -2102,12 +2182,12 @@ local function StartHunt()
                                     StartBoatDrive()
                                 end
                             elseif Running and OwnerPlayer then
-                                StartFollowOwner()
+                                StartFollowBeastHunter()
                             end
                         end)
                     end
                 elseif not AccountBuyBoat and OwnerPlayer then
-                    SetState("FOLLOW_OWNER", "Acompanhando " .. OwnerPlayer.Name)
+                    SetState("FOLLOW_BEAST_HUNTER", "Acompanhando o Beast Hunter de " .. OwnerPlayer.Name)
                 elseif AccountBuyBoat then
                     SetState(
                         "SEARCHING_LEVIATHAN",
