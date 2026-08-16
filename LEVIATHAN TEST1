@@ -104,7 +104,7 @@ local SpyState = {
     CheckInterval = 8,
     LastCheck = 0,
     Visiting = false,
-    LastVisit = 0,
+    LastVisit = os.clock(),
     VisitCooldown = 35,
     LastEventKillCount = 0
 }
@@ -231,7 +231,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v3.2 BOAT NOCLIP + SPY VISIT"
+AppTitle.Text = "IKARO Leviathan v3.3 DRIVE FIX"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -1740,21 +1740,96 @@ local function NameMatchesAny(name, variants, key)
     return false
 end
 
+local function IsExcludedSeaEventModel(obj)
+    if not obj or not obj.Parent then
+        return true
+    end
+
+    local full = string.lower(obj:GetFullName())
+    local name = string.lower(obj.Name)
+
+    -- Nunca tratar NPCs utilitários / mapa / nosso próprio barco como inimigos.
+    if string.find(name, "hunter", 1, true)
+    or string.find(name, "dealer", 1, true)
+    or string.find(name, "spy", 1, true)
+    or string.find(full, "workspace.map", 1, true)
+    or string.find(full, "workspace.npcs", 1, true)
+    or string.find(full, "workspace.boats.beast hunter", 1, true)
+    or string.find(full, "players.", 1, true) then
+        return true
+    end
+
+    return false
+end
+
+local function IsLikelyCombatModel(obj)
+    if not obj or not obj:IsA("Model") or IsExcludedSeaEventModel(obj) then
+        return false
+    end
+
+    -- Sea Events normalmente possuem Humanoid, Health/HP ou ficam
+    -- em containers específicos de entidades.
+    if obj:FindFirstChildOfClass("Humanoid") then
+        return true
+    end
+
+    if obj:FindFirstChild("Health")
+    or obj:FindFirstChild("HP")
+    or obj:FindFirstChild("HumanoidRootPart") then
+        return true
+    end
+
+    local full = string.lower(obj:GetFullName())
+
+    if string.find(full, "workspace.enemies", 1, true)
+    or string.find(full, "workspace.seabeasts", 1, true)
+    or string.find(full, "workspace.sea", 1, true) then
+        return true
+    end
+
+    return false
+end
+
 local function FindSelectedSeaEvent()
+    -- Sea Beast tem container próprio conhecido.
     local seaBeasts = workspace:FindFirstChild("SeaBeasts")
+
     if seaBeasts and SeaEventsSelected.SeaBeast then
         for _, obj in ipairs(seaBeasts:GetChildren()) do
-            if NameMatchesAny(obj.Name, SeaEventNames.SeaBeast, "SeaBeast") then
+            if obj:IsA("Model")
+            and not IsExcludedSeaEventModel(obj)
+            and NameMatchesAny(obj.Name, SeaEventNames.SeaBeast, "SeaBeast") then
                 return "SeaBeast", obj
             end
         end
     end
 
+    -- Primeiro procura Workspace.Enemies, reduzindo falsos positivos.
+    local enemies = workspace:FindFirstChild("Enemies")
+
+    if enemies then
+        for _, obj in ipairs(enemies:GetChildren()) do
+            if obj:IsA("Model") and IsLikelyCombatModel(obj) then
+                for _, key in ipairs(SeaEventOrder) do
+                    if key ~= "SeaBeast" and SeaEventsSelected[key] then
+                        local variants = SeaEventNames[key]
+
+                        if variants and NameMatchesAny(obj.Name, variants, key) then
+                            return key, obj
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Fallback global, mas só para modelos com sinais de combate.
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
+        if obj:IsA("Model") and IsLikelyCombatModel(obj) then
             for _, key in ipairs(SeaEventOrder) do
                 if key ~= "SeaBeast" and SeaEventsSelected[key] then
                     local variants = SeaEventNames[key]
+
                     if variants and NameMatchesAny(obj.Name, variants, key) then
                         return key, obj
                     end
@@ -2348,6 +2423,12 @@ local function StopBoatDrive(restoreCollision)
     SeaHuntState.Driving = false
     DestroyBoatFlightPhysics()
 
+    if SeaVIM then
+        pcall(function()
+            SeaVIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+        end)
+    end
+
     if restoreCollision then
         RestoreBoatCollision()
     end
@@ -2434,7 +2515,23 @@ local function StartBoatDrive()
 
             BoatBodyVelocity.Velocity = wantedVelocity
 
-            -- reforço direto na assembly; não teleporta.
+            -- Mantém o comando normal do VehicleSeat ativo também.
+            -- Nas versões anteriores, W foi o método que o servidor aceitou
+            -- para mover o Beast Hunter, então ele fica como fallback.
+            if SeaVIM then
+                pcall(function()
+                    SeaVIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+                end)
+            end
+
+            local mainSeat = GetBeastHunterMainSeat()
+            if mainSeat then
+                pcall(function()
+                    mainSeat.Throttle = 1
+                end)
+            end
+
+            -- reforço físico; não usa CFrame de posição.
             pcall(function()
                 drivePart.AssemblyLinearVelocity = wantedVelocity
                 drivePart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -2573,6 +2670,24 @@ ToggleRow(HuntPage, "Start Hunt Leviathan", false, function(v)
     end
 end)
 
+SimpleButton(HuntPage, "Debug Boat / Sea Event", function()
+    local boat = GetBeastHunter()
+    local drivePart = GetBoatDrivePart()
+    local eventKey, eventModel = FindSelectedSeaEvent()
+
+    local msg =
+        "Boat=" .. tostring(boat and boat:GetFullName() or "nil")
+        .. " | DrivePart=" .. tostring(drivePart and drivePart:GetFullName() or "nil")
+        .. " | Driving=" .. tostring(SeaHuntState.Driving)
+        .. " | Event=" .. tostring(eventKey or "none")
+
+    if eventModel then
+        msg = msg .. " (" .. eventModel:GetFullName() .. ")"
+    end
+
+    SetState("DEBUG", msg)
+end)
+
 SimpleButton(HuntPage, "Scan Leviathan Now", function()
     local levi = FindLeviathan()
 
@@ -2709,8 +2824,10 @@ task.spawn(function()
                 shouldVisit = true
             end
 
-            -- ou periodicamente, caso o status ainda não tenha sido confirmado
-            if os.clock() - SpyState.LastVisit >= 90 then
+            -- Só faz visita periódica DEPOIS de já termos derrotado
+            -- pelo menos um Sea Event. Antes disso o Spy não pode ser pago.
+            if SeaHuntState.EventKills > 0
+            and os.clock() - SpyState.LastVisit >= 90 then
                 shouldVisit = true
             end
 
