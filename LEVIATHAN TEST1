@@ -52,22 +52,50 @@ local WATER_Y = 0
 local WATER_PLATFORM_SIZE = 500
 
 local SeaEventsSelected = {
-    SeaBeast = true,
-    Ship = false,
-    Shark = true,
     Terrorshark = true,
-    Piranha = false
+    Piranha = true,
+    FishCrewMember = true,
+    Shark = true,
+    PirateBrigade = true,
+    PirateGrandBrigade = true,
+    FishBoat = true,
+    SeaBeast = true
 }
 
 local SeaEventNames = {
-    SeaBeast = {"SeaBeast1", "Sea Beast", "SeaBeast"},
-    Ship = {"Ship Raid", "Pirate Ship", "Marine Ship"},
-    Shark = {"Shark"},
     Terrorshark = {"Terrorshark", "Terror Shark"},
-    Piranha = {"Piranha"}
+    Piranha = {"Piranha"},
+    FishCrewMember = {"Fish Crew Member", "FishCrewMember"},
+    Shark = {"Shark"},
+    PirateBrigade = {"Pirate Brigade", "PirateBrigade"},
+    PirateGrandBrigade = {"Pirate Grand Brigade", "PirateGrandBrigade"},
+    FishBoat = {"Fish Boat", "FishBoat"},
+    SeaBeast = {"SeaBeast1", "Sea Beast", "SeaBeast"}
 }
 
-local SeaEventOrder = {"SeaBeast", "Ship", "Shark", "Terrorshark", "Piranha"}
+local SeaEventOrder = {
+    "Terrorshark",
+    "SeaBeast",
+    "PirateGrandBrigade",
+    "PirateBrigade",
+    "FishBoat",
+    "Shark",
+    "Piranha",
+    "FishCrewMember"
+}
+
+local SeaConfig = {
+    PanicHealthPercent = 40,
+    ReturnHealthPercent = 90,
+    TargetSeaLevel = "6",
+    BoatSpeed = 250
+}
+
+local SeaNPCPositions = {
+    SharkHunter = CFrame.new(-16526, 108, 752),
+    BeastHunter = CFrame.new(-16281, 73, 263),
+    Spy = CFrame.new(-16471, 528, 539)
+}
 
 -- =========================================================
 -- SURVIVAL / LOW HP ESCAPE
@@ -77,10 +105,10 @@ local AutoEscapeEnabled = true
 local EscapeActive = false
 
 -- Entra em fuga com 40% ou menos.
-local EscapeStartHealthPercent = 0.40
+local EscapeStartHealthPercent = SeaConfig.PanicHealthPercent / 100
 
 -- Só volta ao modo normal ao recuperar 90% ou mais.
-local EscapeReturnHealthPercent = 0.90
+local EscapeReturnHealthPercent = SeaConfig.ReturnHealthPercent / 100
 
 -- Velocidade de fuga.
 local EscapeSpeed = 260
@@ -164,7 +192,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v2.7 CLEAN"
+AppTitle.Text = "IKARO Leviathan v2.8 SEA CONFIG"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -648,6 +676,86 @@ ToggleRow(HuntPage, "Water Walk", true, function(v)
 end)
 
 
+local function NumberConfigRow(parent, labelText, defaultValue, minValue, maxValue, suffix, callback)
+    local row = Row(parent, 40)
+    RowLabel(row, labelText)
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0, 110, 0, 30)
+    box.Position = UDim2.new(1, -120, 0.5, -15)
+    box.BackgroundColor3 = Color3.fromRGB(57,57,60)
+    box.BorderSizePixel = 0
+    box.TextColor3 = Color3.fromRGB(225,225,225)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 13
+    box.Text = tostring(defaultValue)
+    box.Parent = row
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,5)
+    c.Parent = box
+
+    box.FocusLost:Connect(function()
+        local value = tonumber(box.Text)
+        if not value then
+            box.Text = tostring(defaultValue)
+            return
+        end
+
+        value = math.clamp(value, minValue, maxValue)
+        box.Text = tostring(value)
+        callback(value)
+    end)
+
+    return row
+end
+
+NumberConfigRow(HuntPage, "Panic Health %", SeaConfig.PanicHealthPercent, 20, 70, "%", function(v)
+    SeaConfig.PanicHealthPercent = v
+    EscapeStartHealthPercent = v / 100
+    SetState("PANIC_HP_UPDATED", tostring(v) .. "%")
+end)
+
+NumberConfigRow(HuntPage, "Return Health %", SeaConfig.ReturnHealthPercent, 50, 100, "%", function(v)
+    SeaConfig.ReturnHealthPercent = v
+    EscapeReturnHealthPercent = v / 100
+    SetState("RETURN_HP_UPDATED", tostring(v) .. "%")
+end)
+
+NumberConfigRow(HuntPage, "Boat Speed", SeaConfig.BoatSpeed, 100, 300, "", function(v)
+    SeaConfig.BoatSpeed = v
+    SetState("BOAT_SPEED_UPDATED", tostring(v))
+end)
+
+local SeaLevelRow = Row(HuntPage, 40)
+RowLabel(SeaLevelRow, "Target Sea Level")
+local SeaLevelBox = Instance.new("TextBox")
+SeaLevelBox.Size = UDim2.new(0, 110, 0, 30)
+SeaLevelBox.Position = UDim2.new(1, -120, 0.5, -15)
+SeaLevelBox.BackgroundColor3 = Color3.fromRGB(57,57,60)
+SeaLevelBox.BorderSizePixel = 0
+SeaLevelBox.TextColor3 = Color3.fromRGB(225,225,225)
+SeaLevelBox.Font = Enum.Font.SourceSans
+SeaLevelBox.TextSize = 13
+SeaLevelBox.Text = SeaConfig.TargetSeaLevel
+SeaLevelBox.Parent = SeaLevelRow
+
+local seaLevelCorner = Instance.new("UICorner")
+seaLevelCorner.CornerRadius = UDim.new(0,5)
+seaLevelCorner.Parent = SeaLevelBox
+
+SeaLevelBox.FocusLost:Connect(function()
+    local v = tostring(SeaLevelBox.Text)
+    local allowed = {["1"]=true,["2"]=true,["3"]=true,["4"]=true,["5"]=true,["6"]=true,["inf"]=true}
+    if allowed[v] then
+        SeaConfig.TargetSeaLevel = v
+        SetState("SEA_LEVEL_UPDATED", v)
+    else
+        SeaLevelBox.Text = SeaConfig.TargetSeaLevel
+    end
+end)
+
+
 
 -- =========================================================
 -- SEA EVENTS MULTI-SELECT
@@ -681,7 +789,7 @@ SeaEventArrow.ZIndex = 21
 SeaEventArrow.Parent = SeaEventButton
 
 local SeaEventDropdown = Instance.new("Frame")
-SeaEventDropdown.Size = UDim2.new(0, 190, 0, 188)
+SeaEventDropdown.Size = UDim2.new(0, 205, 0, 296)
 SeaEventDropdown.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
 SeaEventDropdown.BorderSizePixel = 0
 SeaEventDropdown.Visible = false
@@ -1181,13 +1289,25 @@ end)
 -- SEA EVENT DETECTOR
 -- =========================================================
 
-local function NameMatchesAny(name, variants)
+local function NameMatchesAny(name, variants, key)
     local lowerName = string.lower(name)
+
+    if key == "Shark" and string.find(lowerName, "terrorshark", 1, true) then
+        return false
+    end
+
     for _, variant in ipairs(variants) do
-        if string.find(lowerName, string.lower(variant), 1, true) then
+        local lowerVariant = string.lower(variant)
+
+        if lowerName == lowerVariant then
+            return true
+        end
+
+        if string.find(lowerName, lowerVariant, 1, true) then
             return true
         end
     end
+
     return false
 end
 
@@ -1195,7 +1315,7 @@ local function FindSelectedSeaEvent()
     local seaBeasts = workspace:FindFirstChild("SeaBeasts")
     if seaBeasts and SeaEventsSelected.SeaBeast then
         for _, obj in ipairs(seaBeasts:GetChildren()) do
-            if NameMatchesAny(obj.Name, SeaEventNames.SeaBeast) then
+            if NameMatchesAny(obj.Name, SeaEventNames.SeaBeast, "SeaBeast") then
                 return "SeaBeast", obj
             end
         end
@@ -1206,7 +1326,7 @@ local function FindSelectedSeaEvent()
             for _, key in ipairs(SeaEventOrder) do
                 if key ~= "SeaBeast" and SeaEventsSelected[key] then
                     local variants = SeaEventNames[key]
-                    if variants and NameMatchesAny(obj.Name, variants) then
+                    if variants and NameMatchesAny(obj.Name, variants, key) then
                         return key, obj
                     end
                 end
@@ -1282,58 +1402,222 @@ local function BuyBeastHunter()
 end
 
 local function FlyToPart(part, stopDistance)
-    if not part or not HRP or not Humanoid then return false end
+    if not part or not HRP or not Humanoid then
+        return false
+    end
+
     stopDistance = stopDistance or 7
 
+    local oldPlatformStand = Humanoid.PlatformStand
+    local collisionCache = {}
+
+    local function SetNoClip()
+        if not Character then return end
+
+        for _, obj in ipairs(Character:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                if collisionCache[obj] == nil then
+                    collisionCache[obj] = obj.CanCollide
+                end
+                obj.CanCollide = false
+            end
+        end
+    end
+
+    local function RestoreCollision()
+        for obj, oldValue in pairs(collisionCache) do
+            if obj and obj.Parent then
+                pcall(function()
+                    obj.CanCollide = oldValue
+                end)
+            end
+        end
+    end
+
+    SetNoClip()
+
     local bv = Instance.new("BodyVelocity")
+    bv.Name = "IKAROFlyToTarget"
     bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    bv.P = 10000
+    bv.P = 12000
     bv.Parent = HRP
 
     local bg = Instance.new("BodyGyro")
+    bg.Name = "IKAROFlyToTargetGyro"
     bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    bg.P = 12000
+    bg.P = 14000
     bg.D = 900
     bg.Parent = HRP
 
     Humanoid.PlatformStand = true
-    local deadline = os.clock() + 25
 
-    while Running and part.Parent and HRP.Parent and os.clock() < deadline do
+    local deadline = os.clock() + 30
+    local nextNoclipRefresh = 0
+
+    while Running and part and part.Parent and HRP and HRP.Parent and os.clock() < deadline do
+        local now = os.clock()
+
+        if now >= nextNoclipRefresh then
+            SetNoClip()
+            nextNoclipRefresh = now + 0.15
+        end
+
         local delta = part.Position - HRP.Position
         local dist = delta.Magnitude
-        if dist <= stopDistance then break end
+
+        if dist <= stopDistance then
+            break
+        end
 
         local dir = delta.Unit
-        local speed = dist > 1000 and 300 or dist > 300 and 250 or 190
+        local speed
+
+        if dist > 1000 then
+            speed = 300
+        elseif dist > 300 then
+            speed = 250
+        elseif dist > 80 then
+            speed = 190
+        else
+            speed = 120
+        end
+
         bv.Velocity = dir * speed
         bg.CFrame = CFrame.new(HRP.Position, HRP.Position + dir)
+
         task.wait()
     end
 
     pcall(function() bv:Destroy() end)
     pcall(function() bg:Destroy() end)
-    Humanoid.PlatformStand = false
 
-    return part.Parent and HRP.Parent
+    Humanoid.PlatformStand = oldPlatformStand
+    RestoreCollision()
+
+    return part
+        and part.Parent
+        and HRP
+        and HRP.Parent
         and (part.Position - HRP.Position).Magnitude <= stopDistance + 5
 end
 
 local function GoToBeastHunterSeat()
     local seat = GetBeastHunterMainSeat()
-    if not seat then return false, "VehicleSeat principal não encontrado" end
+    if not seat then
+        return false, "VehicleSeat principal não encontrado"
+    end
 
-    SetState("GOING_TO_BOAT", "Voando até o VehicleSeat principal.")
+    SetState("GOING_TO_BOAT", "Voando com noclip até o VehicleSeat principal.")
 
-    if not FlyToPart(seat, 6) then
+    local arrived = FlyToPart(seat, 4)
+    if not arrived then
         return false, "Não chegou próximo ao VehicleSeat"
     end
 
-    pcall(function() seat:Sit(Humanoid) end)
-    task.wait(0.7)
+    -- Mantém noclip por alguns instantes para atravessar a geometria do barco.
+    local collisionCache = {}
 
-    return Humanoid.Sit == true, seat
+    if Character then
+        for _, obj in ipairs(Character:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                collisionCache[obj] = obj.CanCollide
+                obj.CanCollide = false
+            end
+        end
+    end
+
+    local seated = false
+    local deadline = os.clock() + 3
+
+    repeat
+        pcall(function()
+            -- aproximação final muito curta, apenas já dentro do barco
+            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            seat:Sit(Humanoid)
+        end)
+
+        task.wait(0.15)
+        seated = Humanoid.Sit == true and Humanoid.SeatPart == seat
+    until seated or os.clock() >= deadline
+
+    for obj, oldValue in pairs(collisionCache) do
+        if obj and obj.Parent then
+            pcall(function()
+                obj.CanCollide = oldValue
+            end)
+        end
+    end
+
+    if seated then
+        return true, seat
+    end
+
+    return false, "Chegou ao assento, mas o Humanoid não ficou sentado."
 end
+
+-- Atalhos para NPCs marítimos com posições salvas.
+SimpleButton(HuntPage, "Go to Beast Hunter NPC", function()
+    if not Running then
+        SetState("INFO", "Ative Start Hunt para usar voo automático.")
+        return
+    end
+
+    task.spawn(function()
+        local marker = Instance.new("Part")
+        marker.Name = "IKARO_BeastHunterNPC_Target"
+        marker.Anchored = true
+        marker.CanCollide = false
+        marker.Transparency = 1
+        marker.CFrame = SeaNPCPositions.BeastHunter
+        marker.Parent = workspace
+
+        SetState("GOING_BEAST_HUNTER_NPC", "Voando até o Beast Hunter.")
+        FlyToPart(marker, 8)
+        marker:Destroy()
+    end)
+end)
+
+SimpleButton(HuntPage, "Go to Shark Hunter NPC", function()
+    if not Running then
+        SetState("INFO", "Ative Start Hunt para usar voo automático.")
+        return
+    end
+
+    task.spawn(function()
+        local marker = Instance.new("Part")
+        marker.Name = "IKARO_SharkHunterNPC_Target"
+        marker.Anchored = true
+        marker.CanCollide = false
+        marker.Transparency = 1
+        marker.CFrame = SeaNPCPositions.SharkHunter
+        marker.Parent = workspace
+
+        SetState("GOING_SHARK_HUNTER_NPC", "Voando até o Shark Hunter.")
+        FlyToPart(marker, 8)
+        marker:Destroy()
+    end)
+end)
+
+SimpleButton(HuntPage, "Go to Spy NPC", function()
+    if not Running then
+        SetState("INFO", "Ative Start Hunt para usar voo automático.")
+        return
+    end
+
+    task.spawn(function()
+        local marker = Instance.new("Part")
+        marker.Name = "IKARO_SpyNPC_Target"
+        marker.Anchored = true
+        marker.CanCollide = false
+        marker.Transparency = 1
+        marker.CFrame = SeaNPCPositions.Spy
+        marker.Parent = workspace
+
+        SetState("GOING_SPY_NPC", "Voando até o Spy.")
+        FlyToPart(marker, 8)
+        marker:Destroy()
+    end)
+end)
 
 -- =========================================================
 -- START HUNT
