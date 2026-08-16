@@ -2418,9 +2418,15 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         -- Sea Beast é muito alto e recebe dano por skills; manter grande
         -- altitude evita contato com a água sem sair do alcance das skills.
         local height = eventKey == "SeaBeast" and 260
-            or useBasicClick and 8
+            or eventKey == "Piranha" and 0
+            or useBasicClick and 6
             or 48
-        local desired = target.Position + Vector3.new(0, height, useBasicClick and 3 or 0)
+        -- Piranhas recebem M1, mas o contato por cima empurra o cardume para
+        -- o alto. Mantem o jogador ao lado, na mesma altura e sem tocar no mob.
+        local sideDistance = eventKey == "Piranha" and 12
+            or useBasicClick and 5
+            or 0
+        local desired = target.Position + Vector3.new(0, height, sideDistance)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
@@ -2428,6 +2434,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             local speed = distance > 800 and 340
                 or distance > 250 and 280
                 or distance > 70 and 210
+                or eventKey == "Piranha" and 90
                 or 145
             bodyVelocity.Velocity = delta.Unit * speed
         else
