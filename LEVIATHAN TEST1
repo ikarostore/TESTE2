@@ -102,7 +102,11 @@ local SpyState = {
     LastText = "Não verificado",
     AutoPay = true,
     CheckInterval = 8,
-    LastCheck = 0
+    LastCheck = 0,
+    Visiting = false,
+    LastVisit = 0,
+    VisitCooldown = 35,
+    LastEventKillCount = 0
 }
 
 local SeaHuntState = {
@@ -114,7 +118,7 @@ local SeaHuntState = {
 }
 
 local BoatFlightConfig = {
-    HeightY = 18,
+    HeightY = 70,
     VerticalGain = 5.5,
     MaxVerticalSpeed = 90,
     TurnPower = 22000,
@@ -227,7 +231,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v3.1 FLYING BOAT"
+AppTitle.Text = "IKARO Leviathan v3.2 BOAT NOCLIP + SPY VISIT"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -531,7 +535,7 @@ local function SetSpyStatus(ready, textValue)
 end
 
 -- =========================================================
--- SPY STATUS / DIALOGUE DETECTOR
+-- SPY STATUS / AUTO VISIT v2
 -- =========================================================
 
 local function GetVisibleGuiTexts()
@@ -540,11 +544,13 @@ local function GetVisibleGuiTexts()
     for _, obj in ipairs(PlayerGui:GetDescendants()) do
         if obj:IsA("TextLabel") or obj:IsA("TextButton") then
             local visible = true
+
             pcall(function()
                 visible = obj.Visible
             end)
 
             local txt = ""
+
             pcall(function()
                 txt = obj.Text
             end)
@@ -562,50 +568,52 @@ local function GetVisibleGuiTexts()
 end
 
 local function RefreshSpyStatusFromGui()
-    local texts = GetVisibleGuiTexts()
+    local bestSpyText = nil
 
-    for _, item in ipairs(texts) do
+    for _, item in ipairs(GetVisibleGuiTexts()) do
         local lowerText = string.lower(item.Text)
 
-        -- Texto observado no hub pago para estado pronto.
-        if string.find(lowerText, "you can find leviathan now", 1, true)
-        or string.find(lowerText, "find leviathan now", 1, true)
-        or string.find(lowerText, "leviathan can be found", 1, true) then
+        if string.find(lowerText, "leviathan", 1, true)
+        or string.find(lowerText, "frozen dimension", 1, true)
+        or string.find(lowerText, "bribe", 1, true)
+        or string.find(lowerText, "spy", 1, true) then
+            bestSpyText = item.Text
+        end
+
+        if string.find(lowerText, "find leviathan", 1, true)
+        or string.find(lowerText, "leviathan now", 1, true)
+        or string.find(lowerText, "frozen dimension", 1, true)
+        or (
+            string.find(lowerText, "leviathan", 1, true)
+            and string.find(lowerText, "ready", 1, true)
+        ) then
             SetSpyStatus(true, item.Text)
             return true
         end
+    end
 
-        -- Estados que indicam que ainda falta progresso/pagamento.
-        if string.find(lowerText, "leviathan", 1, true)
-        and (
-            string.find(lowerText, "not", 1, true)
-            or string.find(lowerText, "need", 1, true)
-            or string.find(lowerText, "more", 1, true)
-            or string.find(lowerText, "bribe", 1, true)
-            or string.find(lowerText, "pay", 1, true)
-        ) then
-            SetSpyStatus(false, item.Text)
-        end
+    if bestSpyText then
+        SetSpyStatus(false, bestSpyText)
     end
 
     return SpyState.Ready
 end
 
 local function FindNearestInteraction(position, radius)
-    radius = radius or 60
+    radius = radius or 100
 
     local bestPrompt = nil
     local bestClick = nil
-    local bestDistPrompt = math.huge
-    local bestDistClick = math.huge
+    local bestPromptDist = math.huge
+    local bestClickDist = math.huge
 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ProximityPrompt") then
             local parentPart = obj.Parent
             if parentPart and parentPart:IsA("BasePart") then
                 local d = (parentPart.Position - position).Magnitude
-                if d < radius and d < bestDistPrompt then
-                    bestDistPrompt = d
+                if d < radius and d < bestPromptDist then
+                    bestPromptDist = d
                     bestPrompt = obj
                 end
             end
@@ -613,8 +621,8 @@ local function FindNearestInteraction(position, radius)
             local parentPart = obj.Parent
             if parentPart and parentPart:IsA("BasePart") then
                 local d = (parentPart.Position - position).Magnitude
-                if d < radius and d < bestDistClick then
-                    bestDistClick = d
+                if d < radius and d < bestClickDist then
+                    bestClickDist = d
                     bestClick = obj
                 end
             end
@@ -624,9 +632,44 @@ local function FindNearestInteraction(position, radius)
     return bestPrompt, bestClick
 end
 
+local function ActivateSpyDialogueButtons()
+    local clickedAny = false
+
+    for _, item in ipairs(GetVisibleGuiTexts()) do
+        if item.Object:IsA("TextButton") then
+            local l = string.lower(item.Text)
+
+            if string.find(l, "bribe", 1, true)
+            or string.find(l, "pay", 1, true)
+            or string.find(l, "yes", 1, true)
+            or string.find(l, "sure", 1, true)
+            or string.find(l, "leviathan", 1, true)
+            or string.find(l, "clue", 1, true)
+            or string.find(l, "information", 1, true)
+            or string.find(l, "$", 1, true) then
+                local ok = pcall(function()
+                    item.Object:Activate()
+                end)
+
+                if ok then
+                    clickedAny = true
+                    task.wait(0.35)
+                    RefreshSpyStatusFromGui()
+
+                    if SpyState.Ready then
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    return clickedAny
+end
+
 local function TryInteractSpy()
     local spyPos = SeaNPCPositions.Spy.Position
-    local prompt, clickDetector = FindNearestInteraction(spyPos, 80)
+    local prompt, clickDetector = FindNearestInteraction(spyPos, 110)
     local interacted = false
 
     if prompt and type(fireproximityprompt) == "function" then
@@ -635,39 +678,97 @@ local function TryInteractSpy()
         end)
     end
 
-    if not interacted and clickDetector and type(fireclickdetector) == "function" then
+    if not interacted
+    and clickDetector
+    and type(fireclickdetector) == "function" then
         interacted = pcall(function()
             fireclickdetector(clickDetector)
         end)
     end
 
+    -- fallback: tenta E perto do NPC
+    if not interacted and SeaVIM then
+        interacted = pcall(function()
+            SeaVIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            task.wait(0.08)
+            SeaVIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        end)
+    end
+
     task.wait(0.8)
+
+    RefreshSpyStatusFromGui()
+    ActivateSpyDialogueButtons()
+
+    task.wait(0.5)
     RefreshSpyStatusFromGui()
 
-    -- Tenta opções de diálogo relacionadas a pagamento/informação.
-    for _, item in ipairs(GetVisibleGuiTexts()) do
-        if item.Object:IsA("TextButton") then
-            local l = string.lower(item.Text)
+    return interacted
+end
 
-            if string.find(l, "bribe", 1, true)
-            or string.find(l, "pay", 1, true)
-            or string.find(l, "leviathan", 1, true)
-            or string.find(l, "clue", 1, true)
-            or string.find(l, "information", 1, true) then
-                pcall(function()
-                    item.Object:Activate()
-                end)
-                task.wait(0.4)
-                RefreshSpyStatusFromGui()
+local function VisitSpyAndReturn()
+    if SpyState.Visiting
+    or not Running
+    or not AccountBuyBoat
+    or SpyState.Ready then
+        return false
+    end
 
-                if SpyState.Ready then
-                    break
-                end
-            end
+    local now = os.clock()
+
+    if now - SpyState.LastVisit < SpyState.VisitCooldown then
+        return false
+    end
+
+    SpyState.Visiting = true
+    SpyState.LastVisit = now
+
+    local boatSeat = GetBeastHunterMainSeat()
+
+    SetState("GOING_TO_SPY", "Pausando o barco e indo verificar/pagar o Spy.")
+    StopBoatDrive(false)
+
+    if Humanoid and Humanoid.Sit then
+        Humanoid.Sit = false
+        task.wait(0.2)
+    end
+
+    local marker = Instance.new("Part")
+    marker.Name = "IKARO_SpyVisitTarget"
+    marker.Anchored = true
+    marker.CanCollide = false
+    marker.Transparency = 1
+    marker.CFrame = SeaNPCPositions.Spy
+    marker.Parent = workspace
+
+    local arrived = FlyToPart(marker, 12)
+    marker:Destroy()
+
+    if arrived then
+        SetState("SPY_INTERACTION", "Tentando abrir diálogo e pagar.")
+        TryInteractSpy()
+    else
+        SetState("SPY_VISIT_ERROR", "Não conseguiu chegar ao Spy.")
+    end
+
+    task.wait(0.5)
+    RefreshSpyStatusFromGui()
+
+    -- volta ao Beast Hunter se ele ainda existir
+    boatSeat = GetBeastHunterMainSeat()
+
+    if Running and boatSeat then
+        SetState("RETURNING_TO_BOAT", "Voltando ao Beast Hunter.")
+        local okSeat = GoToBeastHunterSeat()
+
+        if okSeat then
+            task.wait(0.3)
+            StartBoatDrive()
         end
     end
 
-    return interacted
+    SpyState.Visiting = false
+    return SpyState.Ready
 end
 
 -- =========================================================
@@ -942,7 +1043,7 @@ NumberConfigRow(HuntPage, "Boat Speed", SeaConfig.BoatSpeed, 150, 450, "", funct
     SetState("BOAT_SPEED_UPDATED", tostring(v))
 end)
 
-NumberConfigRow(HuntPage, "Boat Flight Y", BoatFlightConfig.HeightY, 10, 35, "", function(v)
+NumberConfigRow(HuntPage, "Boat Flight Y", BoatFlightConfig.HeightY, 20, 120, "", function(v)
     BoatFlightConfig.HeightY = v
     SetState("BOAT_HEIGHT_UPDATED", "Y=" .. tostring(v))
 end)
@@ -2050,20 +2151,22 @@ SimpleButton(HuntPage, "Go to Spy NPC", function()
 end)
 
 -- =========================================================
--- BEAST HUNTER AUTO DRIVE v2
+-- BEAST HUNTER AUTO DRIVE v3
 --
--- Não usa mais somente tecla W.
--- O Beast Hunter é impulsionado fisicamente:
---   • segue para fora da região do Tiki / direção do mar aberto;
---   • mantém Y configurável (padrão 18);
---   • velocidade configurável;
---   • sem CFrame de teleporte contínuo.
+-- Correções:
+-- 1) usa AssemblyRootPart do VehicleSeat quando disponível;
+-- 2) não depende somente de Humanoid.SeatPart para começar;
+-- 3) aplica BodyVelocity + AssemblyLinearVelocity;
+-- 4) desativa colisão de TODAS as partes do Beast Hunter durante a caça;
+-- 5) mantém o barco em Y configurável (padrão 70);
+-- 6) direção de mar aberto é fixada no início para não ficar curvando.
 -- =========================================================
 
 local BoatBodyVelocity = nil
 local BoatBodyGyro = nil
 local BoatDrivePart = nil
-local LastSeaDirection = nil
+local BoatCollisionCache = {}
+local FixedSeaDirection = nil
 
 local function GetBoatDrivePart()
     local boat = GetBeastHunter()
@@ -2071,16 +2174,78 @@ local function GetBoatDrivePart()
         return nil
     end
 
-    -- VehicleSeat é preferível porque é uma parte física central
-    -- e já sabemos que pertence ao Beast Hunter.
-    return boat:FindFirstChild("VehicleSeat")
-        or boat.PrimaryPart
-        or boat:FindFirstChildWhichIsA("BasePart", true)
+    local seat = boat:FindFirstChild("VehicleSeat")
+
+    if seat then
+        local root = nil
+        pcall(function()
+            root = seat.AssemblyRootPart
+        end)
+
+        if root then
+            return root
+        end
+
+        return seat
+    end
+
+    if boat.PrimaryPart then
+        return boat.PrimaryPart
+    end
+
+    -- fallback: maior BasePart do barco
+    local bestPart = nil
+    local bestVolume = -1
+
+    for _, obj in ipairs(boat:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local volume = obj.Size.X * obj.Size.Y * obj.Size.Z
+            if volume > bestVolume then
+                bestVolume = volume
+                bestPart = obj
+            end
+        end
+    end
+
+    return bestPart
 end
 
-local function GetSeaOutwardDirection(boatPart)
+local function ApplyBoatNoclip()
+    local boat = GetBeastHunter()
+    if not boat then
+        return
+    end
+
+    for _, obj in ipairs(boat:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            if BoatCollisionCache[obj] == nil then
+                BoatCollisionCache[obj] = obj.CanCollide
+            end
+            obj.CanCollide = false
+        end
+    end
+end
+
+local function RestoreBoatCollision()
+    for obj, oldValue in pairs(BoatCollisionCache) do
+        if obj and obj.Parent then
+            pcall(function()
+                obj.CanCollide = oldValue
+            end)
+        end
+    end
+
+    BoatCollisionCache = {}
+end
+
+local function CalculateFixedSeaDirection(boatPart)
+    if FixedSeaDirection then
+        return FixedSeaDirection
+    end
+
     if not boatPart then
-        return Vector3.new(1, 0, 0)
+        FixedSeaDirection = Vector3.new(1, 0, 0)
+        return FixedSeaDirection
     end
 
     local boatFlat = Vector3.new(
@@ -2091,19 +2256,16 @@ local function GetSeaOutwardDirection(boatPart)
 
     local delta = boatFlat - BoatFlightConfig.SeaOrigin
 
-    -- Se ainda estiver quase em cima da origem, usa a direção
-    -- Tiki -> ponto onde o Beast Hunter normalmente nasce.
     if delta.Magnitude < 80 then
         delta = BoatFlightConfig.SpawnReference - BoatFlightConfig.SeaOrigin
     end
 
     if delta.Magnitude < 1 then
-        return LastSeaDirection or Vector3.new(1, 0, 0)
+        delta = Vector3.new(1, 0, 0)
     end
 
-    local direction = delta.Unit
-    LastSeaDirection = direction
-    return direction
+    FixedSeaDirection = delta.Unit
+    return FixedSeaDirection
 end
 
 local function DestroyBoatFlightPhysics()
@@ -2126,6 +2288,7 @@ end
 
 local function EnsureBoatFlightPhysics()
     local drivePart = GetBoatDrivePart()
+
     if not drivePart then
         DestroyBoatFlightPhysics()
         return nil
@@ -2136,11 +2299,13 @@ local function EnsureBoatFlightPhysics()
         BoatDrivePart = drivePart
     end
 
+    ApplyBoatNoclip()
+
     if not BoatBodyVelocity or not BoatBodyVelocity.Parent then
         BoatBodyVelocity = Instance.new("BodyVelocity")
         BoatBodyVelocity.Name = "IKARO_BeastHunterFlightVelocity"
-        BoatBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-        BoatBodyVelocity.P = 18000
+        BoatBodyVelocity.MaxForce = Vector3.new(1e10, 1e10, 1e10)
+        BoatBodyVelocity.P = 40000
         BoatBodyVelocity.Velocity = Vector3.new(0, 0, 0)
         BoatBodyVelocity.Parent = drivePart
     end
@@ -2148,9 +2313,9 @@ local function EnsureBoatFlightPhysics()
     if not BoatBodyGyro or not BoatBodyGyro.Parent then
         BoatBodyGyro = Instance.new("BodyGyro")
         BoatBodyGyro.Name = "IKARO_BeastHunterFlightGyro"
-        BoatBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-        BoatBodyGyro.P = BoatFlightConfig.TurnPower
-        BoatBodyGyro.D = 1400
+        BoatBodyGyro.MaxTorque = Vector3.new(1e10, 1e10, 1e10)
+        BoatBodyGyro.P = 45000
+        BoatBodyGyro.D = 1800
         BoatBodyGyro.CFrame = drivePart.CFrame
         BoatBodyGyro.Parent = drivePart
     end
@@ -2166,7 +2331,10 @@ local function DetectSeaLevel6FromGui()
         or string.find(l, "sea danger level 6", 1, true)
         or (
             string.find(l, "level 6", 1, true)
-            and string.find(l, "sea", 1, true)
+            and (
+                string.find(l, "sea", 1, true)
+                or string.find(l, "danger", 1, true)
+            )
         ) then
             SeaHuntState.AtSea6 = true
             return true
@@ -2176,15 +2344,33 @@ local function DetectSeaLevel6FromGui()
     return SeaHuntState.AtSea6
 end
 
-local function StopBoatDrive()
+local function StopBoatDrive(restoreCollision)
     SeaHuntState.Driving = false
     DestroyBoatFlightPhysics()
 
-    if SeaVIM then
-        pcall(function()
-            SeaVIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
-        end)
+    if restoreCollision then
+        RestoreBoatCollision()
     end
+end
+
+local function TrySeatMainAccount()
+    local seat = GetBeastHunterMainSeat()
+
+    if not seat or not Humanoid then
+        return false
+    end
+
+    if Humanoid.SeatPart == seat then
+        return true
+    end
+
+    pcall(function()
+        seat:Sit(Humanoid)
+    end)
+
+    task.wait(0.15)
+
+    return Humanoid.SeatPart == seat
 end
 
 local function StartBoatDrive()
@@ -2192,13 +2378,16 @@ local function StartBoatDrive()
         return
     end
 
-    local seat = GetBeastHunterMainSeat()
-
-    if not seat or not Humanoid or Humanoid.SeatPart ~= seat then
-        SetState("BOAT_DRIVE_WAIT", "A conta principal ainda não está no VehicleSeat.")
+    local boat = GetBeastHunter()
+    if not boat then
+        SetState("BOAT_DRIVE_WAIT", "Beast Hunter ainda não apareceu.")
         return
     end
 
+    -- Tenta sentar, mas não bloqueia o motor caso SeatPart demore a atualizar.
+    TrySeatMainAccount()
+
+    FixedSeaDirection = nil
     SeaHuntState.Driving = true
 
     SetState(
@@ -2208,12 +2397,11 @@ local function StartBoatDrive()
     )
 
     task.spawn(function()
-        while Running and SeaHuntState.Driving do
-            local currentSeat = GetBeastHunterMainSeat()
+        local nextNoclipRefresh = 0
 
-            if not currentSeat
-            or not Humanoid
-            or Humanoid.SeatPart ~= currentSeat then
+        while Running and SeaHuntState.Driving do
+            local boatNow = GetBeastHunter()
+            if not boatNow then
                 break
             end
 
@@ -2222,23 +2410,36 @@ local function StartBoatDrive()
                 break
             end
 
-            local seaDirection = GetSeaOutwardDirection(drivePart)
+            local now = os.clock()
 
-            -- Mantém o barco na altura desejada.
+            if now >= nextNoclipRefresh then
+                ApplyBoatNoclip()
+                nextNoclipRefresh = now + 0.15
+            end
+
+            local seaDirection = CalculateFixedSeaDirection(drivePart)
+
             local heightError =
                 BoatFlightConfig.HeightY - drivePart.Position.Y
 
             local verticalVelocity = math.clamp(
-                heightError * BoatFlightConfig.VerticalGain,
-                -BoatFlightConfig.MaxVerticalSpeed,
-                BoatFlightConfig.MaxVerticalSpeed
+                heightError * 8,
+                -120,
+                120
             )
 
-            BoatBodyVelocity.Velocity =
+            local wantedVelocity =
                 seaDirection * SeaConfig.BoatSpeed
                 + Vector3.new(0, verticalVelocity, 0)
 
-            -- Mantém o casco nivelado, olhando para o mar aberto.
+            BoatBodyVelocity.Velocity = wantedVelocity
+
+            -- reforço direto na assembly; não teleporta.
+            pcall(function()
+                drivePart.AssemblyLinearVelocity = wantedVelocity
+                drivePart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end)
+
             BoatBodyGyro.CFrame = CFrame.lookAt(
                 drivePart.Position,
                 drivePart.Position + seaDirection,
@@ -2247,17 +2448,17 @@ local function StartBoatDrive()
 
             local at6 = DetectSeaLevel6FromGui()
 
-            if at6 and State == "BOAT_FLYING_TO_SEA6" then
+            if at6 and State ~= "SEA6_REACHED" then
                 SetState(
                     "SEA6_REACHED",
-                    "Sea 6 detectado. Mantendo navegação para spawn/eventos."
+                    "Sea 6 detectado. Mantendo navegação e procura por eventos."
                 )
             end
 
             task.wait()
         end
 
-        StopBoatDrive()
+        StopBoatDrive(false)
     end)
 end
 
@@ -2488,20 +2689,35 @@ for _, key in ipairs({"Z","X","C","V","F"}) do
 end
 
 -- =========================================================
--- AUTO SPY CHECK LOOP
+-- AUTO SPY CHECK LOOP v2
 -- =========================================================
 
 task.spawn(function()
     while Gui and Gui.Parent do
-        if Running and SpyState.AutoPay and not SpyState.Ready then
-            if os.clock() - SpyState.LastCheck >= SpyState.CheckInterval then
-                SpyState.LastCheck = os.clock()
-                RefreshSpyStatusFromGui()
+        if Running
+        and AccountBuyBoat
+        and SpyState.AutoPay
+        and not SpyState.Ready
+        and not SpyState.Visiting
+        and not SeaHuntState.CurrentEvent then
 
-                -- Só tenta interação automática quando a conta está perto do Spy.
-                if HRP and (HRP.Position - SeaNPCPositions.Spy.Position).Magnitude <= 120 then
-                    TryInteractSpy()
-                end
+            local shouldVisit = false
+
+            -- visita após cada novo Sea Event derrotado
+            if SeaHuntState.EventKills > SpyState.LastEventKillCount then
+                SpyState.LastEventKillCount = SeaHuntState.EventKills
+                shouldVisit = true
+            end
+
+            -- ou periodicamente, caso o status ainda não tenha sido confirmado
+            if os.clock() - SpyState.LastVisit >= 90 then
+                shouldVisit = true
+            end
+
+            if shouldVisit then
+                task.spawn(VisitSpyAndReturn)
+            else
+                RefreshSpyStatusFromGui()
             end
         end
 
