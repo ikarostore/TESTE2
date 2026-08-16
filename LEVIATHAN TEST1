@@ -1983,15 +1983,28 @@ local function GetCombatFrameworkController()
     return nil
 end
 
+local function SeaTargetLookCFrame(origin, targetPosition)
+    local direction = targetPosition - origin
+    if direction.Magnitude < 0.01 then return nil end
+
+    -- Quando o jogador está quase exatamente acima do mob, o eixo Y padrão
+    -- fica paralelo à mira. Usa Z como eixo superior para permitir olhar
+    -- realmente para baixo, como no padrão mostrado no vídeo.
+    local unit = direction.Unit
+    local up = math.abs(unit:Dot(Vector3.new(0, 1, 0))) > 0.96
+        and Vector3.new(0, 0, -1)
+        or Vector3.new(0, 1, 0)
+
+    return CFrame.lookAt(origin, targetPosition, up)
+end
+
 local function AimAtSeaTarget(target)
     if not target then return end
 
     if HRP and HRP.Parent then
-        local flatTarget = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        if (flatTarget - HRP.Position).Magnitude > 0.01 then
-            pcall(function()
-                HRP.CFrame = CFrame.lookAt(HRP.Position, flatTarget)
-            end)
+        local aimCFrame = SeaTargetLookCFrame(HRP.Position, target.Position)
+        if aimCFrame then
+            pcall(function() HRP.CFrame = aimCFrame end)
         end
     end
 
@@ -2402,7 +2415,12 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local height = eventKey == "SeaBeast" and 260
             or useBasicClick and 8
             or 48
-        local desired = target.Position + Vector3.new(0, height, 0)
+        -- Para M1, mantém o personagem pouco acima e ligeiramente atrás do
+        -- alvo. O mob continua livre; somente o jogador acompanha seu movimento.
+        local combatOffset = useBasicClick
+            and Vector3.new(0, height, 4)
+            or Vector3.new(0, height, 0)
+        local desired = target.Position + combatOffset
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
@@ -2416,9 +2434,9 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             bodyVelocity.Velocity = target.AssemblyLinearVelocity + delta * 5
         end
 
-        local lookPosition = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        if (lookPosition - HRP.Position).Magnitude > 0.01 then
-            bodyGyro.CFrame = CFrame.lookAt(HRP.Position, lookPosition)
+        local aimCFrame = SeaTargetLookCFrame(HRP.Position, target.Position)
+        if aimCFrame then
+            bodyGyro.CFrame = aimCFrame
         end
 
     end)
