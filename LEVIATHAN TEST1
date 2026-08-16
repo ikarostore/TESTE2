@@ -2449,18 +2449,12 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or eventKey == "PirateGrandBrigade"
             or eventKey == "FishBoat"
         local height = eventKey == "SeaBeast" and 260
-            or isShipEvent and 65
-            or eventKey == "Piranha" and 0
-            or useBasicClick and 6
-            or 48
-        -- Piranhas recebem M1, mas o contato por cima empurra o cardume para
-        -- o alto. Mantem o jogador ao lado, na mesma altura e sem tocar no mob.
-        -- BM Fast Attack distante para os mobs que recebem M1. Dezoito studs
-        -- evita contato/empurrao sem ultrapassar demais a validacao do servidor.
-        local sideDistance = isShipEvent and 85
+            or isShipEvent and 110
             or useBasicClick and 18
-            or 0
-        local desired = target.Position + Vector3.new(0, height, sideDistance)
+            or 60
+        -- Todos os Sea Events sao atacados diretamente por cima. Somente o
+        -- personagem se move; nenhuma propriedade do mob/barco e alterada.
+        local desired = target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
