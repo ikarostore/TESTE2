@@ -11,50 +11,6 @@ end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Entra automaticamente como Marine antes mesmo do personagem nascer.
--- O remote cobre a tela normal de seleção; o clique é um fallback para
--- executores/versões em que o servidor ainda deixa a escolha aberta na GUI.
-local function IsMarineTeam()
-    local team = LocalPlayer.Team
-    return team and string.find(string.lower(team.Name), "marine", 1, true) ~= nil
-end
-
-local function TryJoinMarines()
-    if IsMarineTeam() then return true end
-
-    pcall(function()
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        local comm = remotes and remotes:FindFirstChild("CommF_")
-        if comm then
-            comm:InvokeServer("SetTeam", "Marines")
-        end
-    end)
-
-    if not IsMarineTeam() then
-        pcall(function()
-            for _, object in ipairs(PlayerGui:GetDescendants()) do
-                if object:IsA("TextButton") then
-                    local text = string.lower(object.Text or "")
-                    if string.find(text, "marine", 1, true) then
-                        object:Activate()
-                        break
-                    end
-                end
-            end
-        end)
-    end
-
-    return IsMarineTeam()
-end
-
-task.spawn(function()
-    local deadline = os.clock() + 30
-    repeat
-        TryJoinMarines()
-        task.wait(0.5)
-    until IsMarineTeam() or os.clock() >= deadline
-end)
-
 local Character
 local Humanoid
 local HRP
@@ -65,14 +21,7 @@ local function SetupCharacter(char)
     HRP = char:WaitForChild("HumanoidRootPart", 15)
 end
 
--- Na tela de seleção de time ainda pode não existir Character. Não bloquear
--- toda a inicialização aqui: a interface deve abrir e CharacterAdded conclui
--- a configuração assim que Marines for selecionado pelo jogo/script.
-if LocalPlayer.Character then
-    task.spawn(function()
-        SetupCharacter(LocalPlayer.Character)
-    end)
-end
+SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.spawn(function()
@@ -3780,5 +3729,4 @@ else
 end
 
 print("IKARO Leviathan v2 carregado.")
-
 
