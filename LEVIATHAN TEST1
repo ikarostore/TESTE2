@@ -2142,10 +2142,15 @@ local function BMFastAttack(target)
                 local rawHits = rigLib.getBladeHits(Character, {HRP}, 60)
                 local hits = {}
                 local seen = {}
+                local targetModel = target:FindFirstAncestorOfClass("Model")
                 for _, hit in pairs(rawHits or {}) do
                     local model = hit and hit.Parent
                     local root = model and model:FindFirstChild("HumanoidRootPart")
-                    if root and not seen[model] then
+                    local selectedTarget = targetModel and model
+                        and (model == targetModel
+                            or model:IsDescendantOf(targetModel)
+                            or targetModel:IsDescendantOf(model))
+                    if root and selectedTarget and not seen[model] then
                         seen[model] = true
                         table.insert(hits, root)
                     end
@@ -2153,6 +2158,7 @@ local function BMFastAttack(target)
                 if #hits > 0 then
                     rigEvent:FireServer("weaponChange", tostring(weapon))
                     rigEvent:FireServer("hit", hits, 1, "")
+                    attacked = true
                 end
             end
         end
@@ -2160,7 +2166,6 @@ local function BMFastAttack(target)
         if BMCameraShaker and type(BMCameraShaker.Stop) == "function" then
             BMCameraShaker:Stop()
         end
-        attacked = true
     end)
 
     return attacked
@@ -2611,7 +2616,12 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if useBasicClick then
-                    BMFastAttack(target)
+                    local rigAttackWorked = BMFastAttack(target)
+                    if not rigAttackWorked then
+                        -- Se o executor nao fornece controller/hits validos,
+                        -- usa skills para nao deixar o Sea Event invencivel.
+                        UseConfiguredSeaSkills()
+                    end
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
@@ -3177,12 +3187,31 @@ end
 local function StopBoatDrive(restoreCollision)
     SeaHuntState.Driving = false
 
+    local stoppingPart = BoatDrivePart or GetBoatDrivePart()
+    local stoppingSeat = GetBeastHunterMainSeat()
+
     if BoatNoclipConnection then
         BoatNoclipConnection:Disconnect()
         BoatNoclipConnection = nil
     end
 
     DestroyBoatFlightPhysics()
+
+    if stoppingSeat then
+        pcall(function()
+            stoppingSeat.Throttle = 0
+            stoppingSeat.ThrottleFloat = 0
+            stoppingSeat.Steer = 0
+            stoppingSeat.SteerFloat = 0
+        end)
+    end
+
+    if stoppingPart then
+        pcall(function()
+            stoppingPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            stoppingPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end)
+    end
 
     if SeaVIM then
         pcall(function()
