@@ -130,6 +130,180 @@ local buttonCorner = Instance.new("UICorner")
 buttonCorner.CornerRadius = UDim.new(0, 6)
 buttonCorner.Parent = flyButton
 
+local PathfindingService = game:GetService("PathfindingService")
+
+-- Aumenta a janela para caber a lista
+mainFrame.Size = UDim2.new(0, 260, 0, 360)
+
+-- Título da lista
+local npcTitle = Instance.new("TextLabel")
+npcTitle.Size = UDim2.new(0.9, 0, 0, 25)
+npcTitle.Position = UDim2.new(0.05, 0, 0, 115)
+npcTitle.BackgroundTransparency = 1
+npcTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+npcTitle.TextSize = 14
+npcTitle.Font = Enum.Font.SourceSansBold
+npcTitle.Text = "NPCs encontrados"
+npcTitle.Parent = mainFrame
+
+-- Área rolável
+local npcList = Instance.new("ScrollingFrame")
+npcList.Name = "NPCList"
+npcList.Size = UDim2.new(0.9, 0, 0, 190)
+npcList.Position = UDim2.new(0.05, 0, 0, 145)
+npcList.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+npcList.BorderSizePixel = 0
+npcList.ScrollBarThickness = 5
+npcList.CanvasSize = UDim2.new(0, 0, 0, 0)
+npcList.Parent = mainFrame
+
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0, 6)
+listCorner.Parent = npcList
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 5)
+layout.Parent = npcList
+
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 5)
+padding.PaddingLeft = UDim.new(0, 5)
+padding.PaddingRight = UDim.new(0, 5)
+padding.Parent = npcList
+
+local function pegarRoot(model)
+    return model:FindFirstChild("HumanoidRootPart")
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("UpperTorso")
+end
+
+local function irAteNPC(npc)
+
+    if not character or not humanoid or not hrp then
+        return
+    end
+
+    local npcRoot = pegarRoot(npc)
+
+    if not npcRoot then
+        warn("NPC sem RootPart:", npc.Name)
+        return
+    end
+
+    local destino = npcRoot.Position
+
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true,
+        AgentCanClimb = true
+    })
+
+    local sucesso, erro = pcall(function()
+        path:ComputeAsync(hrp.Position, destino)
+    end)
+
+    if not sucesso then
+        warn("Erro no path:", erro)
+        return
+    end
+
+    if path.Status ~= Enum.PathStatus.Success then
+        warn("Não foi possível criar caminho até:", npc.Name)
+        return
+    end
+
+    for _, waypoint in ipairs(path:GetWaypoints()) do
+
+        if not humanoid or humanoid.Health <= 0 then
+            return
+        end
+
+        if waypoint.Action == Enum.PathWaypointAction.Jump then
+            humanoid.Jump = true
+        end
+
+        humanoid:MoveTo(waypoint.Position)
+
+        local chegou = humanoid.MoveToFinished:Wait()
+
+        if not chegou then
+            warn("Caminho interrompido")
+            break
+        end
+    end
+end
+
+local function criarBotaoNPC(npc)
+
+    local button = Instance.new("TextButton")
+    button.Name = "NPC_" .. npc.Name
+    button.Size = UDim2.new(1, -10, 0, 32)
+    button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 13
+    button.Font = Enum.Font.SourceSansBold
+    button.Text = npc.Name
+    button.Parent = npcList
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = button
+
+    button.MouseButton1Click:Connect(function()
+        irAteNPC(npc)
+    end)
+end
+
+local function atualizarListaNPCs()
+
+    for _, child in ipairs(npcList:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local encontrados = {}
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+
+        if obj:IsA("Model") then
+
+            local humanoidNPC = obj:FindFirstChildOfClass("Humanoid")
+            local root = pegarRoot(obj)
+
+            if humanoidNPC and root and obj ~= character then
+
+                if not encontrados[obj] then
+                    encontrados[obj] = true
+                    criarBotaoNPC(obj)
+                end
+            end
+        end
+    end
+
+    task.wait()
+
+    npcList.CanvasSize = UDim2.new(
+        0,
+        0,
+        0,
+        layout.AbsoluteContentSize.Y + 10
+    )
+end
+
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    npcList.CanvasSize = UDim2.new(
+        0,
+        0,
+        0,
+        layout.AbsoluteContentSize.Y + 10
+    )
+end)
+
+atualizarListaNPCs()
+
 -- Atualiza botão
 local function atualizarBotao()
     if voando then
