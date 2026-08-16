@@ -38,9 +38,62 @@ local OwnerPlayer = nil
 local AccountBuyBoat = false
 
 local FollowConnection = nil
-local FollowSpeed = 140
+local FollowSpeed = 190
 local FollowHeight = 22
 local FollowBack = 8
+
+-- =========================================================
+-- SURVIVAL / LOW HP ESCAPE
+-- =========================================================
+
+local AutoEscapeEnabled = true
+local EscapeActive = false
+
+-- Entra em fuga com 40% ou menos.
+local EscapeStartHealthPercent = 0.40
+
+-- Só volta ao modo normal ao recuperar 90% ou mais.
+local EscapeReturnHealthPercent = 0.90
+
+-- Velocidade de fuga.
+local EscapeSpeed = 260
+
+-- Quanto tenta subir durante a fuga.
+local EscapeVerticalBias = 0.65
+
+local EscapeBodyVelocity = nil
+local EscapeBodyGyro = nil
+local EscapeConnection = nil
+
+-- =========================================================
+-- WATER WALK
+-- =========================================================
+
+local WaterWalkEnabled = true
+local WaterPlatform = nil
+local WaterWalkConnection = nil
+
+-- =========================================================
+-- SEA EVENTS
+-- =========================================================
+
+local SeaEventsSelected = {
+    SeaBeast = true,
+    Ship = false,
+    Shark = true,
+    Terrorshark = true,
+    Piranha = false
+}
+
+local SeaEventNames = {
+    SeaBeast = {"Sea Beast", "SeaBeast"},
+    Ship = {"Ship Raid", "Ship", "Pirate Ship", "Marine Ship"},
+    Shark = {"Shark"},
+    Terrorshark = {"Terrorshark", "Terror Shark"},
+    Piranha = {"Piranha"}
+}
+
+local CurrentSeaEventTarget = nil
 
 local savedCollisions = {}
 
@@ -350,6 +403,67 @@ local function SetState(state, message)
 end
 
 -- =========================================================
+-- WATER WALK
+-- Cria uma plataforma local sobre a superfície da água.
+-- Serve para evitar o personagem afundar enquanto estiver sobre o mar.
+-- =========================================================
+
+local function DestroyWaterPlatform()
+    if WaterPlatform then
+        pcall(function()
+            WaterPlatform:Destroy()
+        end)
+        WaterPlatform = nil
+    end
+end
+
+local function EnsureWaterPlatform()
+    if not WaterWalkEnabled or not HRP or not Character then
+        DestroyWaterPlatform()
+        return
+    end
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {Character}
+    params.IgnoreWater = false
+
+    local result = workspace:Raycast(
+        HRP.Position + Vector3.new(0, 3, 0),
+        Vector3.new(0, -80, 0),
+        params
+    )
+
+    if result and result.Material == Enum.Material.Water then
+        if not WaterPlatform or not WaterPlatform.Parent then
+            WaterPlatform = Instance.new("Part")
+            WaterPlatform.Name = "IKAROWaterWalk"
+            WaterPlatform.Size = Vector3.new(10, 1, 10)
+            WaterPlatform.Anchored = true
+            WaterPlatform.CanCollide = true
+            WaterPlatform.Transparency = 1
+            WaterPlatform.Parent = workspace
+        end
+
+        WaterPlatform.CFrame = CFrame.new(
+            HRP.Position.X,
+            result.Position.Y + 1.8,
+            HRP.Position.Z
+        )
+    else
+        DestroyWaterPlatform()
+    end
+end
+
+WaterWalkConnection = RunService.Heartbeat:Connect(function()
+    if WaterWalkEnabled then
+        pcall(EnsureWaterPlatform)
+    else
+        DestroyWaterPlatform()
+    end
+end)
+
+-- =========================================================
 -- DROPDOWN OWNER PLAYER
 -- Dropdown em overlay para não ser cortado pelo ScrollingFrame.
 -- =========================================================
@@ -529,6 +643,189 @@ ToggleRow(HuntPage, "Account Buy Boat", false, function(v)
     end
 end)
 
+ToggleRow(HuntPage, "Auto Escape Low HP", true, function(v)
+    AutoEscapeEnabled = v
+
+    if not v and EscapeActive then
+        StopEscape()
+        SetState("AUTO_ESCAPE_OFF", "Fuga automática desativada.")
+    elseif v then
+        SetState(
+            "AUTO_ESCAPE_ON",
+            "Foge em 40% HP e retorna em 90% HP."
+        )
+        CheckLowHealth()
+    end
+end)
+
+ToggleRow(HuntPage, "Water Walk", true, function(v)
+    WaterWalkEnabled = v
+
+    if not v then
+        DestroyWaterPlatform()
+        SetState("WATER_WALK_OFF", "Water Walk desativado.")
+    else
+        SetState("WATER_WALK_ON", "Mantendo o personagem sobre a água.")
+    end
+end)
+
+-- =========================================================
+-- MULTI-SELECT SEA EVENTS
+-- =========================================================
+
+local SeaEventRow = Row(HuntPage, 52)
+RowLabel(SeaEventRow, "Select Sea Event")
+
+local SeaEventButton = Instance.new("TextButton")
+SeaEventButton.Size = UDim2.new(0, 160, 0, 34)
+SeaEventButton.Position = UDim2.new(1, -170, 0.5, -17)
+SeaEventButton.BackgroundColor3 = Color3.fromRGB(57, 57, 60)
+SeaEventButton.BorderSizePixel = 0
+SeaEventButton.TextColor3 = Color3.fromRGB(225, 225, 225)
+SeaEventButton.Font = Enum.Font.SourceSans
+SeaEventButton.TextSize = 12
+SeaEventButton.TextXAlignment = Enum.TextXAlignment.Left
+SeaEventButton.TextTruncate = Enum.TextTruncate.AtEnd
+SeaEventButton.ZIndex = 20
+SeaEventButton.Parent = SeaEventRow
+
+local SeaEventButtonCorner = Instance.new("UICorner")
+SeaEventButtonCorner.CornerRadius = UDim.new(0, 5)
+SeaEventButtonCorner.Parent = SeaEventButton
+
+local SeaEventArrow = Instance.new("TextLabel")
+SeaEventArrow.Size = UDim2.new(0, 24, 1, 0)
+SeaEventArrow.Position = UDim2.new(1, -28, 0, 0)
+SeaEventArrow.BackgroundTransparency = 1
+SeaEventArrow.TextColor3 = Color3.fromRGB(190, 190, 190)
+SeaEventArrow.Font = Enum.Font.SourceSansBold
+SeaEventArrow.TextSize = 16
+SeaEventArrow.Text = "⌄"
+SeaEventArrow.ZIndex = 21
+SeaEventArrow.Parent = SeaEventButton
+
+local SeaEventDropdown = Instance.new("Frame")
+SeaEventDropdown.Name = "SeaEventDropdownOverlay"
+SeaEventDropdown.Size = UDim2.new(0, 190, 0, 0)
+SeaEventDropdown.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
+SeaEventDropdown.BorderSizePixel = 0
+SeaEventDropdown.Visible = false
+SeaEventDropdown.ZIndex = 120
+SeaEventDropdown.Parent = Gui
+
+local SeaEventDropdownCorner = Instance.new("UICorner")
+SeaEventDropdownCorner.CornerRadius = UDim.new(0, 6)
+SeaEventDropdownCorner.Parent = SeaEventDropdown
+
+local SeaEventLayout = Instance.new("UIListLayout")
+SeaEventLayout.Padding = UDim.new(0, 2)
+SeaEventLayout.Parent = SeaEventDropdown
+
+local SeaEventPadding = Instance.new("UIPadding")
+SeaEventPadding.PaddingTop = UDim.new(0, 4)
+SeaEventPadding.PaddingBottom = UDim.new(0, 4)
+SeaEventPadding.PaddingLeft = UDim.new(0, 4)
+SeaEventPadding.PaddingRight = UDim.new(0, 4)
+SeaEventPadding.Parent = SeaEventDropdown
+
+local SeaEventOpen = false
+local SeaEventOrder = {"SeaBeast", "Ship", "Shark", "Terrorshark", "Piranha"}
+
+local function SeaEventDisplayName(key)
+    if key == "SeaBeast" then return "SeaBeast" end
+    return key
+end
+
+local function UpdateSeaEventButtonText()
+    local selected = {}
+
+    for _, key in ipairs(SeaEventOrder) do
+        if SeaEventsSelected[key] then
+            table.insert(selected, SeaEventDisplayName(key))
+        end
+    end
+
+    if #selected == 0 then
+        SeaEventButton.Text = "  --"
+    else
+        SeaEventButton.Text = "  " .. table.concat(selected, ", ")
+    end
+end
+
+local function PositionSeaEventDropdown()
+    local pos = SeaEventButton.AbsolutePosition
+    local size = SeaEventButton.AbsoluteSize
+
+    SeaEventDropdown.Position = UDim2.fromOffset(
+        pos.X,
+        pos.Y + size.Y + 4
+    )
+end
+
+local function RebuildSeaEventDropdown()
+    for _, child in ipairs(SeaEventDropdown:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    for _, key in ipairs(SeaEventOrder) do
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, -8, 0, 34)
+        b.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
+        b.BorderSizePixel = 0
+        b.TextColor3 = Color3.fromRGB(230, 230, 230)
+        b.Font = Enum.Font.SourceSans
+        b.TextSize = 13
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.ZIndex = 125
+        b.Parent = SeaEventDropdown
+
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, 4)
+        c.Parent = b
+
+        local function refresh()
+            local mark = SeaEventsSelected[key] and "✓" or " "
+            b.Text = "  [" .. mark .. "] " .. SeaEventDisplayName(key)
+            b.BackgroundColor3 = SeaEventsSelected[key]
+                and Color3.fromRGB(50, 63, 60)
+                or Color3.fromRGB(42, 42, 45)
+        end
+
+        refresh()
+
+        b.MouseButton1Click:Connect(function()
+            SeaEventsSelected[key] = not SeaEventsSelected[key]
+            refresh()
+            UpdateSeaEventButtonText()
+        end)
+    end
+
+    SeaEventDropdown.Size = UDim2.new(0, 190, 0, #SeaEventOrder * 36 + 8)
+    PositionSeaEventDropdown()
+end
+
+SeaEventButton.MouseButton1Click:Connect(function()
+    RebuildSeaEventDropdown()
+    SeaEventOpen = not SeaEventOpen
+    SeaEventDropdown.Visible = SeaEventOpen
+    SeaEventArrow.Text = SeaEventOpen and "⌃" or "⌄"
+
+    if SeaEventOpen then
+        PositionSeaEventDropdown()
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if SeaEventOpen then
+        PositionSeaEventDropdown()
+    end
+end)
+
+UpdateSeaEventButtonText()
+
+
 -- =========================================================
 -- FOLLOW OWNER - VOO REAL ATÉ O OWNER
 --
@@ -647,7 +944,7 @@ local function StartFollowOwner()
     local rollbackCount = 0
 
     FollowConnection = RunService.Heartbeat:Connect(function()
-        if not Running then
+        if not Running or EscapeActive then
             return
         end
 
@@ -728,6 +1025,240 @@ local function StartFollowOwner()
 end
 
 -- =========================================================
+-- AUTO ESCAPE - 40% HP -> FOGE / 90% HP -> VOLTA
+-- =========================================================
+
+local function FindLeviathanThreat()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local lower = string.lower(obj.Name)
+
+            if string.find(lower, "leviathan", 1, true) then
+                local part =
+                    obj:FindFirstChild("HumanoidRootPart")
+                    or obj.PrimaryPart
+                    or obj:FindFirstChildWhichIsA("BasePart", true)
+
+                if part then
+                    return obj, part
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+local function StopEscape()
+    EscapeActive = false
+
+    if EscapeConnection then
+        EscapeConnection:Disconnect()
+        EscapeConnection = nil
+    end
+
+    if EscapeBodyVelocity then
+        pcall(function()
+            EscapeBodyVelocity:Destroy()
+        end)
+        EscapeBodyVelocity = nil
+    end
+
+    if EscapeBodyGyro then
+        pcall(function()
+            EscapeBodyGyro:Destroy()
+        end)
+        EscapeBodyGyro = nil
+    end
+
+    -- Se a automação continua ligada e esta conta é seguidora,
+    -- volta a seguir o owner automaticamente.
+    if Running and not AccountBuyBoat and OwnerPlayer then
+        task.defer(function()
+            if not EscapeActive and Running then
+                StartFollowOwner()
+            end
+        end)
+    end
+end
+
+local function StartEscape()
+    if EscapeActive then
+        return
+    end
+
+    if not HRP or not Humanoid then
+        return
+    end
+
+    EscapeActive = true
+
+    -- A fuga sempre tem prioridade sobre follow/hunt.
+    StopFollow()
+
+    ApplyFollowPhysics()
+
+    EscapeBodyVelocity = Instance.new("BodyVelocity")
+    EscapeBodyVelocity.Name = "IKAROEscapeVelocity"
+    EscapeBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    EscapeBodyVelocity.P = 12000
+    EscapeBodyVelocity.Velocity = Vector3.new(0, EscapeSpeed, 0)
+    EscapeBodyVelocity.Parent = HRP
+
+    EscapeBodyGyro = Instance.new("BodyGyro")
+    EscapeBodyGyro.Name = "IKAROEscapeGyro"
+    EscapeBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    EscapeBodyGyro.P = 15000
+    EscapeBodyGyro.D = 900
+    EscapeBodyGyro.CFrame = HRP.CFrame
+    EscapeBodyGyro.Parent = HRP
+
+    SetState(
+        "LOW_HP_ESCAPE",
+        "Vida <= 40%. Fugindo até recuperar 90%."
+    )
+
+    EscapeConnection = RunService.Heartbeat:Connect(function()
+        if not EscapeActive then
+            return
+        end
+
+        if not HRP or not HRP.Parent or not Humanoid or Humanoid.Health <= 0 then
+            StopEscape()
+            return
+        end
+
+        ApplyFollowPhysics()
+
+        local maxHealth = math.max(Humanoid.MaxHealth, 1)
+        local hpPercent = Humanoid.Health / maxHealth
+
+        -- Só encerra quando recuperar 90% ou mais.
+        if hpPercent >= EscapeReturnHealthPercent then
+            SetState(
+                "ESCAPE_COMPLETE",
+                "Vida recuperada para " ..
+                math.floor(hpPercent * 100) ..
+                "%. Voltando ao modo normal."
+            )
+
+            StopEscape()
+            return
+        end
+
+        local _, threatPart = FindLeviathanThreat()
+
+        local fleeDirection
+
+        if threatPart then
+            -- Foge diretamente para o lado oposto do Leviathan.
+            local away = HRP.Position - threatPart.Position
+
+            if away.Magnitude > 0.01 then
+                away = away.Unit
+            else
+                away = Vector3.new(0, 0, -1)
+            end
+
+            -- Mistura afastamento horizontal com subida forte.
+            fleeDirection = (
+                away
+                + Vector3.new(0, EscapeVerticalBias, 0)
+            ).Unit
+        else
+            -- Se não conseguir localizar o Leviathan,
+            -- sobe rapidamente para sair da região de perigo.
+            fleeDirection = Vector3.new(0, 1, 0)
+        end
+
+        EscapeBodyVelocity.Velocity =
+            fleeDirection * EscapeSpeed
+
+        EscapeBodyGyro.CFrame = CFrame.new(
+            HRP.Position,
+            HRP.Position + fleeDirection
+        )
+    end)
+end
+
+local function CheckLowHealth()
+    if not AutoEscapeEnabled then
+        return
+    end
+
+    if not Humanoid or Humanoid.Health <= 0 then
+        return
+    end
+
+    local maxHealth = math.max(Humanoid.MaxHealth, 1)
+    local hpPercent = Humanoid.Health / maxHealth
+
+    if not EscapeActive and hpPercent <= EscapeStartHealthPercent then
+        StartEscape()
+    end
+end
+
+local HealthConnection = nil
+
+local function BindHealthMonitor()
+    if HealthConnection then
+        HealthConnection:Disconnect()
+        HealthConnection = nil
+    end
+
+    if Humanoid then
+        HealthConnection = Humanoid.HealthChanged:Connect(function()
+            CheckLowHealth()
+        end)
+
+        CheckLowHealth()
+    end
+end
+
+BindHealthMonitor()
+
+LocalPlayer.CharacterAdded:Connect(function()
+    task.delay(1, function()
+        BindHealthMonitor()
+    end)
+end)
+
+-- =========================================================
+-- SEA EVENT DETECTOR
+-- Procura apenas eventos marcados no multi-select.
+-- =========================================================
+
+local function NameMatchesAny(name, variants)
+    local lower = string.lower(name)
+
+    for _, variant in ipairs(variants) do
+        if string.find(lower, string.lower(variant), 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function FindSelectedSeaEvent()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            for _, key in ipairs(SeaEventOrder) do
+                if SeaEventsSelected[key] then
+                    local variants = SeaEventNames[key]
+
+                    if variants and NameMatchesAny(obj.Name, variants) then
+                        return key, obj
+                    end
+                end
+            end
+        end
+    end
+
+    return nil, nil
+end
+
+-- =========================================================
 -- LEVIATHAN DETECTOR
 -- =========================================================
 
@@ -779,17 +1310,37 @@ local function StartHunt()
             local levi = FindLeviathan()
 
             if levi then
+                CurrentSeaEventTarget = nil
                 StopFollow()
                 SetState("LEVIATHAN_FOUND", levi:GetFullName())
             else
-                if not AccountBuyBoat and OwnerPlayer then
-                    SetState("FOLLOW_OWNER", "Acompanhando " .. OwnerPlayer.Name)
-                elseif AccountBuyBoat then
-                    SetState("SEARCHING_LEVIATHAN", "Principal aguardando Leviathan.")
+                local eventKey, eventModel = FindSelectedSeaEvent()
+
+                if eventModel then
+                    CurrentSeaEventTarget = eventModel
+                    SetState(
+                        "SEA_EVENT_FOUND",
+                        SeaEventDisplayName(eventKey) .. " • " .. eventModel:GetFullName()
+                    )
+
+                    -- Nesta build o evento é detectado e priorizado.
+                    -- A rotina real de combate vai reutilizar a aba Skills
+                    -- quando terminarmos de mapear o ataque.
+                else
+                    CurrentSeaEventTarget = nil
+
+                    if not AccountBuyBoat and OwnerPlayer then
+                        SetState("FOLLOW_OWNER", "Acompanhando " .. OwnerPlayer.Name)
+                    elseif AccountBuyBoat then
+                        SetState(
+                            "SEARCHING_LEVIATHAN",
+                            "Principal procurando Leviathan / Sea Events selecionados."
+                        )
+                    end
                 end
             end
 
-            task.wait(1)
+            task.wait(0.75)
         end
     end)
 end
