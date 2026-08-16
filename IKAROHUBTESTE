@@ -1,6 +1,6 @@
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local player = Players.LocalPlayer
 if not player then
@@ -14,6 +14,14 @@ local character
 local humanoid
 local hrp
 
+local viagemAtual = nil
+local viagemToken = 0
+local noclipAtivo = false
+local colisoesOriginais = {}
+
+-- Velocidade do voo automático em studs por segundo.
+local velocidadeVooAutomatico = 120
+
 local function atualizarPersonagem(char)
     character = char
     humanoid = char:WaitForChild("Humanoid")
@@ -21,23 +29,68 @@ local function atualizarPersonagem(char)
 end
 
 atualizarPersonagem(player.Character or player.CharacterAdded:Wait())
-player.CharacterAdded:Connect(atualizarPersonagem)
 
--- Remove GUI antiga
-local antiga = playerGui:FindFirstChild("IKAROhubGui")
-if antiga then
-    antiga:Destroy()
+player.CharacterAdded:Connect(function(char)
+    viagemToken = viagemToken + 1
+
+    if viagemAtual then
+        pcall(function()
+            viagemAtual:Cancel()
+        end)
+        viagemAtual = nil
+    end
+
+    atualizarPersonagem(char)
+end)
+
+-- =========================================================
+-- NOCLIP DURANTE O VOO
+-- =========================================================
+
+local function ativarNoclip()
+    if not character then
+        return
+    end
+
+    noclipAtivo = true
+
+    for _, obj in ipairs(character:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            if colisoesOriginais[obj] == nil then
+                colisoesOriginais[obj] = obj.CanCollide
+            end
+
+            obj.CanCollide = false
+        end
+    end
 end
 
--- =========================================================
--- CONFIGURAÇÕES
--- =========================================================
+local function restaurarColisoes()
+    noclipAtivo = false
 
-local distanciaFrenteNPC = 4
-local alturaTP = 3
+    for parte, valorOriginal in pairs(colisoesOriginais) do
+        if parte and parte.Parent then
+            pcall(function()
+                parte.CanCollide = valorOriginal
+            end)
+        end
+    end
+
+    colisoesOriginais = {}
+end
+
+RunService.Stepped:Connect(function()
+    if noclipAtivo and character then
+        for _, obj in ipairs(character:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                obj.CanCollide = false
+            end
+        end
+    end
+end)
 
 -- =========================================================
--- FUNÇÕES DE TELEPORTE
+-- FUNÇÕES DE LOCALIZAÇÃO
 -- =========================================================
 
 local function pegarPartePrincipal(obj)
@@ -60,61 +113,145 @@ local function pegarPartePrincipal(obj)
     return nil
 end
 
-local function teleportarParaParte(parte, offset)
-    if not hrp or not parte then
-        return
+local function pegarCFrameDestino(obj, altura)
+    altura = altura or 4
+
+    if not obj then
+        return nil
     end
 
-    offset = offset or Vector3.new(0, alturaTP, 0)
+    local parte = pegarPartePrincipal(obj)
 
-    local destino = parte.CFrame * CFrame.new(offset)
-
-    pcall(function()
-        hrp.CFrame = destino
-    end)
-end
-
-local function teleportarParaModel(model)
-    local parte = pegarPartePrincipal(model)
-    if not parte then
-        warn("IKAROhub: não encontrei parte principal em", model and model.Name)
-        return
-    end
-
-    local pos =
-        parte.Position
-        + Vector3.new(0, alturaTP, 0)
-        - (parte.CFrame.LookVector * distanciaFrenteNPC)
-
-    pcall(function()
-        hrp.CFrame = CFrame.new(pos, parte.Position)
-    end)
-end
-
-local function teleportarParaIlha(model)
-    if not model then
-        return
-    end
-
-    local sucesso, pivot = pcall(function()
-        return model:GetPivot()
-    end)
-
-    if sucesso and pivot then
-        pcall(function()
-            hrp.CFrame = pivot + Vector3.new(0, 15, 0)
-        end)
-        return
-    end
-
-    local parte = pegarPartePrincipal(model)
     if parte then
-        teleportarParaParte(parte, Vector3.new(0, 15, 0))
+        return parte.CFrame + Vector3.new(0, altura, 0)
     end
+
+    if obj:IsA("Model") then
+        local ok, pivot = pcall(function()
+            return obj:GetPivot()
+        end)
+
+        if ok and pivot then
+            return pivot + Vector3.new(0, altura, 0)
+        end
+    end
+
+    return nil
 end
 
 -- =========================================================
--- GUI BASE
+-- VOO AUTOMÁTICO
+-- =========================================================
+
+local function cancelarViagem()
+    viagemToken = viagemToken + 1
+
+    if viagemAtual then
+        pcall(function()
+            viagemAtual:Cancel()
+        end)
+
+        viagemAtual = nil
+    end
+
+    restaurarColisoes()
+end
+
+local function voarAteCFrame(destinoCFrame, statusCallback)
+    if not hrp or not destinoCFrame then
+        return false
+    end
+
+    cancelarViagem()
+
+    viagemToken = viagemToken + 1
+    local meuToken = viagemToken
+
+    ativarNoclip()
+
+    local distancia = (hrp.Position - destinoCFrame.Position).Magnitude
+    local duracao = math.max(distancia / velocidadeVooAutomatico, 0.15)
+
+    local tweenInfo = TweenInfo.new(
+        duracao,
+        Enum.EasingStyle.Linear,
+        Enum.EasingDirection.Out
+    )
+
+    viagemAtual = TweenService:Create(
+        hrp,
+        tweenInfo,
+        {CFrame = destinoCFrame}
+    )
+
+    if statusCallback then
+        statusCallback("Voando... " .. math.floor(distancia) .. " studs")
+    end
+
+    local tweenLocal = viagemAtual
+    tweenLocal:Play()
+
+    local estado = tweenLocal.Completed:Wait()
+
+    if meuToken ~= viagemToken then
+        return false
+    end
+
+    if viagemAtual == tweenLocal then
+        viagemAtual = nil
+    end
+
+    restaurarColisoes()
+
+    return estado == Enum.PlaybackState.Completed
+end
+
+local function voarAteObjeto(obj, altura, statusCallback)
+    local destino = pegarCFrameDestino(obj, altura)
+
+    if not destino then
+        if statusCallback then
+            statusCallback("Não encontrei uma posição válida.")
+        end
+
+        return
+    end
+
+    task.spawn(function()
+        local ok, erro = pcall(function()
+            local chegou = voarAteCFrame(destino, statusCallback)
+
+            if statusCallback then
+                if chegou then
+                    statusCallback("Chegou ao destino.")
+                else
+                    statusCallback("Viagem cancelada.")
+                end
+            end
+        end)
+
+        if not ok then
+            restaurarColisoes()
+
+            if statusCallback then
+                statusCallback("Erro durante o voo: " .. tostring(erro))
+            end
+        end
+    end)
+end
+
+-- =========================================================
+-- REMOVE GUI ANTIGA
+-- =========================================================
+
+local antiga = playerGui:FindFirstChild("IKAROhubGui")
+
+if antiga then
+    antiga:Destroy()
+end
+
+-- =========================================================
+-- INTERFACE
 -- =========================================================
 
 local gui = Instance.new("ScreenGui")
@@ -123,9 +260,8 @@ gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
 local main = Instance.new("Frame")
-main.Name = "Main"
-main.Size = UDim2.new(0, 360, 0, 470)
-main.Position = UDim2.new(0.03, 0, 0.13, 0)
+main.Size = UDim2.new(0, 370, 0, 500)
+main.Position = UDim2.new(0.03, 0, 0.1, 0)
 main.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
 main.BorderSizePixel = 0
 main.Active = true
@@ -163,19 +299,39 @@ tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 tabLayout.Parent = tabBar
 
 local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1, -20, 0, 26)
+status.Size = UDim2.new(1, -20, 0, 30)
 status.Position = UDim2.new(0, 10, 0, 96)
 status.BackgroundTransparency = 1
 status.TextColor3 = Color3.fromRGB(210, 210, 210)
 status.Font = Enum.Font.SourceSans
 status.TextSize = 13
-status.Text = "Carregando..."
+status.TextWrapped = true
+status.Text = "Pronto."
 status.Parent = main
 
+local cancelButton = Instance.new("TextButton")
+cancelButton.Size = UDim2.new(0, 95, 0, 26)
+cancelButton.Position = UDim2.new(1, -105, 0, 98)
+cancelButton.BackgroundColor3 = Color3.fromRGB(155, 45, 45)
+cancelButton.BorderSizePixel = 0
+cancelButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+cancelButton.Font = Enum.Font.SourceSansBold
+cancelButton.TextSize = 12
+cancelButton.Text = "Parar voo"
+cancelButton.Parent = main
+
+local cancelCorner = Instance.new("UICorner")
+cancelCorner.CornerRadius = UDim.new(0, 5)
+cancelCorner.Parent = cancelButton
+
+cancelButton.MouseButton1Click:Connect(function()
+    cancelarViagem()
+    status.Text = "Voo cancelado."
+end)
+
 local content = Instance.new("ScrollingFrame")
-content.Name = "Content"
-content.Size = UDim2.new(1, -20, 0, 325)
-content.Position = UDim2.new(0, 10, 0, 126)
+content.Size = UDim2.new(1, -20, 0, 350)
+content.Position = UDim2.new(0, 10, 0, 135)
 content.BackgroundColor3 = Color3.fromRGB(17, 17, 17)
 content.BorderSizePixel = 0
 content.ScrollBarThickness = 6
@@ -248,22 +404,24 @@ local function criarAviso(texto)
     label.Parent = content
 end
 
+local function setStatus(texto)
+    status.Text = texto
+end
+
 -- =========================================================
--- ABA INIMIGOS
+-- INIMIGOS
+-- Usa APENAS inimigos físicos que existem em Workspace.Enemies
 -- =========================================================
 
 local function carregarInimigos()
     limparConteudo()
 
-    local encontrados = {}
+    local pasta = workspace:FindFirstChild("Enemies")
     local lista = {}
 
-    local pastaEnemies = workspace:FindFirstChild("Enemies")
-
-    if pastaEnemies then
-        for _, obj in ipairs(pastaEnemies:GetChildren()) do
-            if obj:IsA("Model") and not encontrados[obj] then
-                encontrados[obj] = true
+    if pasta then
+        for _, obj in ipairs(pasta:GetChildren()) do
+            if obj:IsA("Model") then
                 table.insert(lista, obj)
             end
         end
@@ -276,124 +434,126 @@ local function carregarInimigos()
     for _, inimigo in ipairs(lista) do
         criarBotaoLista(inimigo.Name, function()
             if inimigo and inimigo.Parent then
-                teleportarParaModel(inimigo)
-                status.Text = "TP para inimigo: " .. inimigo.Name
+                setStatus("Indo até inimigo: " .. inimigo.Name)
+                voarAteObjeto(inimigo, 4, setStatus)
             else
-                status.Text = "Inimigo não está mais no mapa."
+                setStatus("Esse inimigo não está mais no mapa.")
             end
         end)
     end
 
-    status.Text = "Inimigos detectados: " .. tostring(#lista)
-
     if #lista == 0 then
-        criarAviso("Nenhum inimigo encontrado em Workspace.Enemies.")
+        criarAviso("Nenhum inimigo físico encontrado em Workspace.Enemies.")
     end
+
+    setStatus("Inimigos físicos encontrados: " .. tostring(#lista))
 end
 
 -- =========================================================
--- ABA NPCs
+-- NPCs
+--
+-- IMPORTANTE:
+-- A versão anterior listava ReplicatedStorage.NPCs. Aqueles modelos
+-- são templates e não possuem necessariamente uma posição física.
+--
+-- Esta versão lista APENAS NPCs realmente existentes em Workspace.NPCs.
 -- =========================================================
-
-local function procurarNPCFisico(nome)
-    local pastaNPCs = workspace:FindFirstChild("NPCs")
-
-    if pastaNPCs then
-        for _, obj in ipairs(pastaNPCs:GetDescendants()) do
-            if obj:IsA("Model") and obj.Name == nome then
-                return obj
-            end
-        end
-    end
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and obj.Name == nome then
-            if Players:GetPlayerFromCharacter(obj) == nil then
-                return obj
-            end
-        end
-    end
-
-    return nil
-end
 
 local function carregarNPCs()
     limparConteudo()
 
-    local npcFolder = ReplicatedStorage:FindFirstChild("NPCs")
-    if not npcFolder then
-        status.Text = "ReplicatedStorage.NPCs não encontrado."
-        criarAviso("A pasta ReplicatedStorage.NPCs não está disponível.")
-        return
-    end
+    local pasta = workspace:FindFirstChild("NPCs")
+    local lista = {}
 
-    local nomes = {}
-    local vistos = {}
+    if pasta then
+        for _, obj in ipairs(pasta:GetDescendants()) do
+            if obj:IsA("Model") then
+                local parte = pegarPartePrincipal(obj)
 
-    for _, obj in ipairs(npcFolder:GetChildren()) do
-        if obj:IsA("Model") and not vistos[obj.Name] then
-            vistos[obj.Name] = true
-            table.insert(nomes, obj.Name)
+                if parte and Players:GetPlayerFromCharacter(obj) == nil then
+                    table.insert(lista, obj)
+                end
+            end
         end
     end
 
-    table.sort(nomes, function(a, b)
-        return string.lower(a) < string.lower(b)
+    table.sort(lista, function(a, b)
+        return string.lower(a.Name) < string.lower(b.Name)
     end)
 
-    for _, nome in ipairs(nomes) do
-        criarBotaoLista(nome, function()
-            local fisico = procurarNPCFisico(nome)
-
-            if fisico then
-                teleportarParaModel(fisico)
-                status.Text = "TP para NPC: " .. nome
+    for _, npc in ipairs(lista) do
+        criarBotaoLista(npc.Name, function()
+            if npc and npc.Parent then
+                setStatus("Indo até NPC: " .. npc.Name)
+                voarAteObjeto(npc, 4, setStatus)
             else
-                status.Text = "NPC '" .. nome .. "' existe no storage, mas não achei a cópia física no mapa."
+                setStatus("Esse NPC não está mais carregado no mapa.")
             end
         end)
     end
 
-    status.Text = "NPCs disponíveis no storage: " .. tostring(#nomes)
+    if #lista == 0 then
+        criarAviso(
+            "Nenhum NPC físico foi encontrado em Workspace.NPCs. " ..
+            "Alguns NPCs só são carregados quando você se aproxima da ilha."
+        )
+    end
+
+    setStatus("NPCs físicos encontrados: " .. tostring(#lista))
 end
 
 -- =========================================================
--- ABA ILHAS / TP
+-- ILHAS
+--
+-- Em vez de TP instantâneo, agora voa em linha reta até o destino
+-- com noclip temporário.
 -- =========================================================
 
-local nomesIgnorarMapa = {
-    ["Waterfall"] = true,
-    ["Temple of Time"] = true
+local nomesIlhasPreferidos = {
+    "Port Town",
+    "Port",
+    "Hydra Island",
+    "Hydra",
+    "Great Tree",
+    "Tree",
+    "Floating Turtle",
+    "Turtle",
+    "Haunted Castle",
+    "Castle on the Sea",
+    "Castle",
+    "Sea of Treats",
+    "Cake",
+    "Chocolate",
+    "Candy",
+    "Ice Cream",
+    "Tiki Outpost",
+    "Tiki"
 }
 
-local function ehProvavelIlha(model)
-    if not model:IsA("Model") then
+local function pareceIlha(obj)
+    if not obj:IsA("Model") then
         return false
     end
 
-    if nomesIgnorarMapa[model.Name] then
-        return false
-    end
+    local nome = string.lower(obj.Name)
 
-    local nome = string.lower(model.Name)
-
-    local palavras = {
-        "island",
-        "castle",
-        "turtle",
-        "tree",
+    local termos = {
         "port",
-        "tiki",
+        "hydra",
+        "tree",
+        "turtle",
+        "castle",
         "cake",
         "chocolate",
         "candy",
         "ice cream",
-        "haunted",
-        "hydra"
+        "tiki",
+        "peanut",
+        "sea of treats"
     }
 
-    for _, palavra in ipairs(palavras) do
-        if string.find(nome, palavra, 1, true) then
+    for _, termo in ipairs(termos) do
+        if string.find(nome, termo, 1, true) then
             return true
         end
     end
@@ -405,9 +565,10 @@ local function carregarIlhas()
     limparConteudo()
 
     local map = workspace:FindFirstChild("Map")
+
     if not map then
-        status.Text = "Workspace.Map não encontrado."
-        criarAviso("A pasta Workspace.Map não foi encontrada.")
+        criarAviso("Workspace.Map não foi encontrado.")
+        setStatus("Mapa não encontrado.")
         return
     end
 
@@ -415,22 +576,18 @@ local function carregarIlhas()
     local vistos = {}
 
     for _, obj in ipairs(map:GetChildren()) do
-        if obj:IsA("Model") and not vistos[obj.Name] then
-            if ehProvavelIlha(obj) then
-                vistos[obj.Name] = true
-                table.insert(lista, obj)
-            end
+        if obj:IsA("Model") and pareceIlha(obj) and not vistos[obj] then
+            vistos[obj] = true
+            table.insert(lista, obj)
         end
     end
 
-    -- fallback: se o jogo não nomear as ilhas de forma óbvia,
-    -- mostra todos os models principais do Map
-    if #lista == 0 then
-        for _, obj in ipairs(map:GetChildren()) do
-            if obj:IsA("Model") and not vistos[obj.Name] then
-                vistos[obj.Name] = true
-                table.insert(lista, obj)
-            end
+    -- Inclui alguns modelos aninhados relevantes, caso estejam dentro
+    -- de outro model principal.
+    for _, obj in ipairs(map:GetDescendants()) do
+        if obj:IsA("Model") and pareceIlha(obj) and not vistos[obj] then
+            vistos[obj] = true
+            table.insert(lista, obj)
         end
     end
 
@@ -441,31 +598,65 @@ local function carregarIlhas()
     for _, ilha in ipairs(lista) do
         criarBotaoLista(ilha.Name, function()
             if ilha and ilha.Parent then
-                teleportarParaIlha(ilha)
-                status.Text = "TP para ilha/mapa: " .. ilha.Name
-            else
-                status.Text = "Ilha não está mais disponível."
+                setStatus("Voando até: " .. ilha.Name)
+
+                local destino = nil
+
+                local ok, pivot = pcall(function()
+                    return ilha:GetPivot()
+                end)
+
+                if ok and pivot then
+                    destino = pivot + Vector3.new(0, 30, 0)
+                else
+                    local parte = pegarPartePrincipal(ilha)
+
+                    if parte then
+                        destino = parte.CFrame + Vector3.new(0, 30, 0)
+                    end
+                end
+
+                if destino then
+                    task.spawn(function()
+                        local sucesso, erro = pcall(function()
+                            local chegou = voarAteCFrame(destino, setStatus)
+
+                            if chegou then
+                                setStatus("Chegou em: " .. ilha.Name)
+                            end
+                        end)
+
+                        if not sucesso then
+                            restaurarColisoes()
+                            setStatus("Erro ao voar até ilha: " .. tostring(erro))
+                        end
+                    end)
+                else
+                    setStatus("Não consegui obter a posição de " .. ilha.Name)
+                end
             end
         end)
     end
 
-    status.Text = "Locais detectados: " .. tostring(#lista)
-
     if #lista == 0 then
-        criarAviso("Nenhuma ilha/model principal foi encontrada em Workspace.Map.")
+        criarAviso(
+            "Nenhum modelo de ilha reconhecido foi encontrado. " ..
+            "Podemos mapear os nomes internos do Workspace.Map com outro diagnóstico."
+        )
     end
+
+    setStatus("Locais/ilhas encontrados: " .. tostring(#lista))
 end
 
 -- =========================================================
 -- ABAS
 -- =========================================================
 
-local abaAtual = nil
 local botoesAbas = {}
 
 local function criarAba(nome, callback)
     local botao = Instance.new("TextButton")
-    botao.Size = UDim2.new(0, 105, 1, 0)
+    botao.Size = UDim2.new(0, 108, 1, 0)
     botao.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     botao.BorderSizePixel = 0
     botao.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -481,13 +672,13 @@ local function criarAba(nome, callback)
     botoesAbas[nome] = botao
 
     botao.MouseButton1Click:Connect(function()
-        abaAtual = nome
+        cancelarViagem()
 
-        for n, b in pairs(botoesAbas) do
-            if n == nome then
-                b.BackgroundColor3 = Color3.fromRGB(40, 150, 90)
+        for nomeAba, outro in pairs(botoesAbas) do
+            if nomeAba == nome then
+                outro.BackgroundColor3 = Color3.fromRGB(40, 150, 90)
             else
-                b.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+                outro.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
             end
         end
 
@@ -497,21 +688,16 @@ end
 
 criarAba("Inimigos", carregarInimigos)
 criarAba("NPCs", carregarNPCs)
-criarAba("Ilhas / TP", carregarIlhas)
+criarAba("Ilhas / Voo", carregarIlhas)
 
--- Abre NPCs por padrão
 task.delay(0.4, function()
-    abaAtual = "NPCs"
-
     for nome, botao in pairs(botoesAbas) do
         if nome == "NPCs" then
             botao.BackgroundColor3 = Color3.fromRGB(40, 150, 90)
-        else
-            botao.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
         end
     end
 
     carregarNPCs()
 end)
 
-print("IKAROhub Menu carregado com sucesso!")
+print("IKAROhub atualizado: inimigos, NPCs físicos e voo para ilhas.")
