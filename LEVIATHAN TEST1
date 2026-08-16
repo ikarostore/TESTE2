@@ -1,0 +1,704 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    warn("IKARO Leviathan: LocalPlayer não encontrado")
+    return
+end
+
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local Character
+local Humanoid
+local HRP
+
+local function SetupCharacter(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+    HRP = char:WaitForChild("HumanoidRootPart")
+end
+
+SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
+LocalPlayer.CharacterAdded:Connect(SetupCharacter)
+
+-- =========================================================
+-- ESTADO / CONFIGURAÇÕES
+-- =========================================================
+
+local State = "IDLE"
+local Running = false
+local OwnerPlayer = nil
+local AccountBuyBoat = false
+
+local FollowEnabled = true
+local FollowDistance = 7
+local FollowHeight = 3
+
+local LeviathanModel = nil
+
+local CombatConfig = {
+    Type = "Melee",
+
+    Melee = {
+        Selected = {Z = true, X = true, C = true},
+        Hold = {Z = 0.5, X = 0.5, C = 0.5}
+    },
+
+    Sword = {
+        Selected = {Z = true, X = true},
+        Hold = {Z = 0.5, X = 0.5}
+    },
+
+    Gun = {
+        Selected = {Z = true, X = true},
+        Hold = {Z = 0.5, X = 0.5}
+    },
+
+    Fruit = {
+        Selected = {Z = true, X = true, C = true, V = true, F = true},
+        Hold = {Z = 0.5, X = 0.5, C = 0.5, V = 0.5, F = 0.5}
+    }
+}
+
+-- =========================================================
+-- GUI BASE
+-- =========================================================
+
+local oldGui = PlayerGui:FindFirstChild("IKARO_Leviathan")
+if oldGui then
+    oldGui:Destroy()
+end
+
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "IKARO_Leviathan"
+Gui.ResetOnSpawn = false
+Gui.Parent = PlayerGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 520, 0, 430)
+Main.Position = UDim2.new(0.04, 0, 0.12, 0)
+Main.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.Parent = Gui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = Main
+
+local Header = Instance.new("TextLabel")
+Header.Size = UDim2.new(1, 0, 0, 42)
+Header.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+Header.BorderSizePixel = 0
+Header.TextColor3 = Color3.fromRGB(0, 255, 150)
+Header.Font = Enum.Font.SourceSansBold
+Header.TextSize = 18
+Header.Text = "IKARO Leviathan • Test Build"
+Header.Parent = Main
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 10)
+HeaderCorner.Parent = Header
+
+local Side = Instance.new("Frame")
+Side.Size = UDim2.new(0, 145, 1, -52)
+Side.Position = UDim2.new(0, 8, 0, 48)
+Side.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
+Side.BorderSizePixel = 0
+Side.Parent = Main
+
+local SideCorner = Instance.new("UICorner")
+SideCorner.CornerRadius = UDim.new(0, 8)
+SideCorner.Parent = Side
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -165, 1, -52)
+Content.Position = UDim2.new(0, 158, 0, 48)
+Content.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
+Content.BorderSizePixel = 0
+Content.Parent = Main
+
+local ContentCorner = Instance.new("UICorner")
+ContentCorner.CornerRadius = UDim.new(0, 8)
+ContentCorner.Parent = Content
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, -20, 0, 46)
+Status.Position = UDim2.new(0, 10, 1, -52)
+Status.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+Status.BorderSizePixel = 0
+Status.TextColor3 = Color3.fromRGB(210, 210, 210)
+Status.TextWrapped = true
+Status.Font = Enum.Font.SourceSans
+Status.TextSize = 12
+Status.Text = "Status: IDLE"
+Status.Parent = Content
+
+local StatusCorner = Instance.new("UICorner")
+StatusCorner.CornerRadius = UDim.new(0, 6)
+StatusCorner.Parent = Status
+
+local function SetState(newState, message)
+    State = newState
+    Status.Text = "Status: " .. newState .. (message and ("\n" .. message) or "")
+    print("[IKARO Leviathan]", newState, message or "")
+end
+
+local Pages = {}
+
+local function NewPage(name)
+    local page = Instance.new("ScrollingFrame")
+    page.Name = name
+    page.Size = UDim2.new(1, -20, 1, -62)
+    page.Position = UDim2.new(0, 10, 0, 8)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 5
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.Visible = false
+    page.Parent = Content
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 7)
+    layout.Parent = page
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 3)
+    padding.PaddingBottom = UDim.new(0, 3)
+    padding.PaddingLeft = UDim.new(0, 3)
+    padding.PaddingRight = UDim.new(0, 3)
+    padding.Parent = page
+
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+    end)
+
+    Pages[name] = page
+    return page
+end
+
+local HuntPage = NewPage("Hunt")
+local SkillsPage = NewPage("Skills")
+
+local TabButtons = {}
+
+local function ShowPage(name)
+    for pageName, page in pairs(Pages) do
+        page.Visible = pageName == name
+    end
+
+    for tabName, button in pairs(TabButtons) do
+        if tabName == name then
+            button.BackgroundColor3 = Color3.fromRGB(40, 130, 85)
+        else
+            button.BackgroundColor3 = Color3.fromRGB(43, 43, 43)
+        end
+    end
+end
+
+local function NewTab(name, text, y)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -12, 0, 38)
+    button.Position = UDim2.new(0, 6, 0, y)
+    button.BackgroundColor3 = Color3.fromRGB(43, 43, 43)
+    button.BorderSizePixel = 0
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextWrapped = true
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 12
+    button.Text = text
+    button.Parent = Side
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = button
+
+    TabButtons[name] = button
+    button.MouseButton1Click:Connect(function()
+        ShowPage(name)
+    end)
+end
+
+NewTab("Hunt", "Setup Hunt\nLeviathan", 8)
+NewTab("Skills", "Hold / Select\nSkills", 52)
+
+-- =========================================================
+-- COMPONENTES
+-- =========================================================
+
+local function Label(parent, text, height)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(1, -6, 0, height or 28)
+    l.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+    l.BorderSizePixel = 0
+    l.TextColor3 = Color3.fromRGB(235, 235, 235)
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Font = Enum.Font.SourceSans
+    l.TextSize = 13
+    l.Text = "  " .. text
+    l.Parent = parent
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = l
+
+    return l
+end
+
+local function Button(parent, text, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -6, 0, 34)
+    b.BackgroundColor3 = Color3.fromRGB(46, 46, 46)
+    b.BorderSizePixel = 0
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = 13
+    b.Text = text
+    b.Parent = parent
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = b
+
+    b.MouseButton1Click:Connect(function()
+        callback(b)
+    end)
+
+    return b
+end
+
+local function Toggle(parent, text, initial, callback)
+    local value = initial
+    local b = Button(parent, "", function(button)
+        value = not value
+        button.Text = text .. ": " .. (value and "ON" or "OFF")
+        button.BackgroundColor3 = value and Color3.fromRGB(40, 130, 85) or Color3.fromRGB(80, 45, 45)
+        callback(value)
+    end)
+
+    b.Text = text .. ": " .. (value and "ON" or "OFF")
+    b.BackgroundColor3 = value and Color3.fromRGB(40, 130, 85) or Color3.fromRGB(80, 45, 45)
+
+    return b
+end
+
+-- =========================================================
+-- PLAYER SELECTOR
+-- =========================================================
+
+local OwnerLabel = Label(HuntPage, "Owner Boat: --", 30)
+
+local PlayerDropdownOpen = false
+local PlayerDropdownButtons = {}
+
+local function ClearPlayerButtons()
+    for _, b in ipairs(PlayerDropdownButtons) do
+        if b and b.Parent then
+            b:Destroy()
+        end
+    end
+    PlayerDropdownButtons = {}
+end
+
+local function RefreshPlayerList()
+    ClearPlayerButtons()
+
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            table.insert(list, p)
+        end
+    end
+
+    table.sort(list, function(a, b)
+        return string.lower(a.Name) < string.lower(b.Name)
+    end)
+
+    for _, p in ipairs(list) do
+        local b = Button(HuntPage, "Select: " .. p.Name, function()
+            OwnerPlayer = p
+            OwnerLabel.Text = "  Owner Boat: " .. p.Name
+            SetState("OWNER_SELECTED", p.Name)
+        end)
+        table.insert(PlayerDropdownButtons, b)
+    end
+
+    SetState("PLAYER_LIST_REFRESHED", tostring(#list) .. " outros jogadores")
+end
+
+Button(HuntPage, "Refresh List Player", RefreshPlayerList)
+
+Toggle(HuntPage, "Account Buy Boat", false, function(v)
+    AccountBuyBoat = v
+
+    if v then
+        OwnerPlayer = LocalPlayer
+        OwnerLabel.Text = "  Owner Boat: " .. LocalPlayer.Name .. " (THIS ACCOUNT)"
+        SetState("MAIN_ACCOUNT", "Esta conta é a principal / compradora do Beast Hunter.")
+    else
+        SetState("FOLLOWER_ACCOUNT", "Selecione o dono do barco.")
+    end
+end)
+
+-- =========================================================
+-- LEVIATHAN DETECTOR
+-- =========================================================
+
+local function FindLeviathan()
+    local best = nil
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local lower = string.lower(obj.Name)
+
+            if string.find(lower, "leviathan", 1, true) then
+                best = obj
+                break
+            end
+        end
+    end
+
+    return best
+end
+
+local function GetTargetPart(model)
+    if not model then
+        return nil
+    end
+
+    return model:FindFirstChild("HumanoidRootPart")
+        or model.PrimaryPart
+        or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+-- =========================================================
+-- FOLLOW OWNER
+-- =========================================================
+
+local FollowConnection = nil
+
+local function StopFollow()
+    if FollowConnection then
+        FollowConnection:Disconnect()
+        FollowConnection = nil
+    end
+end
+
+local function StartFollowOwner()
+    StopFollow()
+
+    if not OwnerPlayer or OwnerPlayer == LocalPlayer then
+        return
+    end
+
+    FollowConnection = RunService.Heartbeat:Connect(function()
+        if not Running or State == "COMBAT" then
+            return
+        end
+
+        if not HRP or not HRP.Parent then
+            return
+        end
+
+        local ownerCharacter = OwnerPlayer.Character
+        local ownerHRP = ownerCharacter and ownerCharacter:FindFirstChild("HumanoidRootPart")
+
+        if not ownerHRP then
+            return
+        end
+
+        local targetPosition =
+            ownerHRP.Position
+            - ownerHRP.CFrame.LookVector * FollowDistance
+            + Vector3.new(0, FollowHeight, 0)
+
+        local distance = (HRP.Position - targetPosition).Magnitude
+
+        -- Teste inicial:
+        -- aproxima suavemente usando velocity, sem CFrame contínuo.
+        if distance > 15 then
+            local direction = (targetPosition - HRP.Position).Unit
+            HRP.AssemblyLinearVelocity = direction * math.min(180, distance * 4)
+        else
+            HRP.AssemblyLinearVelocity = ownerHRP.AssemblyLinearVelocity
+        end
+    end)
+end
+
+-- =========================================================
+-- COMBAT INPUT TEST
+-- =========================================================
+
+local function PressSkill(keyName, hold)
+    local key = Enum.KeyCode[keyName]
+    if not key then
+        return
+    end
+
+    VirtualInputManager:SendKeyEvent(true, key, false, game)
+    task.wait(hold or 0.1)
+    VirtualInputManager:SendKeyEvent(false, key, false, game)
+end
+
+local function EquipCategory(category)
+    -- Placeholder.
+    -- Primeiro vamos validar o detector/seguir dono.
+    -- Depois mapearemos como selecionar Melee/Sword/Gun/Fruit corretamente.
+    print("IKARO: categoria de combate:", category)
+end
+
+local function RunCombatRotationOnce()
+    local category = CombatConfig.Type
+    local cfg = CombatConfig[category]
+
+    if not cfg then
+        return
+    end
+
+    EquipCategory(category)
+
+    local order
+
+    if category == "Fruit" then
+        order = {"Z","X","C","V","F"}
+    elseif category == "Melee" then
+        order = {"Z","X","C"}
+    else
+        order = {"Z","X"}
+    end
+
+    for _, key in ipairs(order) do
+        if not Running or State ~= "COMBAT" then
+            return
+        end
+
+        if cfg.Selected[key] then
+            PressSkill(key, cfg.Hold[key] or 0.5)
+            task.wait(0.15)
+        end
+    end
+end
+
+-- =========================================================
+-- HUNT STATE MACHINE - TEST VERSION
+-- =========================================================
+
+local HuntThread = nil
+
+local function StopHunt()
+    Running = false
+    StopFollow()
+
+    if HRP then
+        HRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
+    end
+
+    LeviathanModel = nil
+    SetState("STOPPED", "Automação parada.")
+end
+
+local function StartHunt()
+    if Running then
+        return
+    end
+
+    if not AccountBuyBoat and not OwnerPlayer then
+        SetState("ERROR", "Selecione o Owner Boat antes de iniciar.")
+        return
+    end
+
+    Running = true
+
+    if AccountBuyBoat then
+        SetState(
+            "MAIN_WAITING",
+            "Conta principal ativa. Compra/controle do Beast Hunter ainda será mapeado."
+        )
+    else
+        SetState(
+            "FOLLOW_OWNER",
+            "Seguindo " .. OwnerPlayer.Name
+        )
+        StartFollowOwner()
+    end
+
+    HuntThread = task.spawn(function()
+        while Running do
+            local leviathan = FindLeviathan()
+
+            if leviathan then
+                LeviathanModel = leviathan
+                StopFollow()
+
+                SetState(
+                    "LEVIATHAN_FOUND",
+                    leviathan:GetFullName()
+                )
+
+                task.wait(0.5)
+
+                if Running then
+                    SetState(
+                        "COMBAT",
+                        "Leviathan detectado. Iniciando rotação TESTE de skills."
+                    )
+
+                    while Running and LeviathanModel and LeviathanModel.Parent do
+                        RunCombatRotationOnce()
+                        task.wait(0.2)
+                    end
+
+                    if Running then
+                        LeviathanModel = nil
+
+                        if AccountBuyBoat then
+                            SetState("MAIN_WAITING", "Leviathan saiu/despawnou.")
+                        else
+                            SetState("FOLLOW_OWNER", "Leviathan saiu/despawnou.")
+                            StartFollowOwner()
+                        end
+                    end
+                end
+            else
+                if AccountBuyBoat then
+                    SetState(
+                        "SEARCHING_LEVIATHAN",
+                        "Principal aguardando Leviathan. Navegação do barco ainda será adicionada."
+                    )
+                else
+                    SetState(
+                        "FOLLOW_OWNER",
+                        "Acompanhando " .. OwnerPlayer.Name .. " e procurando Leviathan."
+                    )
+                end
+            end
+
+            task.wait(1)
+        end
+    end)
+end
+
+Toggle(HuntPage, "Start Hunt Leviathan", false, function(v)
+    if v then
+        StartHunt()
+    else
+        StopHunt()
+    end
+end)
+
+Button(HuntPage, "Scan Leviathan Now", function()
+    local model = FindLeviathan()
+
+    if model then
+        local part = GetTargetPart(model)
+        SetState(
+            "LEVIATHAN_FOUND_MANUAL",
+            model:GetFullName() .. (part and ("\nTarget: " .. part:GetFullName()) or "")
+        )
+    else
+        SetState("NO_LEVIATHAN", "Nenhum Model com 'Leviathan' encontrado no Workspace.")
+    end
+end)
+
+-- =========================================================
+-- SKILLS PAGE
+-- =========================================================
+
+local CurrentCategoryLabel = Label(SkillsPage, "Combat Type: Melee", 30)
+
+local function SetCombatType(category)
+    CombatConfig.Type = category
+    CurrentCategoryLabel.Text = "  Combat Type: " .. category
+    SetState("COMBAT_CONFIG", category)
+end
+
+Button(SkillsPage, "Use Melee", function() SetCombatType("Melee") end)
+Button(SkillsPage, "Use Sword", function() SetCombatType("Sword") end)
+Button(SkillsPage, "Use Gun", function() SetCombatType("Gun") end)
+Button(SkillsPage, "Use Fruit", function() SetCombatType("Fruit") end)
+
+local function AddSkillToggle(category, key)
+    Toggle(
+        SkillsPage,
+        category .. " " .. key,
+        CombatConfig[category].Selected[key],
+        function(v)
+            CombatConfig[category].Selected[key] = v
+        end
+    )
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, -6, 0, 30)
+    box.BackgroundColor3 = Color3.fromRGB(38,38,38)
+    box.BorderSizePixel = 0
+    box.TextColor3 = Color3.fromRGB(255,255,255)
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 13
+    box.Text = tostring(CombatConfig[category].Hold[key])
+    box.PlaceholderText = "Hold seconds"
+    box.Parent = SkillsPage
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,6)
+    c.Parent = box
+
+    box.FocusLost:Connect(function()
+        local n = tonumber(box.Text)
+
+        if n and n >= 0 and n <= 10 then
+            CombatConfig[category].Hold[key] = n
+        else
+            box.Text = tostring(CombatConfig[category].Hold[key])
+        end
+    end)
+end
+
+Label(SkillsPage, "MELEE", 28)
+AddSkillToggle("Melee", "Z")
+AddSkillToggle("Melee", "X")
+AddSkillToggle("Melee", "C")
+
+Label(SkillsPage, "SWORD", 28)
+AddSkillToggle("Sword", "Z")
+AddSkillToggle("Sword", "X")
+
+Label(SkillsPage, "GUN", 28)
+AddSkillToggle("Gun", "Z")
+AddSkillToggle("Gun", "X")
+
+Label(SkillsPage, "FRUIT", 28)
+AddSkillToggle("Fruit", "Z")
+AddSkillToggle("Fruit", "X")
+AddSkillToggle("Fruit", "C")
+AddSkillToggle("Fruit", "V")
+AddSkillToggle("Fruit", "F")
+
+Button(SkillsPage, "Test Selected Skills", function()
+    task.spawn(function()
+        SetState("SKILL_TEST", "Executando uma rotação: " .. CombatConfig.Type)
+
+        local oldState = State
+        State = "COMBAT"
+        local oldRunning = Running
+        Running = true
+
+        RunCombatRotationOnce()
+
+        Running = oldRunning
+        State = oldState
+        SetState("SKILL_TEST_DONE", "Teste concluído.")
+    end)
+end)
+
+-- =========================================================
+-- INIT
+-- =========================================================
+
+ShowPage("Hunt")
+SetState("IDLE", "Configure Owner / Account Buy Boat e teste o detector.")
+
+print("IKARO Leviathan Test Build carregado.")
