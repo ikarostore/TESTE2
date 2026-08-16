@@ -1,13 +1,5 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-
--- Alguns ambientes não expõem VirtualInputManager.
--- Não deixamos isso impedir a interface de carregar.
-local VirtualInputManager = nil
-pcall(function()
-    VirtualInputManager = game:GetService("VirtualInputManager")
-end)
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -17,26 +9,18 @@ end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-print("IKARO Leviathan: bootstrap iniciado...")
-
 local Character
 local Humanoid
 local HRP
 
 local function SetupCharacter(char)
     Character = char
-
-    local ok, erro = pcall(function()
-        Humanoid = char:WaitForChild("Humanoid", 15)
-        HRP = char:WaitForChild("HumanoidRootPart", 15)
-    end)
-
-    if not ok then
-        warn("IKARO Leviathan: erro configurando personagem:", erro)
-    end
+    Humanoid = char:WaitForChild("Humanoid", 15)
+    HRP = char:WaitForChild("HumanoidRootPart", 15)
 end
 
 SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
+
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.spawn(function()
         SetupCharacter(char)
@@ -44,19 +28,21 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 end)
 
 -- =========================================================
--- ESTADO / CONFIGURAÇÕES
+-- STATE
 -- =========================================================
 
-local State = "IDLE"
 local Running = false
+local State = "IDLE"
+
 local OwnerPlayer = nil
 local AccountBuyBoat = false
 
-local FollowEnabled = true
-local FollowDistance = 7
-local FollowHeight = 3
+local FollowConnection = nil
+local FollowSpeed = 260
+local FollowHeight = 8
+local FollowBack = 9
 
-local LeviathanModel = nil
+local savedCollisions = {}
 
 local CombatConfig = {
     Type = "Melee",
@@ -83,117 +69,97 @@ local CombatConfig = {
 }
 
 -- =========================================================
--- GUI BASE
+-- GUI ROOT
 -- =========================================================
 
-local oldGui = PlayerGui:FindFirstChild("IKARO_Leviathan")
-if oldGui then
-    oldGui:Destroy()
+local old = PlayerGui:FindFirstChild("IKARO_Leviathan")
+if old then
+    old:Destroy()
 end
 
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "IKARO_Leviathan"
 Gui.ResetOnSpawn = false
+Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Gui.Parent = PlayerGui
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 520, 0, 430)
-Main.Position = UDim2.new(0.04, 0, 0.12, 0)
-Main.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+Main.Size = UDim2.new(0, 500, 0, 355)
+Main.Position = UDim2.new(0.04, 0, 0.16, 0)
+Main.BackgroundColor3 = Color3.fromRGB(31, 31, 33)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
 Main.Parent = Gui
 
 local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.CornerRadius = UDim.new(0, 8)
 MainCorner.Parent = Main
 
-local Header = Instance.new("TextLabel")
-Header.Size = UDim2.new(1, 0, 0, 42)
-Header.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
-Header.BorderSizePixel = 0
-Header.TextColor3 = Color3.fromRGB(0, 255, 150)
-Header.Font = Enum.Font.SourceSansBold
-Header.TextSize = 18
-Header.Text = "IKARO Leviathan • Test Build"
-Header.Parent = Main
+local Top = Instance.new("Frame")
+Top.Size = UDim2.new(1, 0, 0, 38)
+Top.BackgroundColor3 = Color3.fromRGB(36, 36, 39)
+Top.BorderSizePixel = 0
+Top.Parent = Main
 
-local HeaderCorner = Instance.new("UICorner")
-HeaderCorner.CornerRadius = UDim.new(0, 10)
-HeaderCorner.Parent = Header
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 8)
+TopCorner.Parent = Top
 
-local Side = Instance.new("Frame")
-Side.Size = UDim2.new(0, 145, 1, -52)
-Side.Position = UDim2.new(0, 8, 0, 48)
-Side.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
-Side.BorderSizePixel = 0
-Side.Parent = Main
+local AppTitle = Instance.new("TextLabel")
+AppTitle.Size = UDim2.new(1, -20, 1, 0)
+AppTitle.Position = UDim2.new(0, 12, 0, 0)
+AppTitle.BackgroundTransparency = 1
+AppTitle.TextXAlignment = Enum.TextXAlignment.Left
+AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
+AppTitle.Font = Enum.Font.SourceSansBold
+AppTitle.TextSize = 14
+AppTitle.Text = "IKARO Leviathan [Test]"
+AppTitle.Parent = Top
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 145, 1, -48)
+Sidebar.Position = UDim2.new(0, 8, 0, 44)
+Sidebar.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
 
 local SideCorner = Instance.new("UICorner")
-SideCorner.CornerRadius = UDim.new(0, 8)
-SideCorner.Parent = Side
+SideCorner.CornerRadius = UDim.new(0, 7)
+SideCorner.Parent = Sidebar
 
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(1, -165, 1, -52)
-Content.Position = UDim2.new(0, 158, 0, 48)
-Content.BackgroundColor3 = Color3.fromRGB(29, 29, 29)
-Content.BorderSizePixel = 0
-Content.Parent = Main
+local PageHost = Instance.new("Frame")
+PageHost.Size = UDim2.new(1, -169, 1, -48)
+PageHost.Position = UDim2.new(0, 161, 0, 44)
+PageHost.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+PageHost.BorderSizePixel = 0
+PageHost.Parent = Main
 
-local ContentCorner = Instance.new("UICorner")
-ContentCorner.CornerRadius = UDim.new(0, 8)
-ContentCorner.Parent = Content
-
-local Status = Instance.new("TextLabel")
-Status.Size = UDim2.new(1, -20, 0, 46)
-Status.Position = UDim2.new(0, 10, 1, -52)
-Status.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
-Status.BorderSizePixel = 0
-Status.TextColor3 = Color3.fromRGB(210, 210, 210)
-Status.TextWrapped = true
-Status.Font = Enum.Font.SourceSans
-Status.TextSize = 12
-Status.Text = "Status: IDLE"
-Status.Parent = Content
-
-local StatusCorner = Instance.new("UICorner")
-StatusCorner.CornerRadius = UDim.new(0, 6)
-StatusCorner.Parent = Status
-
-local function SetState(newState, message)
-    State = newState
-    Status.Text = "Status: " .. newState .. (message and ("\n" .. message) or "")
-    print("[IKARO Leviathan]", newState, message or "")
-end
+local PageCorner = Instance.new("UICorner")
+PageCorner.CornerRadius = UDim.new(0, 7)
+PageCorner.Parent = PageHost
 
 local Pages = {}
+local TabButtons = {}
 
 local function NewPage(name)
     local page = Instance.new("ScrollingFrame")
     page.Name = name
-    page.Size = UDim2.new(1, -20, 1, -62)
-    page.Position = UDim2.new(0, 10, 0, 8)
+    page.Size = UDim2.new(1, -12, 1, -12)
+    page.Position = UDim2.new(0, 6, 0, 6)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
-    page.ScrollBarThickness = 5
+    page.ScrollBarThickness = 4
     page.CanvasSize = UDim2.new(0, 0, 0, 0)
     page.Visible = false
-    page.Parent = Content
+    page.Parent = PageHost
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 7)
+    layout.Padding = UDim.new(0, 6)
     layout.Parent = page
 
-    local padding = Instance.new("UIPadding")
-    padding.PaddingTop = UDim.new(0, 3)
-    padding.PaddingBottom = UDim.new(0, 3)
-    padding.PaddingLeft = UDim.new(0, 3)
-    padding.PaddingRight = UDim.new(0, 3)
-    padding.Parent = page
-
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
     end)
 
     Pages[name] = page
@@ -203,130 +169,256 @@ end
 local HuntPage = NewPage("Hunt")
 local SkillsPage = NewPage("Skills")
 
-local TabButtons = {}
-
 local function ShowPage(name)
     for pageName, page in pairs(Pages) do
-        page.Visible = pageName == name
+        page.Visible = (pageName == name)
     end
 
-    for tabName, button in pairs(TabButtons) do
+    for tabName, btn in pairs(TabButtons) do
         if tabName == name then
-            button.BackgroundColor3 = Color3.fromRGB(40, 130, 85)
+            btn.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
         else
-            button.BackgroundColor3 = Color3.fromRGB(43, 43, 43)
+            btn.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
         end
     end
 end
 
 local function NewTab(name, text, y)
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, -12, 0, 38)
-    button.Position = UDim2.new(0, 6, 0, y)
-    button.BackgroundColor3 = Color3.fromRGB(43, 43, 43)
-    button.BorderSizePixel = 0
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextWrapped = true
-    button.Font = Enum.Font.SourceSansBold
-    button.TextSize = 12
-    button.Text = text
-    button.Parent = Side
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = button
-
-    TabButtons[name] = button
-    button.MouseButton1Click:Connect(function()
-        ShowPage(name)
-    end)
-end
-
-NewTab("Hunt", "Setup Hunt\nLeviathan", 8)
-NewTab("Skills", "Hold / Select\nSkills", 52)
-
--- =========================================================
--- COMPONENTES
--- =========================================================
-
-local function Label(parent, text, height)
-    local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -6, 0, height or 28)
-    l.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
-    l.BorderSizePixel = 0
-    l.TextColor3 = Color3.fromRGB(235, 235, 235)
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Font = Enum.Font.SourceSans
-    l.TextSize = 13
-    l.Text = "  " .. text
-    l.Parent = parent
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = l
-
-    return l
-end
-
-local function Button(parent, text, callback)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -6, 0, 34)
-    b.BackgroundColor3 = Color3.fromRGB(46, 46, 46)
+    b.Size = UDim2.new(1, -12, 0, 42)
+    b.Position = UDim2.new(0, 6, 0, y)
+    b.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
     b.BorderSizePixel = 0
-    b.TextColor3 = Color3.fromRGB(255,255,255)
-    b.Font = Enum.Font.SourceSansBold
-    b.TextSize = 13
-    b.Text = text
-    b.Parent = parent
+    b.TextColor3 = Color3.fromRGB(200, 200, 200)
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 12
+    b.TextWrapped = true
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.Text = "  " .. text
+    b.Parent = Sidebar
 
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, 6)
     c.Parent = b
 
-    b.MouseButton1Click:Connect(function()
-        callback(b)
-    end)
+    TabButtons[name] = b
 
-    return b
+    b.MouseButton1Click:Connect(function()
+        ShowPage(name)
+    end)
 end
 
-local function Toggle(parent, text, initial, callback)
+NewTab("Hunt", "Tab Setup Hunt Leviathan", 8)
+NewTab("Skills", "Setting Hold\nand Select Skill", 54)
+
+-- =========================================================
+-- UI HELPERS
+-- =========================================================
+
+local function SectionTitle(parent, text)
+    local t = Instance.new("TextLabel")
+    t.Size = UDim2.new(1, 0, 0, 38)
+    t.BackgroundTransparency = 1
+    t.TextColor3 = Color3.fromRGB(245, 245, 245)
+    t.Font = Enum.Font.SourceSansBold
+    t.TextSize = 22
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Text = text
+    t.Parent = parent
+    return t
+end
+
+local function Row(parent, height)
+    local f = Instance.new("Frame")
+    f.Size = UDim2.new(1, 0, 0, height or 42)
+    f.BackgroundColor3 = Color3.fromRGB(46, 46, 49)
+    f.BorderSizePixel = 0
+    f.ClipsDescendants = false
+    f.Parent = parent
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = f
+
+    return f
+end
+
+local function RowLabel(row, text)
+    local l = Instance.new("TextLabel")
+    l.Size = UDim2.new(0.5, -8, 1, 0)
+    l.Position = UDim2.new(0, 10, 0, 0)
+    l.BackgroundTransparency = 1
+    l.TextColor3 = Color3.fromRGB(230, 230, 230)
+    l.Font = Enum.Font.SourceSans
+    l.TextSize = 13
+    l.TextWrapped = true
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Text = text
+    l.Parent = row
+    return l
+end
+
+local function SimpleButton(parent, text, callback)
+    local row = Row(parent, 40)
+
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, 0, 1, 0)
+    b.BackgroundTransparency = 1
+    b.TextColor3 = Color3.fromRGB(235, 235, 235)
+    b.TextXAlignment = Enum.TextXAlignment.Left
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 13
+    b.Text = "  " .. text
+    b.Parent = row
+
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(0, 22, 1, 0)
+    arrow.Position = UDim2.new(1, -28, 0, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.TextColor3 = Color3.fromRGB(210, 210, 210)
+    arrow.Font = Enum.Font.SourceSansBold
+    arrow.TextSize = 18
+    arrow.Text = "›"
+    arrow.Parent = row
+
+    b.MouseButton1Click:Connect(callback)
+    return row
+end
+
+local function ToggleRow(parent, text, initial, callback)
     local value = initial
-    local b = Button(parent, "", function(button)
+    local row = Row(parent, 40)
+
+    RowLabel(row, text)
+
+    local track = Instance.new("TextButton")
+    track.Size = UDim2.new(0, 42, 0, 22)
+    track.Position = UDim2.new(1, -52, 0.5, -11)
+    track.BackgroundColor3 = value and Color3.fromRGB(70, 130, 95) or Color3.fromRGB(70, 70, 73)
+    track.BorderSizePixel = 0
+    track.Text = ""
+    track.Parent = row
+
+    local tc = Instance.new("UICorner")
+    tc.CornerRadius = UDim.new(1, 0)
+    tc.Parent = track
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 18, 0, 18)
+    knob.Position = value and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    knob.BackgroundColor3 = Color3.fromRGB(210, 210, 210)
+    knob.BorderSizePixel = 0
+    knob.Parent = track
+
+    local kc = Instance.new("UICorner")
+    kc.CornerRadius = UDim.new(1, 0)
+    kc.Parent = knob
+
+    track.MouseButton1Click:Connect(function()
         value = not value
-        button.Text = text .. ": " .. (value and "ON" or "OFF")
-        button.BackgroundColor3 = value and Color3.fromRGB(40, 130, 85) or Color3.fromRGB(80, 45, 45)
+        track.BackgroundColor3 = value and Color3.fromRGB(70, 130, 95) or Color3.fromRGB(70, 70, 73)
+        knob.Position = value and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
         callback(value)
     end)
 
-    b.Text = text .. ": " .. (value and "ON" or "OFF")
-    b.BackgroundColor3 = value and Color3.fromRGB(40, 130, 85) or Color3.fromRGB(80, 45, 45)
-
-    return b
+    return row
 end
 
 -- =========================================================
--- PLAYER SELECTOR
+-- STATUS
 -- =========================================================
 
-local OwnerLabel = Label(HuntPage, "Owner Boat: --", 30)
+local StatusRow = Row(HuntPage, 46)
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, -20, 1, 0)
+StatusLabel.Position = UDim2.new(0, 10, 0, 0)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextColor3 = Color3.fromRGB(215, 215, 215)
+StatusLabel.Font = Enum.Font.SourceSans
+StatusLabel.TextSize = 12
+StatusLabel.TextWrapped = true
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.Text = "Status: IDLE"
+StatusLabel.Parent = StatusRow
 
-local PlayerDropdownOpen = false
-local PlayerDropdownButtons = {}
+local function SetState(state, message)
+    State = state
+    StatusLabel.Text = "Status: " .. state .. (message and ("\n" .. message) or "")
+    print("[IKARO Leviathan]", state, message or "")
+end
 
-local function ClearPlayerButtons()
-    for _, b in ipairs(PlayerDropdownButtons) do
-        if b and b.Parent then
-            b:Destroy()
+-- =========================================================
+-- DROPDOWN OWNER PLAYER
+-- =========================================================
+
+local OwnerRow = Row(HuntPage, 52)
+RowLabel(OwnerRow, "Select Owner Boat\nBeast Hunter Heart")
+
+local DropButton = Instance.new("TextButton")
+DropButton.Size = UDim2.new(0, 160, 0, 34)
+DropButton.Position = UDim2.new(1, -170, 0.5, -17)
+DropButton.BackgroundColor3 = Color3.fromRGB(57, 57, 60)
+DropButton.BorderSizePixel = 0
+DropButton.TextColor3 = Color3.fromRGB(225, 225, 225)
+DropButton.Font = Enum.Font.SourceSans
+DropButton.TextSize = 13
+DropButton.TextXAlignment = Enum.TextXAlignment.Left
+DropButton.Text = "  --"
+DropButton.ZIndex = 20
+DropButton.Parent = OwnerRow
+
+local DropCorner = Instance.new("UICorner")
+DropCorner.CornerRadius = UDim.new(0, 5)
+DropCorner.Parent = DropButton
+
+local DropArrow = Instance.new("TextLabel")
+DropArrow.Size = UDim2.new(0, 24, 1, 0)
+DropArrow.Position = UDim2.new(1, -28, 0, 0)
+DropArrow.BackgroundTransparency = 1
+DropArrow.TextColor3 = Color3.fromRGB(190, 190, 190)
+DropArrow.Font = Enum.Font.SourceSansBold
+DropArrow.TextSize = 16
+DropArrow.Text = "⌄"
+DropArrow.ZIndex = 21
+DropArrow.Parent = DropButton
+
+local Dropdown = Instance.new("ScrollingFrame")
+Dropdown.Size = UDim2.new(0, 160, 0, 0)
+Dropdown.Position = UDim2.new(1, -170, 1, 4)
+Dropdown.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
+Dropdown.BorderSizePixel = 0
+Dropdown.ScrollBarThickness = 3
+Dropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
+Dropdown.Visible = false
+Dropdown.ZIndex = 50
+Dropdown.Parent = OwnerRow
+
+local DropdownCorner = Instance.new("UICorner")
+DropdownCorner.CornerRadius = UDim.new(0, 6)
+DropdownCorner.Parent = Dropdown
+
+local DropLayout = Instance.new("UIListLayout")
+DropLayout.Padding = UDim.new(0, 2)
+DropLayout.Parent = Dropdown
+
+local DropPadding = Instance.new("UIPadding")
+DropPadding.PaddingTop = UDim.new(0, 4)
+DropPadding.PaddingBottom = UDim.new(0, 4)
+DropPadding.Parent = Dropdown
+
+local dropdownOpen = false
+
+local function RefreshDropdown()
+    for _, child in ipairs(Dropdown:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
         end
     end
-    PlayerDropdownButtons = {}
-end
-
-local function RefreshPlayerList()
-    ClearPlayerButtons()
 
     local list = {}
+
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer then
             table.insert(list, p)
@@ -338,73 +430,117 @@ local function RefreshPlayerList()
     end)
 
     for _, p in ipairs(list) do
-        local b = Button(HuntPage, "Select: " .. p.Name, function()
+        local b = Instance.new("TextButton")
+        b.Size = UDim2.new(1, 0, 0, 32)
+        b.BackgroundTransparency = 1
+        b.TextColor3 = Color3.fromRGB(225, 225, 225)
+        b.Font = Enum.Font.SourceSans
+        b.TextSize = 13
+        b.TextXAlignment = Enum.TextXAlignment.Left
+        b.Text = "  " .. p.Name
+        b.ZIndex = 55
+        b.Parent = Dropdown
+
+        b.MouseButton1Click:Connect(function()
             OwnerPlayer = p
-            OwnerLabel.Text = "  Owner Boat: " .. p.Name
+            DropButton.Text = "  " .. p.Name
+            dropdownOpen = false
+            Dropdown.Visible = false
+            DropArrow.Text = "⌄"
             SetState("OWNER_SELECTED", p.Name)
         end)
-        table.insert(PlayerDropdownButtons, b)
     end
 
-    SetState("PLAYER_LIST_REFRESHED", tostring(#list) .. " outros jogadores")
+    local height = math.min(#list * 34 + 8, 150)
+    Dropdown.Size = UDim2.new(0, 160, 0, height)
+    Dropdown.CanvasSize = UDim2.new(0, 0, 0, #list * 34 + 8)
 end
 
-Button(HuntPage, "Refresh List Player", RefreshPlayerList)
+DropButton.MouseButton1Click:Connect(function()
+    RefreshDropdown()
+    dropdownOpen = not dropdownOpen
+    Dropdown.Visible = dropdownOpen
+    DropArrow.Text = dropdownOpen and "⌃" or "⌄"
+end)
 
-Toggle(HuntPage, "Account Buy Boat", false, function(v)
+SimpleButton(HuntPage, "Refresh List Player", function()
+    RefreshDropdown()
+    SetState("PLAYER_LIST_REFRESHED", "Lista atualizada.")
+end)
+
+ToggleRow(HuntPage, "Account Buy Boat", false, function(v)
     AccountBuyBoat = v
 
     if v then
         OwnerPlayer = LocalPlayer
-        OwnerLabel.Text = "  Owner Boat: " .. LocalPlayer.Name .. " (THIS ACCOUNT)"
-        SetState("MAIN_ACCOUNT", "Esta conta é a principal / compradora do Beast Hunter.")
+        DropButton.Text = "  " .. LocalPlayer.Name
+        SetState("MAIN_ACCOUNT", "Esta conta será a principal.")
     else
+        OwnerPlayer = nil
+        DropButton.Text = "  --"
         SetState("FOLLOWER_ACCOUNT", "Selecione o dono do barco.")
     end
 end)
 
 -- =========================================================
--- LEVIATHAN DETECTOR
+-- FOLLOW OWNER - STRAIGHT / HEIGHT LOCK
 -- =========================================================
 
-local function FindLeviathan()
-    local best = nil
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            local lower = string.lower(obj.Name)
-
-            if string.find(lower, "leviathan", 1, true) then
-                best = obj
-                break
+local function RestoreFollowPhysics()
+    if Character then
+        for part, oldValue in pairs(savedCollisions) do
+            if part and part.Parent then
+                pcall(function()
+                    part.CanCollide = oldValue
+                end)
             end
         end
     end
 
-    return best
-end
+    savedCollisions = {}
 
-local function GetTargetPart(model)
-    if not model then
-        return nil
+    if Humanoid then
+        pcall(function()
+            Humanoid.PlatformStand = false
+            Humanoid.AutoRotate = true
+        end)
     end
 
-    return model:FindFirstChild("HumanoidRootPart")
-        or model.PrimaryPart
-        or model:FindFirstChildWhichIsA("BasePart", true)
+    if HRP then
+        pcall(function()
+            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end)
+    end
 end
 
--- =========================================================
--- FOLLOW OWNER
--- =========================================================
+local function ApplyFollowPhysics()
+    if not Character then
+        return
+    end
 
-local FollowConnection = nil
+    for _, obj in ipairs(Character:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            if savedCollisions[obj] == nil then
+                savedCollisions[obj] = obj.CanCollide
+            end
+            obj.CanCollide = false
+        end
+    end
+
+    if Humanoid then
+        Humanoid.PlatformStand = true
+        Humanoid.AutoRotate = false
+    end
+end
 
 local function StopFollow()
     if FollowConnection then
         FollowConnection:Disconnect()
         FollowConnection = nil
     end
+
+    RestoreFollowPhysics()
 end
 
 local function StartFollowOwner()
@@ -414,8 +550,10 @@ local function StartFollowOwner()
         return
     end
 
-    FollowConnection = RunService.Heartbeat:Connect(function()
-        if not Running or State == "COMBAT" then
+    ApplyFollowPhysics()
+
+    FollowConnection = RunService.Heartbeat:Connect(function(dt)
+        if not Running then
             return
         end
 
@@ -423,107 +561,61 @@ local function StartFollowOwner()
             return
         end
 
-        local ownerCharacter = OwnerPlayer.Character
-        local ownerHRP = ownerCharacter and ownerCharacter:FindFirstChild("HumanoidRootPart")
+        local ownerChar = OwnerPlayer.Character
+        local ownerHRP = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
 
         if not ownerHRP then
             return
         end
 
-        local targetPosition =
+        ApplyFollowPhysics()
+
+        local target =
             ownerHRP.Position
-            - ownerHRP.CFrame.LookVector * FollowDistance
+            - ownerHRP.CFrame.LookVector * FollowBack
             + Vector3.new(0, FollowHeight, 0)
 
-        local distance = (HRP.Position - targetPosition).Magnitude
+        local delta = target - HRP.Position
+        local distance = delta.Magnitude
 
-        -- Teste inicial:
-        -- aproxima suavemente usando velocity, sem CFrame contínuo.
-        if distance > 15 then
-            local direction = (targetPosition - HRP.Position).Unit
-            HRP.AssemblyLinearVelocity = direction * math.min(180, distance * 4)
+        if distance > 3 then
+            local step = math.min(FollowSpeed * dt, distance)
+            local nextPos = HRP.Position + delta.Unit * step
+
+            HRP.CFrame = CFrame.new(
+                nextPos,
+                nextPos + ownerHRP.CFrame.LookVector
+            )
         else
-            HRP.AssemblyLinearVelocity = ownerHRP.AssemblyLinearVelocity
+            HRP.CFrame = CFrame.new(
+                target,
+                target + ownerHRP.CFrame.LookVector
+            )
         end
+
+        HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end)
 end
 
 -- =========================================================
--- COMBAT INPUT TEST
+-- LEVIATHAN DETECTOR
 -- =========================================================
 
-local function PressSkill(keyName, hold)
-    if not VirtualInputManager then
-        warn("IKARO Leviathan: VirtualInputManager indisponível neste ambiente.")
-        return false
-    end
-
-    local key = nil
-
-    pcall(function()
-        key = Enum.KeyCode[keyName]
-    end)
-
-    if not key then
-        warn("IKARO Leviathan: tecla inválida:", keyName)
-        return false
-    end
-
-    local ok, erro = pcall(function()
-        VirtualInputManager:SendKeyEvent(true, key, false, game)
-        task.wait(hold or 0.1)
-        VirtualInputManager:SendKeyEvent(false, key, false, game)
-    end)
-
-    if not ok then
-        warn("IKARO Leviathan: erro ao enviar skill:", erro)
-        return false
-    end
-
-    return true
-end
-
-local function EquipCategory(category)
-    -- Placeholder.
-    -- Primeiro vamos validar o detector/seguir dono.
-    -- Depois mapearemos como selecionar Melee/Sword/Gun/Fruit corretamente.
-    print("IKARO: categoria de combate:", category)
-end
-
-local function RunCombatRotationOnce()
-    local category = CombatConfig.Type
-    local cfg = CombatConfig[category]
-
-    if not cfg then
-        return
-    end
-
-    EquipCategory(category)
-
-    local order
-
-    if category == "Fruit" then
-        order = {"Z","X","C","V","F"}
-    elseif category == "Melee" then
-        order = {"Z","X","C"}
-    else
-        order = {"Z","X"}
-    end
-
-    for _, key in ipairs(order) do
-        if not Running or State ~= "COMBAT" then
-            return
-        end
-
-        if cfg.Selected[key] then
-            PressSkill(key, cfg.Hold[key] or 0.5)
-            task.wait(0.15)
+local function FindLeviathan()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local n = string.lower(obj.Name)
+            if string.find(n, "leviathan", 1, true) then
+                return obj
+            end
         end
     end
+    return nil
 end
 
 -- =========================================================
--- HUNT STATE MACHINE - TEST VERSION
+-- START HUNT
 -- =========================================================
 
 local HuntThread = nil
@@ -531,12 +623,6 @@ local HuntThread = nil
 local function StopHunt()
     Running = false
     StopFollow()
-
-    if HRP then
-        HRP.AssemblyLinearVelocity = Vector3.new(0,0,0)
-    end
-
-    LeviathanModel = nil
     SetState("STOPPED", "Automação parada.")
 end
 
@@ -546,73 +632,31 @@ local function StartHunt()
     end
 
     if not AccountBuyBoat and not OwnerPlayer then
-        SetState("ERROR", "Selecione o Owner Boat antes de iniciar.")
+        SetState("ERROR", "Escolha o Owner Boat.")
         return
     end
 
     Running = true
 
     if AccountBuyBoat then
-        SetState(
-            "MAIN_WAITING",
-            "Conta principal ativa. Compra/controle do Beast Hunter ainda será mapeado."
-        )
+        SetState("MAIN_ACCOUNT", "Conta principal ativa. Compra automática do barco ainda não implementada.")
     else
-        SetState(
-            "FOLLOW_OWNER",
-            "Seguindo " .. OwnerPlayer.Name
-        )
+        SetState("FOLLOW_OWNER", "Seguindo " .. OwnerPlayer.Name)
         StartFollowOwner()
     end
 
     HuntThread = task.spawn(function()
         while Running do
-            local leviathan = FindLeviathan()
+            local levi = FindLeviathan()
 
-            if leviathan then
-                LeviathanModel = leviathan
+            if levi then
                 StopFollow()
-
-                SetState(
-                    "LEVIATHAN_FOUND",
-                    leviathan:GetFullName()
-                )
-
-                task.wait(0.5)
-
-                if Running then
-                    SetState(
-                        "COMBAT",
-                        "Leviathan detectado. Iniciando rotação TESTE de skills."
-                    )
-
-                    while Running and LeviathanModel and LeviathanModel.Parent do
-                        RunCombatRotationOnce()
-                        task.wait(0.2)
-                    end
-
-                    if Running then
-                        LeviathanModel = nil
-
-                        if AccountBuyBoat then
-                            SetState("MAIN_WAITING", "Leviathan saiu/despawnou.")
-                        else
-                            SetState("FOLLOW_OWNER", "Leviathan saiu/despawnou.")
-                            StartFollowOwner()
-                        end
-                    end
-                end
+                SetState("LEVIATHAN_FOUND", levi:GetFullName())
             else
-                if AccountBuyBoat then
-                    SetState(
-                        "SEARCHING_LEVIATHAN",
-                        "Principal aguardando Leviathan. Navegação do barco ainda será adicionada."
-                    )
-                else
-                    SetState(
-                        "FOLLOW_OWNER",
-                        "Acompanhando " .. OwnerPlayer.Name .. " e procurando Leviathan."
-                    )
+                if not AccountBuyBoat and OwnerPlayer then
+                    SetState("FOLLOW_OWNER", "Acompanhando " .. OwnerPlayer.Name)
+                elseif AccountBuyBoat then
+                    SetState("SEARCHING_LEVIATHAN", "Principal aguardando Leviathan.")
                 end
             end
 
@@ -621,7 +665,7 @@ local function StartHunt()
     end)
 end
 
-Toggle(HuntPage, "Start Hunt Leviathan", false, function(v)
+ToggleRow(HuntPage, "Start Hunt Leviathan", false, function(v)
     if v then
         StartHunt()
     else
@@ -629,17 +673,13 @@ Toggle(HuntPage, "Start Hunt Leviathan", false, function(v)
     end
 end)
 
-Button(HuntPage, "Scan Leviathan Now", function()
-    local model = FindLeviathan()
+SimpleButton(HuntPage, "Scan Leviathan Now", function()
+    local levi = FindLeviathan()
 
-    if model then
-        local part = GetTargetPart(model)
-        SetState(
-            "LEVIATHAN_FOUND_MANUAL",
-            model:GetFullName() .. (part and ("\nTarget: " .. part:GetFullName()) or "")
-        )
+    if levi then
+        SetState("LEVIATHAN_FOUND_MANUAL", levi:GetFullName())
     else
-        SetState("NO_LEVIATHAN", "Nenhum Model com 'Leviathan' encontrado no Workspace.")
+        SetState("NO_LEVIATHAN", "Nenhum Leviathan detectado.")
     end
 end)
 
@@ -647,48 +687,60 @@ end)
 -- SKILLS PAGE
 -- =========================================================
 
-local CurrentCategoryLabel = Label(SkillsPage, "Combat Type: Melee", 30)
+SectionTitle(SkillsPage, "Setting Hold\nand Select Skill")
 
-local function SetCombatType(category)
-    CombatConfig.Type = category
-    CurrentCategoryLabel.Text = "  Combat Type: " .. category
-    SetState("COMBAT_CONFIG", category)
+local function CombatTypeRow(text, category)
+    local row = Row(SkillsPage, 40)
+    local label = RowLabel(row, text)
+
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 120, 0, 30)
+    b.Position = UDim2.new(1, -130, 0.5, -15)
+    b.BackgroundColor3 = Color3.fromRGB(57, 57, 60)
+    b.BorderSizePixel = 0
+    b.TextColor3 = Color3.fromRGB(225,225,225)
+    b.Font = Enum.Font.SourceSans
+    b.TextSize = 13
+    b.Text = category
+    b.Parent = row
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,5)
+    c.Parent = b
+
+    b.MouseButton1Click:Connect(function()
+        CombatConfig.Type = category
+        SetState("COMBAT_CONFIG", category)
+    end)
 end
 
-Button(SkillsPage, "Use Melee", function() SetCombatType("Melee") end)
-Button(SkillsPage, "Use Sword", function() SetCombatType("Sword") end)
-Button(SkillsPage, "Use Gun", function() SetCombatType("Gun") end)
-Button(SkillsPage, "Use Fruit", function() SetCombatType("Fruit") end)
+CombatTypeRow("Setting Melee", "Melee")
+CombatTypeRow("Setting Sword", "Sword")
+CombatTypeRow("Setting Gun", "Gun")
+CombatTypeRow("Setting Fruit", "Fruit")
 
-local function AddSkillToggle(category, key)
-    Toggle(
-        SkillsPage,
-        category .. " " .. key,
-        CombatConfig[category].Selected[key],
-        function(v)
-            CombatConfig[category].Selected[key] = v
-        end
-    )
+local function SkillHoldRow(category, key)
+    local row = Row(SkillsPage, 40)
+    RowLabel(row, "Skill " .. key .. " " .. category)
 
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(1, -6, 0, 30)
-    box.BackgroundColor3 = Color3.fromRGB(38,38,38)
+    box.Size = UDim2.new(0, 120, 0, 30)
+    box.Position = UDim2.new(1, -130, 0.5, -15)
+    box.BackgroundColor3 = Color3.fromRGB(57,57,60)
     box.BorderSizePixel = 0
-    box.TextColor3 = Color3.fromRGB(255,255,255)
+    box.TextColor3 = Color3.fromRGB(225,225,225)
     box.Font = Enum.Font.SourceSans
     box.TextSize = 13
     box.Text = tostring(CombatConfig[category].Hold[key])
-    box.PlaceholderText = "Hold seconds"
-    box.Parent = SkillsPage
+    box.Parent = row
 
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0,6)
+    c.CornerRadius = UDim.new(0,5)
     c.Parent = box
 
     box.FocusLost:Connect(function()
         local n = tonumber(box.Text)
-
-        if n and n >= 0 and n <= 10 then
+        if n then
             CombatConfig[category].Hold[key] = n
         else
             box.Text = tostring(CombatConfig[category].Hold[key])
@@ -696,48 +748,28 @@ local function AddSkillToggle(category, key)
     end)
 end
 
-Label(SkillsPage, "MELEE", 28)
-AddSkillToggle("Melee", "Z")
-AddSkillToggle("Melee", "X")
-AddSkillToggle("Melee", "C")
+for _, key in ipairs({"Z","X","C"}) do
+    SkillHoldRow("Melee", key)
+end
 
-Label(SkillsPage, "SWORD", 28)
-AddSkillToggle("Sword", "Z")
-AddSkillToggle("Sword", "X")
+for _, key in ipairs({"Z","X"}) do
+    SkillHoldRow("Sword", key)
+end
 
-Label(SkillsPage, "GUN", 28)
-AddSkillToggle("Gun", "Z")
-AddSkillToggle("Gun", "X")
+for _, key in ipairs({"Z","X"}) do
+    SkillHoldRow("Gun", key)
+end
 
-Label(SkillsPage, "FRUIT", 28)
-AddSkillToggle("Fruit", "Z")
-AddSkillToggle("Fruit", "X")
-AddSkillToggle("Fruit", "C")
-AddSkillToggle("Fruit", "V")
-AddSkillToggle("Fruit", "F")
-
-Button(SkillsPage, "Test Selected Skills", function()
-    task.spawn(function()
-        SetState("SKILL_TEST", "Executando uma rotação: " .. CombatConfig.Type)
-
-        local oldState = State
-        State = "COMBAT"
-        local oldRunning = Running
-        Running = true
-
-        RunCombatRotationOnce()
-
-        Running = oldRunning
-        State = oldState
-        SetState("SKILL_TEST_DONE", "Teste concluído.")
-    end)
-end)
+for _, key in ipairs({"Z","X","C","V","F"}) do
+    SkillHoldRow("Fruit", key)
+end
 
 -- =========================================================
 -- INIT
 -- =========================================================
 
+SectionTitle(HuntPage, "Tab Setup Hunt Leviathan")
 ShowPage("Hunt")
-SetState("IDLE", "Interface carregada. VirtualInputManager: " .. (VirtualInputManager and "OK" or "INDISPONÍVEL"))
+SetState("IDLE", "Configure Owner / Account Buy Boat.")
 
-print("IKARO Leviathan Test Build carregado.")
+print("IKARO Leviathan v2 carregado.")
