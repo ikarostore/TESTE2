@@ -1820,6 +1820,8 @@ local function StopEscape()
         EscapeBodyGyro = nil
     end
 
+    RestoreFollowPhysics()
+
     -- Se a automação continua ligada e esta conta é seguidora,
     -- volta a seguir o owner automaticamente.
     if Running and not AccountBuyBoat and OwnerPlayer then
@@ -1845,7 +1847,10 @@ local function StartEscape()
     -- A fuga sempre tem prioridade sobre follow/hunt.
     StopFollow()
 
-    ApplyFollowPhysics()
+    CacheFollowParts()
+    SetFollowNoclip()
+    Humanoid.PlatformStand = true
+    Humanoid.AutoRotate = false
 
     EscapeBodyVelocity = Instance.new("BodyVelocity")
     EscapeBodyVelocity.Name = "IKAROEscapeVelocity"
@@ -1877,7 +1882,7 @@ local function StartEscape()
             return
         end
 
-        ApplyFollowPhysics()
+        SetFollowNoclip()
 
         local maxHealth = math.max(Humanoid.MaxHealth, 1)
         local hpPercent = Humanoid.Health / maxHealth
@@ -1896,6 +1901,12 @@ local function StartEscape()
         end
 
         local _, threatPart = FindLeviathanThreat()
+        if not threatPart and SeaHuntState.CurrentEvent then
+            local event = SeaHuntState.CurrentEvent
+            threatPart = event:FindFirstChild("HumanoidRootPart", true)
+                or event.PrimaryPart
+                or event:FindFirstChildWhichIsA("BasePart", true)
+        end
 
         local fleeDirection
 
@@ -2024,6 +2035,10 @@ local function GetCombatFrameworkController()
     if getUps then
         local okUps, ups = pcall(getUps, framework)
         if okUps and type(ups) == "table" then
+            local internal = ups[2]
+            if type(internal) == "table" and internal.activeController then
+                return internal.activeController
+            end
             for _, value in pairs(ups) do
                 if type(value) == "table" and value.activeController then
                     return value.activeController
@@ -2107,17 +2122,37 @@ local function BMFastAttack(target)
         BMVirtualUser:CaptureController()
         BMVirtualUser:Button1Down(Vector2.new(1280, 672))
 
-        -- Fallback para executores que nao expoem activeController. Envia o
-        -- alvo diretamente ao RigControllerEvent, com limite de frequencia.
-        if not controller then
-            local env = getgenv and getgenv() or _G
-            local now = os.clock()
-            if now >= (env.IKARO_NEXT_RIG_ATTACK or 0) then
-                env.IKARO_NEXT_RIG_ATTACK = now + 0.18
-                local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
-                if rigEvent then
-                    rigEvent:FireServer("weaponChange", tool.Name)
-                    rigEvent:FireServer("hit", {target}, 1, "")
+        -- Fluxo completo do script de referencia: arma real + hits gerados
+        -- pelo RigLib. Nao fabrica uma lista {target}, rejeitada pelo servidor.
+        local env = getgenv and getgenv() or _G
+        local now = os.clock()
+        if controller and now >= (env.IKARO_NEXT_RIG_ATTACK or 0) then
+            env.IKARO_NEXT_RIG_ATTACK = now + 0.18
+            local rigFolder = ReplicatedStorage:FindFirstChild("CombatFramework")
+            local rigModule = rigFolder and rigFolder:FindFirstChild("RigLib")
+            local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
+            local okRig, rigLib = pcall(require, rigModule)
+            local weapon = controller.blades and controller.blades[1]
+            while weapon and weapon.Parent and weapon.Parent ~= Character do
+                weapon = weapon.Parent
+            end
+
+            if rigModule and rigEvent and okRig and type(rigLib) == "table"
+            and type(rigLib.getBladeHits) == "function" and weapon then
+                local rawHits = rigLib.getBladeHits(Character, {HRP}, 60)
+                local hits = {}
+                local seen = {}
+                for _, hit in pairs(rawHits or {}) do
+                    local model = hit and hit.Parent
+                    local root = model and model:FindFirstChild("HumanoidRootPart")
+                    if root and not seen[model] then
+                        seen[model] = true
+                        table.insert(hits, root)
+                    end
+                end
+                if #hits > 0 then
+                    rigEvent:FireServer("weaponChange", tostring(weapon))
+                    rigEvent:FireServer("hit", hits, 1, "")
                 end
             end
         end
@@ -2442,7 +2477,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
 
     local nextNoclip = 0
     local connection = RunService.Heartbeat:Connect(function()
-        if not Running or SeaHuntState.CurrentEvent ~= eventModel then
+        if EscapeActive or not Running or SeaHuntState.CurrentEvent ~= eventModel then
             bodyVelocity.Velocity = Vector3.new(0, 0, 0)
             return
         end
@@ -2560,6 +2595,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     local started = os.clock()
     local okCombat, combatError = pcall(function()
         while Running
+        and not EscapeActive
         and SeaHuntState.CurrentEvent == eventModel
         and IsEventAlive(eventModel)
         and os.clock() - started < 180 do
@@ -2623,7 +2659,8 @@ end
 task.spawn(function()
     local dodgeRight = true
     while Gui and Gui.Parent do
-        if SeaConfig.AutoDodgeEnabled and Running and HRP and Humanoid and Humanoid.Health > 0 then
+        if SeaConfig.AutoDodgeEnabled and not EscapeActive
+        and Running and HRP and Humanoid and Humanoid.Health > 0 then
             local threat = SeaHuntState.CurrentEvent
             local threatName = threat and string.lower(threat.Name) or ""
             local dangerous = string.find(threatName, "terror", 1, true)
