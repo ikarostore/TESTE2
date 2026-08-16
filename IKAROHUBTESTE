@@ -20,7 +20,7 @@ local noclipAtivo = false
 local colisoesOriginais = {}
 
 -- Velocidade do voo automático em studs por segundo.
-local velocidadeVooAutomatico = 120
+local velocidadeVooAutomatico = 450
 
 local function atualizarPersonagem(char)
     character = char
@@ -169,41 +169,109 @@ local function voarAteCFrame(destinoCFrame, statusCallback)
 
     ativarNoclip()
 
-    local distancia = (hrp.Position - destinoCFrame.Position).Magnitude
-    local duracao = math.max(distancia / velocidadeVooAutomatico, 0.15)
+    local humanoidLocal = humanoid
+    local autoRotateOriginal = nil
+    local platformStandOriginal = nil
 
-    local tweenInfo = TweenInfo.new(
-        duracao,
-        Enum.EasingStyle.Linear,
-        Enum.EasingDirection.Out
-    )
+    if humanoidLocal then
+        pcall(function()
+            autoRotateOriginal = humanoidLocal.AutoRotate
+            platformStandOriginal = humanoidLocal.PlatformStand
 
-    viagemAtual = TweenService:Create(
-        hrp,
-        tweenInfo,
-        {CFrame = destinoCFrame}
-    )
+            humanoidLocal.AutoRotate = false
+            humanoidLocal.PlatformStand = true
+        end)
+    end
+
+    local function restaurarHumanoid()
+        if humanoidLocal and humanoidLocal.Parent then
+            pcall(function()
+                if autoRotateOriginal ~= nil then
+                    humanoidLocal.AutoRotate = autoRotateOriginal
+                end
+
+                if platformStandOriginal ~= nil then
+                    humanoidLocal.PlatformStand = platformStandOriginal
+                else
+                    humanoidLocal.PlatformStand = false
+                end
+            end)
+        end
+    end
+
+    local distanciaInicial = (hrp.Position - destinoCFrame.Position).Magnitude
 
     if statusCallback then
-        statusCallback("Voando... " .. math.floor(distancia) .. " studs")
+        statusCallback(
+            "Voando... " ..
+            math.floor(distanciaInicial) ..
+            " studs • " ..
+            tostring(velocidadeVooAutomatico) ..
+            " studs/s"
+        )
     end
 
-    local tweenLocal = viagemAtual
-    tweenLocal:Play()
+    -- Movimento manual por frame.
+    -- Isso deixa a trajetória realmente reta e evita o efeito
+    -- de "pular" que o TweenService pode causar no personagem.
+    while meuToken == viagemToken do
+        if not hrp or not hrp.Parent then
+            restaurarHumanoid()
+            restaurarColisoes()
+            return false
+        end
 
-    local estado = tweenLocal.Completed:Wait()
+        local atual = hrp.Position
+        local alvo = destinoCFrame.Position
+        local delta = alvo - atual
+        local distancia = delta.Magnitude
 
-    if meuToken ~= viagemToken then
-        return false
+        if distancia <= 3 then
+            hrp.CFrame = destinoCFrame
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+
+            restaurarHumanoid()
+            restaurarColisoes()
+            viagemAtual = nil
+            return true
+        end
+
+        local dt = RunService.Heartbeat:Wait()
+
+        if meuToken ~= viagemToken then
+            break
+        end
+
+        local passo = math.min(velocidadeVooAutomatico * dt, distancia)
+        local direcao = delta.Unit
+        local proximaPosicao = atual + direcao * passo
+
+        -- Mantém a orientação estável durante o voo.
+        local look = destinoCFrame.LookVector
+        local lookHorizontal = Vector3.new(look.X, 0, look.Z)
+
+        if lookHorizontal.Magnitude < 0.01 then
+            lookHorizontal = Vector3.new(0, 0, -1)
+        else
+            lookHorizontal = lookHorizontal.Unit
+        end
+
+        hrp.CFrame = CFrame.new(
+            proximaPosicao,
+            proximaPosicao + lookHorizontal
+        )
+
+        -- Remove impulso físico que costuma causar tremidas/pulos.
+        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end
 
-    if viagemAtual == tweenLocal then
-        viagemAtual = nil
-    end
-
+    restaurarHumanoid()
     restaurarColisoes()
+    viagemAtual = nil
 
-    return estado == Enum.PlaybackState.Completed
+    return false
 end
 
 local function voarAteObjeto(obj, altura, statusCallback)
