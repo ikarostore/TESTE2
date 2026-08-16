@@ -352,9 +352,11 @@ Main.Active = true
 Main.Draggable = true
 Main.Parent = Gui
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
-MainCorner.Parent = Main
+do
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = Main
+end
 
 local Top = Instance.new("Frame")
 Top.Size = UDim2.new(1, 0, 0, 38)
@@ -362,20 +364,22 @@ Top.BackgroundColor3 = Color3.fromRGB(36, 36, 39)
 Top.BorderSizePixel = 0
 Top.Parent = Main
 
-local TopCorner = Instance.new("UICorner")
-TopCorner.CornerRadius = UDim.new(0, 8)
-TopCorner.Parent = Top
+do
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = Top
 
-local AppTitle = Instance.new("TextLabel")
-AppTitle.Size = UDim2.new(1, -20, 1, 0)
-AppTitle.Position = UDim2.new(0, 12, 0, 0)
-AppTitle.BackgroundTransparency = 1
-AppTitle.TextXAlignment = Enum.TextXAlignment.Left
-AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
-AppTitle.Font = Enum.Font.SourceSansBold
-AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v3.6 EXACT SEA6 ROUTE"
-AppTitle.Parent = Top
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -20, 1, 0)
+    title.Position = UDim2.new(0, 12, 0, 0)
+    title.BackgroundTransparency = 1
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextColor3 = Color3.fromRGB(235, 235, 235)
+    title.Font = Enum.Font.SourceSansBold
+    title.TextSize = 14
+    title.Text = "IKARO Leviathan v3.6 EXACT SEA6 ROUTE"
+    title.Parent = Top
+end
 
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 145, 1, -48)
@@ -384,9 +388,11 @@ Sidebar.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
 
-local SideCorner = Instance.new("UICorner")
-SideCorner.CornerRadius = UDim.new(0, 7)
-SideCorner.Parent = Sidebar
+do
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 7)
+    corner.Parent = Sidebar
+end
 
 local PageHost = Instance.new("Frame")
 PageHost.Size = UDim2.new(1, -169, 1, -48)
@@ -395,9 +401,11 @@ PageHost.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
 PageHost.BorderSizePixel = 0
 PageHost.Parent = Main
 
-local PageCorner = Instance.new("UICorner")
-PageCorner.CornerRadius = UDim.new(0, 7)
-PageCorner.Parent = PageHost
+do
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 7)
+    corner.Parent = PageHost
+end
 
 local Pages = {}
 local TabButtons = {}
