@@ -2268,6 +2268,8 @@ local BoatAlignOrientation = nil
 local BoatAttachment = nil
 local BoatDrivePart = nil
 local BoatCollisionCache = {}
+local BoatObstacleCollisionCache = {}
+local BoatNoclipConnection = nil
 local FixedSeaDirection = nil
 
 local function GetBoatDrivePart()
@@ -2300,6 +2302,60 @@ local function ApplyBoatNoclip()
     end
 end
 
+local function ApplyBoatObstacleNoclip(drivePart, direction)
+    local boat = GetBeastHunter()
+    if not boat or not drivePart then return end
+
+    local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+    if flatDirection.Magnitude < 0.01 then
+        flatDirection = Vector3.new(-1, 0, 0)
+    else
+        flatDirection = flatDirection.Unit
+    end
+
+    local params = OverlapParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = Character and {boat, Character} or {boat}
+    params.MaxParts = 0
+
+    -- A caixa acompanha a frente do barco e remove localmente somente a
+    -- colisão de geometria estática. Isso cobre muralhas/rochas grandes que
+    -- continuam bloqueando a assembly mesmo com as peças do barco em noclip.
+    local center = drivePart.Position + flatDirection * 55
+    local scanCFrame = CFrame.lookAt(center, center + flatDirection)
+    local seenNow = {}
+
+    for _, part in ipairs(workspace:GetPartBoundsInBox(
+        scanCFrame,
+        Vector3.new(150, 150, 190),
+        params
+    )) do
+        if part:IsA("BasePart")
+        and part.Anchored
+        and (part.CanCollide or BoatObstacleCollisionCache[part] ~= nil)
+        and not part:IsDescendantOf(boat) then
+            if BoatObstacleCollisionCache[part] == nil then
+                BoatObstacleCollisionCache[part] = part.CanCollide
+            end
+            seenNow[part] = true
+            part.CanCollide = false
+        end
+    end
+
+    -- Restaura obstáculos que já ficaram para trás para não deixar o mapa
+    -- inteiro sem colisão durante uma viagem longa.
+    for part, oldValue in pairs(BoatObstacleCollisionCache) do
+        if not part or not part.Parent then
+            BoatObstacleCollisionCache[part] = nil
+        elseif not seenNow[part] then
+            pcall(function()
+                part.CanCollide = oldValue
+            end)
+            BoatObstacleCollisionCache[part] = nil
+        end
+    end
+end
+
 local function RestoreBoatCollision()
     for obj, oldValue in pairs(BoatCollisionCache) do
         if obj and obj.Parent then
@@ -2309,6 +2365,15 @@ local function RestoreBoatCollision()
         end
     end
     BoatCollisionCache = {}
+
+    for obj, oldValue in pairs(BoatObstacleCollisionCache) do
+        if obj and obj.Parent then
+            pcall(function()
+                obj.CanCollide = oldValue
+            end)
+        end
+    end
+    BoatObstacleCollisionCache = {}
 end
 
 local function CalculateFixedSeaDirection(boatPart)
@@ -2413,6 +2478,12 @@ end
 
 local function StopBoatDrive(restoreCollision)
     SeaHuntState.Driving = false
+
+    if BoatNoclipConnection then
+        BoatNoclipConnection:Disconnect()
+        BoatNoclipConnection = nil
+    end
+
     DestroyBoatFlightPhysics()
 
     if SeaVIM then
@@ -2421,9 +2492,16 @@ local function StopBoatDrive(restoreCollision)
         end)
     end
 
-    if restoreCollision then
-        RestoreBoatCollision()
+    -- Sempre restaura a geometria externa. As colisões originais do barco
+    -- só voltam quando solicitado, pois ele pode retomar a caça logo depois.
+    for obj, oldValue in pairs(BoatObstacleCollisionCache) do
+        if obj and obj.Parent then
+            pcall(function() obj.CanCollide = oldValue end)
+        end
     end
+    BoatObstacleCollisionCache = {}
+
+    if restoreCollision then RestoreBoatCollision() end
 end
 
 local function TrySeatMainAccount()
@@ -2458,6 +2536,19 @@ local function StartBoatDrive(forceStart)
     FixedSeaDirection = nil
     SeaHuntState.Driving = true
 
+
+    if BoatNoclipConnection then
+        BoatNoclipConnection:Disconnect()
+    end
+
+    -- Stepped roda imediatamente antes da resolução física. Reaplicar aqui
+    -- impede scripts do barco/servidor de religarem CanCollide entre ciclos.
+    BoatNoclipConnection = RunService.Stepped:Connect(function()
+        if SeaHuntState.Driving then
+            ApplyBoatNoclip()
+        end
+    end)
+
     SetState(
         "BOAT_FLYING_TO_SEA6",
         "Rota EXATA Sea 6 | Speed=" .. tostring(SeaConfig.BoatSpeed)
@@ -2480,6 +2571,10 @@ local function StartBoatDrive(forceStart)
             local now = os.clock()
             if now >= nextNoclipRefresh then
                 ApplyBoatNoclip()
+                ApplyBoatObstacleNoclip(
+                    drivePart,
+                    FixedSeaDirection or SEA6_MAPPED_DIRECTION
+                )
                 nextNoclipRefresh = now + 0.10
             end
 
@@ -2882,3 +2977,4 @@ ShowPage("Hunt")
 SetState("IDLE", "Configure Owner / Account Buy Boat.")
 
 print("IKARO Leviathan v2 carregado.")
+
