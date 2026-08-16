@@ -1,0 +1,211 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+if not player then
+    warn("IKAROhub: LocalPlayer não encontrado")
+    return
+end
+
+local camera = workspace.CurrentCamera
+
+local voando = false
+local velocidadeVoo = 50
+
+local character
+local humanoid
+local hrp
+local attachment
+local linearVelocity
+
+local function configurarPersonagem(char)
+    character = char
+    humanoid = character:WaitForChild("Humanoid")
+    hrp = character:WaitForChild("HumanoidRootPart")
+
+    -- Remove objetos antigos caso existam
+    local oldAttachment = hrp:FindFirstChild("IKAROFlyAttachment")
+    if oldAttachment then
+        oldAttachment:Destroy()
+    end
+
+    local oldVelocity = hrp:FindFirstChild("IKAROFlyVelocity")
+    if oldVelocity then
+        oldVelocity:Destroy()
+    end
+
+    attachment = Instance.new("Attachment")
+    attachment.Name = "IKAROFlyAttachment"
+    attachment.Parent = hrp
+
+    linearVelocity = Instance.new("LinearVelocity")
+    linearVelocity.Name = "IKAROFlyVelocity"
+
+    linearVelocity.Attachment0 = attachment
+
+    linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+
+    linearVelocity.ForceLimitsEnabled = false
+
+    linearVelocity.VectorVelocity = Vector3.zero
+    linearVelocity.Enabled = false
+    linearVelocity.Parent = hrp
+end
+
+-- Personagem inicial
+configurarPersonagem(
+    player.Character or player.CharacterAdded:Wait()
+)
+
+-- Reconfigura depois de morrer
+player.CharacterAdded:Connect(function(char)
+    voando = false
+    configurarPersonagem(char)
+end)
+
+-- Remove GUI antiga
+local playerGui = player:WaitForChild("PlayerGui")
+
+local antigaGui = playerGui:FindFirstChild("IKAROhubGui")
+if antigaGui then
+    antigaGui:Destroy()
+end
+
+-- GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "IKAROhubGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = false
+screenGui.Parent = playerGui
+
+-- Frame principal
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 220, 0, 130)
+mainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = mainFrame
+
+-- Título
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "Title"
+titleLabel.Size = UDim2.new(1, 0, 0, 35)
+titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+titleLabel.BorderSizePixel = 0
+titleLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+titleLabel.TextSize = 16
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.Text = "⚡ IKAROhub"
+titleLabel.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 8)
+titleCorner.Parent = titleLabel
+
+-- Botão Fly
+local flyButton = Instance.new("TextButton")
+flyButton.Name = "FlyButton"
+flyButton.Size = UDim2.new(0.85, 0, 0, 40)
+flyButton.Position = UDim2.new(0.075, 0, 0.48, 0)
+flyButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+flyButton.BorderSizePixel = 0
+flyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+flyButton.TextSize = 14
+flyButton.Font = Enum.Font.SourceSansBold
+flyButton.Text = "Voo: DESATIVADO (F)"
+flyButton.Parent = mainFrame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0, 6)
+buttonCorner.Parent = flyButton
+
+-- Atualiza botão
+local function atualizarBotao()
+    if voando then
+        flyButton.Text = "Voo: ATIVADO (F)"
+        flyButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+    else
+        flyButton.Text = "Voo: DESATIVADO (F)"
+        flyButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+    end
+end
+
+-- Liga/desliga voo
+local function alternarVoo()
+
+    if not character then
+        return
+    end
+
+    if not hrp then
+        return
+    end
+
+    if not linearVelocity then
+        return
+    end
+
+    voando = not voando
+
+    linearVelocity.Enabled = voando
+
+    if not voando then
+        linearVelocity.VectorVelocity = Vector3.zero
+    end
+
+    atualizarBotao()
+end
+
+flyButton.MouseButton1Click:Connect(function()
+    alternarVoo()
+end)
+
+-- Tecla F
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.F then
+        alternarVoo()
+    end
+end)
+
+-- Movimento
+RunService.RenderStepped:Connect(function()
+
+    if not voando then
+        return
+    end
+
+    if not linearVelocity then
+        return
+    end
+
+    if not linearVelocity.Parent then
+        return
+    end
+
+    camera = workspace.CurrentCamera
+
+    if not camera then
+        return
+    end
+
+    linearVelocity.VectorVelocity =
+        camera.CFrame.LookVector * velocidadeVoo
+end)
+
+print("IKAROhub carregado com sucesso!")
