@@ -1902,11 +1902,6 @@ local ClickSeaEvents = {
     Terrorshark = true
 }
 
-local SeaVirtualUser = nil
-pcall(function()
-    SeaVirtualUser = game:GetService("VirtualUser")
-end)
-
 local function GetCombatFrameworkController()
     local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
     local module = playerScripts and playerScripts:FindFirstChild("CombatFramework")
@@ -1955,76 +1950,45 @@ local function AimAtSeaTarget(target)
     end
 end
 
-local function FireRangedBasicAttack(target)
+local EnsureSeaCombatHaki
+
+local function BMFastAttack(target)
     if not target then return false end
 
+    EnsureSeaCombatHaki()
     AimAtSeaTarget(target)
 
     local tool = EquipSeaCombatType("Melee")
-    local attacked = false
+    if not tool then return false end
 
-    -- Método mais próximo do PlayerClick usado nos scripts de farm antigos.
-    if type(mouse1click) == "function" then
-        pcall(function()
-            mouse1click()
-            attacked = true
-        end)
-    elseif type(mouse1press) == "function" and type(mouse1release) == "function" then
-        pcall(function()
-            mouse1press()
-            task.wait(0.02)
-            mouse1release()
-            attacked = true
-        end)
-    end
-
-    -- Método inspirado nos sources analisados: reduz cooldown e aumenta a
-    -- magnitude do hitbox antes de solicitar o ataque do controller.
+    -- BM Fast Attack: usa somente o controlador interno de combate. Não há
+    -- mouse1click, VirtualInput, VirtualUser nem Tool:Activate nesta rotina.
     local controller = GetCombatFrameworkController()
-    if controller then
-        pcall(function()
-            controller.hitboxMagnitude = math.max(controller.hitboxMagnitude or 0, 200)
-            controller.timeToNextAttack = 0
-            controller.timeToNextBlock = 0
-            controller.attacking = false
-            controller.equipped = true
+    if not controller or type(controller.attack) ~= "function" then
+        return false
+    end
 
-            if type(controller.attack) == "function" then
-                controller:attack()
-                attacked = true
+    local attacked = false
+    pcall(function()
+        controller.hitboxMagnitude = math.max(controller.hitboxMagnitude or 0, 200)
+        controller.timeToNextAttack = 0
+        controller.timeToNextBlock = 0
+        controller.attacking = false
+        controller.blocking = false
+        controller.increment = 3
+        controller.equipped = true
+
+        local animator = controller.animator
+        local basicAnimations = animator and animator.anims and animator.anims.basic
+        if basicAnimations then
+            for _, animation in pairs(basicAnimations) do
+                pcall(function() animation:Play(0.01, 1, 1.5) end)
             end
-        end)
-    end
+        end
 
-    if tool then
-        pcall(function()
-            tool:Activate()
-            attacked = true
-        end)
-    end
-
-    if SeaVIM then
-        pcall(function()
-            local camera = workspace.CurrentCamera
-            local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
-            local x = math.floor(viewport.X / 2)
-            local y = math.floor(viewport.Y / 2)
-            SeaVIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
-            task.wait(0.03)
-            SeaVIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
-            attacked = true
-        end)
-    end
-
-    if SeaVirtualUser then
-        pcall(function()
-            SeaVirtualUser:CaptureController()
-            SeaVirtualUser:Button1Down(Vector2.new(0, 0), target.CFrame)
-            task.wait(0.03)
-            SeaVirtualUser:Button1Up(Vector2.new(0, 0), target.CFrame)
-            attacked = true
-        end)
-    end
+        controller:attack()
+        attacked = true
+    end)
 
     return attacked
 end
@@ -2299,7 +2263,7 @@ local function ForceExitBoatForCombat()
     return not Humanoid.SeatPart
 end
 
-local function EnsureSeaCombatHaki()
+EnsureSeaCombatHaki = function()
     if not Character or Character:FindFirstChild("HasBuso") then return true end
 
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -2426,7 +2390,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
     local useBasicClick = ClickSeaEvents[eventKey] == true
 
-    local combatState = useBasicClick and "SEA_EVENT_AUTO_CLICK" or "SEA_EVENT_SKILLS"
+    local combatState = useBasicClick and "SEA_EVENT_BM_FAST_ATTACK" or "SEA_EVENT_SKILLS"
 
     SetState(combatState, SeaEventDisplayName(eventKey))
 
@@ -2459,7 +2423,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if useBasicClick then
-                    FireRangedBasicAttack(target)
+                    BMFastAttack(target)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
