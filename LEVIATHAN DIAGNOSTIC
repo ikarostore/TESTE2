@@ -1,21 +1,24 @@
--- IKARO Leviathan - diagnostico secundario de combate
--- Execute junto do LEVIATHAN TEST1 e consulte o console do executor.
-
+-- IKARO Leviathan - diagnostico e auxiliar Frozen Dimension
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-print("[IKARO DIAG] CARREGADO - aguardando dados de combate")
+print("[IKARO DIAG] CARREGADO")
+local oldGui = PlayerGui:FindFirstChild("IKARO_LeviathanDiagnostic")
+if oldGui then oldGui:Destroy() end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "IKARO_LeviathanDiagnostic"
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+gui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 390, 0, 210)
-frame.Position = UDim2.new(1, -410, 0, 20)
+frame.Size = UDim2.new(0, 500, 0, 430)
+frame.Position = UDim2.new(1, -520, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(24, 25, 28)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -30,7 +33,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -16, 0, 34)
 title.Position = UDim2.new(0, 8, 0, 3)
 title.BackgroundTransparency = 1
-title.Text = "IKARO - Diagnostico de Combate"
+title.Text = "IKARO - Diagnostico Sea Events / Frozen"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 17
@@ -38,52 +41,185 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = frame
 
 local output = Instance.new("TextLabel")
-output.Size = UDim2.new(1, -20, 1, -48)
+output.Size = UDim2.new(1, -20, 0, 315)
 output.Position = UDim2.new(0, 10, 0, 40)
 output.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
 output.BorderSizePixel = 0
-output.Text = "Diagnostico carregado.\nAguardando personagem e Piranha..."
+output.Text = "Diagnostico carregado. Aguardando personagem..."
 output.TextColor3 = Color3.fromRGB(220, 225, 230)
 output.Font = Enum.Font.Code
-output.TextSize = 14
-output.TextWrapped = true
+output.TextSize = 13
 output.TextXAlignment = Enum.TextXAlignment.Left
 output.TextYAlignment = Enum.TextYAlignment.Top
 output.Parent = frame
 
-local function FindNearestPiranha(root)
-    local nearest
-    local nearestPart
+local function NewButton(text, x, width)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, width, 0, 34)
+    button.Position = UDim2.new(0, x, 0, 372)
+    button.BackgroundColor3 = Color3.fromRGB(55, 91, 75)
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 14
+    button.Parent = frame
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 6)
+    buttonCorner.Parent = button
+    return button
+end
+
+local copyButton = NewButton("Copiar diagnostico", 10, 150)
+local recordButton = NewButton("Gravar ponto Frozen", 170, 150)
+local autoButton = NewButton("Auto Frozen: OFF", 330, 160)
+
+local EventNames = {
+    Piranha = {"piranha"}, Shark = {"shark"},
+    Terrorshark = {"terrorshark", "terror shark"},
+    SeaBeast = {"seabeast", "sea beast"},
+    PirateBrigade = {"piratebrigade", "pirate brigade"},
+    PirateGrandBrigade = {"pirategrandbrigade", "pirate grand brigade"},
+    FishBoat = {"fishboat", "fish boat"}
+}
+local EventOrder = {"Piranha", "Shark", "Terrorshark", "SeaBeast", "PirateBrigade", "PirateGrandBrigade", "FishBoat"}
+
+local function NameMatches(name, aliases)
+    local lowered = string.lower(name)
+    for _, alias in ipairs(aliases) do
+        if string.find(lowered, alias, 1, true) then return true end
+    end
+    return false
+end
+
+local function TargetPart(model)
+    return model:FindFirstChild("HumanoidRootPart", true)
+        or model:FindFirstChild("VehicleSeat", true)
+        or model:FindFirstChild("Engine", true)
+        or model.PrimaryPart
+        or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function HealthText(model)
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    local value = model:FindFirstChild("Health", true) or model:FindFirstChild("HP", true)
+    if humanoid then return tostring(math.floor(humanoid.Health)) .. "/" .. tostring(math.floor(humanoid.MaxHealth)) end
+    if value and tonumber(value.Value) then return tostring(math.floor(tonumber(value.Value))) end
+    return "desconhecido"
+end
+
+local function FindNearestEvent(root, aliases)
+    local nearest, nearestPart
     local nearestDistance = math.huge
-
-    local containers = {
-        workspace:FindFirstChild("Enemies"),
-        workspace:FindFirstChild("SeaBeasts"),
-        workspace
-    }
-
+    local containers = {workspace:FindFirstChild("Enemies"), workspace:FindFirstChild("SeaBeasts"), workspace:FindFirstChild("Boats"), workspace}
     for _, container in ipairs(containers) do
         if container then
             for _, obj in ipairs(container:GetChildren()) do
-                if obj:IsA("Model")
-                and string.find(string.lower(obj.Name), "piranha", 1, true) then
-                    local part = obj:FindFirstChild("HumanoidRootPart", true)
-                        or obj.PrimaryPart
-                        or obj:FindFirstChildWhichIsA("BasePart", true)
+                if obj:IsA("Model") and NameMatches(obj.Name, aliases) then
+                    local part = TargetPart(obj)
                     if part then
                         local distance = (part.Position - root.Position).Magnitude
-                        if distance < nearestDistance then
-                            nearest = obj
-                            nearestPart = part
-                            nearestDistance = distance
-                        end
+                        if distance < nearestDistance then nearest, nearestPart, nearestDistance = obj, part, distance end
                     end
                 end
             end
         end
     end
-
     return nearest, nearestPart, nearestDistance
+end
+
+local frozenCache
+local lastFrozenScan = 0
+local function FindFrozenDimension(forceScan)
+    if frozenCache and frozenCache.Parent then return frozenCache end
+    if not forceScan and os.clock() - lastFrozenScan < 4 then return nil end
+    lastFrozenScan = os.clock()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local lowered = string.lower(obj.Name)
+        if string.find(lowered, "frozen dimension", 1, true) or string.find(lowered, "frozendimension", 1, true) then
+            if obj:IsA("Model") or obj:IsA("BasePart") then
+                frozenCache = obj
+                return obj
+            end
+        end
+    end
+end
+
+local function ObjectCFrame(obj)
+    if obj:IsA("Model") then return obj:GetPivot() end
+    if obj:IsA("BasePart") then return obj.CFrame end
+end
+
+local MacroFile = "IKARO_FROZEN_MACRO.json"
+local frozenOffset
+local autoFrozen = false
+local frozenBusy = false
+local lastReport = "Diagnostico ainda sem dados."
+
+pcall(function()
+    if isfile and isfile(MacroFile) and readfile then
+        frozenOffset = CFrame.new(table.unpack(HttpService:JSONDecode(readfile(MacroFile))))
+    end
+end)
+
+copyButton.MouseButton1Click:Connect(function()
+    if setclipboard then
+        setclipboard(lastReport)
+        copyButton.Text = "Copiado!"
+        task.delay(1.5, function() copyButton.Text = "Copiar diagnostico" end)
+    else
+        copyButton.Text = "Sem clipboard"
+    end
+end)
+
+recordButton.MouseButton1Click:Connect(function()
+    local character = LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local frozen = FindFrozenDimension(true)
+    local frozenCFrame = frozen and ObjectCFrame(frozen)
+    if not root or not frozenCFrame then recordButton.Text = "Frozen nao detectada" return end
+    frozenOffset = frozenCFrame:ToObjectSpace(root.CFrame)
+    pcall(function()
+        if writefile then writefile(MacroFile, HttpService:JSONEncode({frozenOffset:GetComponents()})) end
+    end)
+    recordButton.Text = "Ponto gravado!"
+    task.delay(2, function() recordButton.Text = "Gravar ponto Frozen" end)
+end)
+
+autoButton.MouseButton1Click:Connect(function()
+    autoFrozen = not autoFrozen
+    autoButton.Text = autoFrozen and "Auto Frozen: ON" or "Auto Frozen: OFF"
+    autoButton.BackgroundColor3 = autoFrozen and Color3.fromRGB(55, 125, 82) or Color3.fromRGB(55, 91, 75)
+end)
+
+local function ActivateFrozen(frozen)
+    if frozenBusy or not frozenOffset then return end
+    frozenBusy = true
+    task.spawn(function()
+        local character = LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        local frozenCFrame = ObjectCFrame(frozen)
+        if root and frozenCFrame then
+            local destination = frozenCFrame * frozenOffset
+            local duration = math.clamp((root.Position - destination.Position).Magnitude / 250, 0.2, 20)
+            local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = destination})
+            tween:Play()
+            tween.Completed:Wait()
+            local prompt = frozen:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local click = frozen:FindFirstChildWhichIsA("ClickDetector", true)
+            if prompt and fireproximityprompt then
+                pcall(fireproximityprompt, prompt)
+            elseif click and fireclickdetector then
+                pcall(fireclickdetector, click)
+            else
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.wait(0.15)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            end
+        end
+        task.wait(3)
+        frozenBusy = false
+    end)
 end
 
 while task.wait(1) do
@@ -93,31 +229,34 @@ while task.wait(1) do
     local tool = character and character:FindFirstChildOfClass("Tool")
     local hasBuso = character and character:FindFirstChild("HasBuso") ~= nil
     local controllerFound = false
-
     pcall(function()
         local module = LocalPlayer.PlayerScripts:FindFirstChild("CombatFramework")
         local framework = module and require(module)
         controllerFound = type(framework) == "table" and framework.activeController ~= nil
     end)
 
+    local lines = {
+        "Personagem: " .. tostring(character ~= nil), "HP: " .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
+        "Buso: " .. tostring(hasBuso), "Arma: " .. tostring(tool and tool.Name or "nenhuma"),
+        "CombatController: " .. tostring(controllerFound), "Macro Frozen: " .. tostring(frozenOffset ~= nil)
+    }
     if root then
-        local mob, part, distance = FindNearestPiranha(root)
-        local humanoidMob = mob and mob:FindFirstChildOfClass("Humanoid")
-        local diagnosticText = table.concat({
-            "Personagem: " .. tostring(character ~= nil),
-            "HP: " .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
-            "Buso: " .. tostring(hasBuso),
-            "Arma: " .. tostring(tool and tool.Name or "nenhuma"),
-            "CombatController: " .. tostring(controllerFound),
-            "Piranha: " .. tostring(mob and mob.Name or "nao encontrada"),
-            "Distancia: " .. tostring(part and math.floor(distance * 10) / 10 or "nil"),
-            "HP real da Piranha: " .. tostring(humanoidMob and math.floor(humanoidMob.Health) or "desconhecido")
-        }, "\n")
-        output.Text = diagnosticText
-        print("[IKARO DIAG] " .. string.gsub(diagnosticText, "\n", " | "))
+        for _, key in ipairs(EventOrder) do
+            local mob, part, distance = FindNearestEvent(root, EventNames[key])
+            if mob and part then
+                table.insert(lines, key .. ": SIM | Dist=" .. tostring(math.floor(distance * 10) / 10) .. " | HP=" .. HealthText(mob))
+            else
+                table.insert(lines, key .. ": nao detectado")
+            end
+        end
     else
-        output.Text = "Diagnostico carregado.\nAguardando personagem/HRP..."
-        print("[IKARO DIAG] aguardando personagem/HRP")
+        table.insert(lines, "Aguardando personagem/HRP...")
     end
+    local frozen = FindFrozenDimension()
+    table.insert(lines, "Frozen Dimension: " .. tostring(frozen and frozen:GetFullName() or "nao detectada"))
+    lastReport = table.concat(lines, "\n")
+    output.Text = lastReport
+    print("[IKARO DIAG] " .. string.gsub(lastReport, "\n", " | "))
+    if autoFrozen and frozen and frozenOffset then ActivateFrozen(frozen) end
 end
 
