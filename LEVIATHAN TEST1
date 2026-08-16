@@ -11,6 +11,50 @@ end
 
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- Entra automaticamente como Marine antes mesmo do personagem nascer.
+-- O remote cobre a tela normal de seleção; o clique é um fallback para
+-- executores/versões em que o servidor ainda deixa a escolha aberta na GUI.
+local function IsMarineTeam()
+    local team = LocalPlayer.Team
+    return team and string.find(string.lower(team.Name), "marine", 1, true) ~= nil
+end
+
+local function TryJoinMarines()
+    if IsMarineTeam() then return true end
+
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local comm = remotes and remotes:FindFirstChild("CommF_")
+        if comm then
+            comm:InvokeServer("SetTeam", "Marines")
+        end
+    end)
+
+    if not IsMarineTeam() then
+        pcall(function()
+            for _, object in ipairs(PlayerGui:GetDescendants()) do
+                if object:IsA("TextButton") then
+                    local text = string.lower(object.Text or "")
+                    if string.find(text, "marine", 1, true) then
+                        object:Activate()
+                        break
+                    end
+                end
+            end
+        end)
+    end
+
+    return IsMarineTeam()
+end
+
+task.spawn(function()
+    local deadline = os.clock() + 30
+    repeat
+        TryJoinMarines()
+        task.wait(0.5)
+    until IsMarineTeam() or os.clock() >= deadline
+end)
+
 local Character
 local Humanoid
 local HRP
@@ -1973,7 +2017,7 @@ local function FireRangedBasicAttack(target)
     local controller = GetCombatFrameworkController()
     if controller then
         pcall(function()
-            controller.hitboxMagnitude = math.max(controller.hitboxMagnitude or 0, 120)
+            controller.hitboxMagnitude = math.max(controller.hitboxMagnitude or 0, 200)
             controller.timeToNextAttack = 0
             controller.timeToNextBlock = 0
             controller.attacking = false
@@ -2303,6 +2347,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     local oldAutoRotate = Humanoid.AutoRotate
     local collisionCache = {}
     local targetCollisionCache = {}
+    local bringAnchor = nil
 
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
@@ -2348,7 +2393,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         -- Sea Beast é muito alto e recebe dano por skills; manter grande
         -- altitude evita contato com a água sem sair do alcance das skills.
         local height = eventKey == "SeaBeast" and 260
-            or useBasicClick and 18
+            or useBasicClick and 8
             or 48
         local desired = target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
@@ -2386,12 +2431,17 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
                 target.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                 target.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 
-                local bringPosition =
-                    HRP.Position
-                    + HRP.CFrame.LookVector * 14
-                    - Vector3.new(0, useBasicClick and 16 or 28, 0)
+                -- A âncora não acompanha o HRP. Isso impede o ciclo em que o
+                -- jogador sobe para ficar acima do mob e o mob sobe junto.
+                if not bringAnchor then
+                    bringAnchor = target.Position
+                end
 
-                target.CFrame = CFrame.lookAt(bringPosition, HRP.Position)
+                local facing = Vector3.new(HRP.Position.X, bringAnchor.Y, HRP.Position.Z)
+                if (facing - bringAnchor).Magnitude < 0.01 then
+                    facing = bringAnchor + Vector3.new(0, 0, -1)
+                end
+                target.CFrame = CFrame.lookAt(bringAnchor, facing)
             end)
         end
     end)
@@ -3112,7 +3162,13 @@ local function StartBoatDrive(forceStart)
 
             local seaDirection
 
-            if flatDelta.Magnitude > 250 then
+            -- Depois de entrar na região do Sea 6, segue eternamente na rota
+            -- mapeada. Não tenta voltar para o ponto de entrada ao ultrapassá-lo.
+            if SeaHuntState.AtSea6 or flatDelta.Magnitude <= 1000 then
+                SeaHuntState.AtSea6 = true
+                seaDirection = SEA6_MAPPED_DIRECTION
+                FixedSeaDirection = seaDirection
+            elseif flatDelta.Magnitude > 250 then
                 seaDirection = flatDelta.Unit
                 FixedSeaDirection = seaDirection
             else
@@ -3126,7 +3182,7 @@ local function StartBoatDrive(forceStart)
             local horizontalSpeed = SeaConfig.BoatSpeed
 
             -- desacelera um pouco quando chega perto do ponto mapeado
-            if flatDelta.Magnitude < 1500 then
+            if not SeaHuntState.AtSea6 and flatDelta.Magnitude < 1500 then
                 horizontalSpeed = math.max(180, SeaConfig.BoatSpeed * 0.65)
             end
 
