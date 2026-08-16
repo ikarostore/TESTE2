@@ -2102,6 +2102,21 @@ local function BMFastAttack(target)
         BMVirtualUser:CaptureController()
         BMVirtualUser:Button1Down(Vector2.new(1280, 672))
 
+        -- Fallback para executores que nao expoem activeController. Envia o
+        -- alvo diretamente ao RigControllerEvent, com limite de frequencia.
+        if not controller then
+            local env = getgenv and getgenv() or _G
+            local now = os.clock()
+            if now >= (env.IKARO_NEXT_RIG_ATTACK or 0) then
+                env.IKARO_NEXT_RIG_ATTACK = now + 0.18
+                local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
+                if rigEvent then
+                    rigEvent:FireServer("weaponChange", tool.Name)
+                    rigEvent:FireServer("hit", {target}, 1, "")
+                end
+            end
+        end
+
         if BMCameraShaker and type(BMCameraShaker.Stop) == "function" then
             BMCameraShaker:Stop()
         end
