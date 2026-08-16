@@ -1950,13 +1950,6 @@ local ClickSeaEvents = {
     FishCrewMember = true
 }
 
-local BringableSeaEvents = {
-    Shark = true,
-    Piranha = true,
-    Terrorshark = true,
-    FishCrewMember = true
-}
-
 local SeaVirtualUser = nil
 pcall(function()
     SeaVirtualUser = game:GetService("VirtualUser")
@@ -2346,16 +2339,22 @@ local function EnsureSeaCombatHaki()
     end)
 end
 
+-- Mantém o Armament/Buso Haki ligado mesmo após morte, respawn ou troca de
+-- etapa. O marcador HasBuso impede chamadas remotas quando ele já está ativo.
+task.spawn(function()
+    while task.wait(2) do
+        if Character and Humanoid and Humanoid.Health > 0 then
+            EnsureSeaCombatHaki()
+        end
+    end
+end)
+
 local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     if not HRP or not Humanoid then return nil end
 
     local oldPlatformStand = Humanoid.PlatformStand
     local oldAutoRotate = Humanoid.AutoRotate
     local collisionCache = {}
-    local targetCollisionCache = {}
-    local bringAnchor = nil
-    local nextBringUpdate = 0
-    local simulationRadiusApplied = false
 
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
@@ -2422,39 +2421,6 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             bodyGyro.CFrame = CFrame.lookAt(HRP.Position, lookPosition)
         end
 
-        -- Bring Mob é restrito a entidades vivas pequenas/bosses marítimos.
-        -- Ships e Leviathan nunca passam por esta rotina.
-        if BringableSeaEvents[eventKey]
-        and not target.Anchored
-        and (target.Position - HRP.Position).Magnitude <= 260
-        and now >= nextBringUpdate then
-            nextBringUpdate = now + 0.10
-            pcall(function()
-                if not simulationRadiusApplied and type(sethiddenproperty) == "function" then
-                    sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-                    simulationRadiusApplied = true
-                end
-
-                if targetCollisionCache[target] == nil then
-                    targetCollisionCache[target] = target.CanCollide
-                end
-                target.CanCollide = false
-                target.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                target.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-
-                -- A âncora não acompanha o HRP. Isso impede o ciclo em que o
-                -- jogador sobe para ficar acima do mob e o mob sobe junto.
-                if not bringAnchor then
-                    bringAnchor = target.Position
-                end
-
-                local facing = Vector3.new(HRP.Position.X, bringAnchor.Y, HRP.Position.Z)
-                if (facing - bringAnchor).Magnitude < 0.01 then
-                    facing = bringAnchor + Vector3.new(0, 0, -1)
-                end
-                target.CFrame = CFrame.lookAt(bringAnchor, facing)
-            end)
-        end
     end)
 
     return function()
@@ -2468,13 +2434,6 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         end
 
         for part, oldValue in pairs(collisionCache) do
-            if part and part.Parent then
-                pcall(function() part.CanCollide = oldValue end)
-            end
-        end
-
-
-        for part, oldValue in pairs(targetCollisionCache) do
             if part and part.Parent then
                 pcall(function() part.CanCollide = oldValue end)
             end
@@ -2504,9 +2463,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     local useBasicClick = ClickSeaEvents[eventKey] == true
 
     local combatState = useBasicClick and "SEA_EVENT_AUTO_CLICK" or "SEA_EVENT_SKILLS"
-    if BringableSeaEvents[eventKey] then
-        combatState = "SEA_EVENT_AUTO_CLICK_BRING"
-    end
 
     SetState(combatState, SeaEventDisplayName(eventKey))
 
