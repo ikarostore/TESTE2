@@ -38,9 +38,9 @@ local OwnerPlayer = nil
 local AccountBuyBoat = false
 
 local FollowConnection = nil
-local FollowSpeed = 320
-local FollowHeight = 35
-local FollowBack = 6
+local FollowSpeed = 140
+local FollowHeight = 22
+local FollowBack = 8
 
 local savedCollisions = {}
 
@@ -530,13 +530,15 @@ ToggleRow(HuntPage, "Account Buy Boat", false, function(v)
 end)
 
 -- =========================================================
--- FOLLOW OWNER - ALTURA TRAVADA / SEM CAIR NA ÁGUA
+-- FOLLOW OWNER - VOO REAL ATÉ O OWNER
 --
--- O seguidor fica acima e atrás do owner usando BodyPosition.
--- Assim não depende da gravidade nem vai descendo até a água.
+-- IMPORTANTE:
+-- Esta versão NÃO usa CFrame para "puxar" o seguidor até o owner.
+-- Ela usa BodyVelocity para o personagem voar fisicamente em linha reta.
+-- Isso reduz o efeito de rollback causado por teleporte/CFrame contínuo.
 -- =========================================================
 
-local FollowBodyPosition = nil
+local FollowBodyVelocity = nil
 local FollowBodyGyro = nil
 
 local function RestoreFollowPhysics()
@@ -552,11 +554,11 @@ local function RestoreFollowPhysics()
 
     savedCollisions = {}
 
-    if FollowBodyPosition then
+    if FollowBodyVelocity then
         pcall(function()
-            FollowBodyPosition:Destroy()
+            FollowBodyVelocity:Destroy()
         end)
-        FollowBodyPosition = nil
+        FollowBodyVelocity = nil
     end
 
     if FollowBodyGyro then
@@ -586,12 +588,12 @@ local function ApplyFollowPhysics()
         return
     end
 
+    -- Noclip durante o voo.
     for _, obj in ipairs(Character:GetDescendants()) do
         if obj:IsA("BasePart") then
             if savedCollisions[obj] == nil then
                 savedCollisions[obj] = obj.CanCollide
             end
-
             obj.CanCollide = false
         end
     end
@@ -603,22 +605,21 @@ local function ApplyFollowPhysics()
         end)
     end
 
-    if not FollowBodyPosition or not FollowBodyPosition.Parent then
-        FollowBodyPosition = Instance.new("BodyPosition")
-        FollowBodyPosition.Name = "IKAROFollowPosition"
-        FollowBodyPosition.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-        FollowBodyPosition.P = 35000
-        FollowBodyPosition.D = 2500
-        FollowBodyPosition.Position = HRP.Position
-        FollowBodyPosition.Parent = HRP
+    if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
+        FollowBodyVelocity = Instance.new("BodyVelocity")
+        FollowBodyVelocity.Name = "IKAROFollowVelocity"
+        FollowBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        FollowBodyVelocity.P = 9000
+        FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        FollowBodyVelocity.Parent = HRP
     end
 
     if not FollowBodyGyro or not FollowBodyGyro.Parent then
         FollowBodyGyro = Instance.new("BodyGyro")
         FollowBodyGyro.Name = "IKAROFollowGyro"
         FollowBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-        FollowBodyGyro.P = 25000
-        FollowBodyGyro.D = 1200
+        FollowBodyGyro.P = 12000
+        FollowBodyGyro.D = 700
         FollowBodyGyro.CFrame = HRP.CFrame
         FollowBodyGyro.Parent = HRP
     end
@@ -642,6 +643,9 @@ local function StartFollowOwner()
 
     ApplyFollowPhysics()
 
+    local lastDistance = nil
+    local rollbackCount = 0
+
     FollowConnection = RunService.Heartbeat:Connect(function()
         if not Running then
             return
@@ -655,13 +659,13 @@ local function StartFollowOwner()
         local ownerHRP = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
 
         if not ownerHRP then
+            FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
             return
         end
 
         ApplyFollowPhysics()
 
-        -- Mantém o seguidor BEM acima do owner.
-        -- Isso evita tocar a água mesmo se o owner estiver sentado baixo no barco.
+        -- Ponto-alvo: um pouco atrás e acima do jogador principal.
         local target =
             ownerHRP.Position
             - ownerHRP.CFrame.LookVector * FollowBack
@@ -670,25 +674,56 @@ local function StartFollowOwner()
         local delta = target - HRP.Position
         local distance = delta.Magnitude
 
-        -- Se ficou absurdamente longe (por respawn/teleporte do owner),
-        -- aproxima em um salto inicial e depois volta ao follow suave.
-        if distance > 900 then
-            HRP.CFrame = CFrame.new(
-                target,
-                target + ownerHRP.CFrame.LookVector
+        if distance > 10 then
+            local direction = delta.Unit
+
+            -- Voo real com velocidade constante.
+            -- Sem teleporte, sem CFrame de posição.
+            FollowBodyVelocity.Velocity = direction * FollowSpeed
+
+            -- Faz o corpo olhar para a direção do voo.
+            FollowBodyGyro.CFrame = CFrame.new(
+                HRP.Position,
+                HRP.Position + direction
             )
-            FollowBodyPosition.Position = target
         else
-            FollowBodyPosition.Position = target
+            -- Quando chega perto, acompanha a velocidade do owner
+            -- sem ficar tentando corrigir a posição agressivamente.
+            local ownerVelocity = ownerHRP.AssemblyLinearVelocity
+            local correction = delta * 2.2
+
+            FollowBodyVelocity.Velocity =
+                ownerVelocity + correction
+
+            FollowBodyGyro.CFrame = CFrame.new(
+                HRP.Position,
+                HRP.Position + ownerHRP.CFrame.LookVector
+            )
         end
 
-        FollowBodyGyro.CFrame = CFrame.new(
-            HRP.Position,
-            HRP.Position + ownerHRP.CFrame.LookVector
-        )
+        -- Detector simples de rollback.
+        -- Se o servidor estiver devolvendo a conta repetidamente,
+        -- apenas reduz a velocidade; nunca teleporta.
+        if lastDistance then
+            if distance > lastDistance + 25 then
+                rollbackCount = rollbackCount + 1
+            else
+                rollbackCount = math.max(rollbackCount - 1, 0)
+            end
 
-        HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            if rollbackCount >= 3 then
+                FollowSpeed = math.max(FollowSpeed * 0.75, 70)
+                rollbackCount = 0
+
+                SetState(
+                    "FOLLOW_OWNER",
+                    "Servidor corrigiu posição; reduzindo velocidade para " ..
+                    math.floor(FollowSpeed)
+                )
+            end
+        end
+
+        lastDistance = distance
     end)
 end
 
