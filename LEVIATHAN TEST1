@@ -1902,9 +1902,6 @@ local ClickSeaEvents = {
     Terrorshark = true
 }
 
--- Bring Mob desativado para todos os Sea Events.
-local BringableSeaEvents = {}
-
 local SeaVirtualUser = nil
 pcall(function()
     SeaVirtualUser = game:GetService("VirtualUser")
@@ -1942,9 +1939,10 @@ local function AimAtSeaTarget(target)
     if not target then return end
 
     if HRP and HRP.Parent then
-        if (target.Position - HRP.Position).Magnitude > 0.01 then
+        local flatTarget = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
+        if (flatTarget - HRP.Position).Magnitude > 0.01 then
             pcall(function()
-                HRP.CFrame = CFrame.lookAt(HRP.Position, target.Position)
+                HRP.CFrame = CFrame.lookAt(HRP.Position, flatTarget)
             end)
         end
     end
@@ -1965,6 +1963,21 @@ local function FireRangedBasicAttack(target)
     local tool = EquipSeaCombatType("Melee")
     local attacked = false
 
+    -- Método mais próximo do PlayerClick usado nos scripts de farm antigos.
+    if type(mouse1click) == "function" then
+        pcall(function()
+            mouse1click()
+            attacked = true
+        end)
+    elseif type(mouse1press) == "function" and type(mouse1release) == "function" then
+        pcall(function()
+            mouse1press()
+            task.wait(0.02)
+            mouse1release()
+            attacked = true
+        end)
+    end
+
     -- Método inspirado nos sources analisados: reduz cooldown e aumenta a
     -- magnitude do hitbox antes de solicitar o ataque do controller.
     local controller = GetCombatFrameworkController()
@@ -1974,6 +1987,7 @@ local function FireRangedBasicAttack(target)
             controller.timeToNextAttack = 0
             controller.timeToNextBlock = 0
             controller.attacking = false
+            controller.equipped = true
 
             if type(controller.attack) == "function" then
                 controller:attack()
@@ -2303,10 +2317,6 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     local oldPlatformStand = Humanoid.PlatformStand
     local oldAutoRotate = Humanoid.AutoRotate
     local collisionCache = {}
-    local targetCollisionCache = {}
-    local bringAnchor = nil
-    local nextBringUpdate = 0
-    local simulationRadiusApplied = false
 
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
@@ -2323,7 +2333,9 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     bodyGyro.CFrame = HRP.CFrame
     bodyGyro.Parent = HRP
 
-    Humanoid.PlatformStand = true
+    -- PlatformStand bloqueia o controlador normal de M1 em vários executores.
+    -- Skills continuam usando-o; mobs de clique permanecem em estado atacável.
+    Humanoid.PlatformStand = not useBasicClick
     Humanoid.AutoRotate = false
 
     local nextNoclip = 0
@@ -2368,43 +2380,11 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             bodyVelocity.Velocity = target.AssemblyLinearVelocity + delta * 5
         end
 
-        if (target.Position - HRP.Position).Magnitude > 0.01 then
-            bodyGyro.CFrame = CFrame.lookAt(HRP.Position, target.Position)
+        local lookPosition = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
+        if (lookPosition - HRP.Position).Magnitude > 0.01 then
+            bodyGyro.CFrame = CFrame.lookAt(HRP.Position, lookPosition)
         end
 
-        -- Bring Mob é restrito a entidades vivas pequenas/bosses marítimos.
-        -- Ships e Leviathan nunca passam por esta rotina.
-        if BringableSeaEvents[eventKey]
-        and not target.Anchored
-        and (target.Position - HRP.Position).Magnitude <= 260
-        and now >= nextBringUpdate then
-            nextBringUpdate = now + 0.10
-            pcall(function()
-                if not simulationRadiusApplied and type(sethiddenproperty) == "function" then
-                    sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-                    simulationRadiusApplied = true
-                end
-
-                if targetCollisionCache[target] == nil then
-                    targetCollisionCache[target] = target.CanCollide
-                end
-                target.CanCollide = false
-                target.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                target.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-
-                -- A âncora não acompanha o HRP. Isso impede o ciclo em que o
-                -- jogador sobe para ficar acima do mob e o mob sobe junto.
-                if not bringAnchor then
-                    bringAnchor = target.Position
-                end
-
-                local facing = Vector3.new(HRP.Position.X, bringAnchor.Y, HRP.Position.Z)
-                if (facing - bringAnchor).Magnitude < 0.01 then
-                    facing = bringAnchor + Vector3.new(0, 0, -1)
-                end
-                target.CFrame = CFrame.lookAt(bringAnchor, facing)
-            end)
-        end
     end)
 
     return function()
@@ -2418,13 +2398,6 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         end
 
         for part, oldValue in pairs(collisionCache) do
-            if part and part.Parent then
-                pcall(function() part.CanCollide = oldValue end)
-            end
-        end
-
-
-        for part, oldValue in pairs(targetCollisionCache) do
             if part and part.Parent then
                 pcall(function() part.CanCollide = oldValue end)
             end
@@ -2454,9 +2427,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     local useBasicClick = ClickSeaEvents[eventKey] == true
 
     local combatState = useBasicClick and "SEA_EVENT_AUTO_CLICK" or "SEA_EVENT_SKILLS"
-    if BringableSeaEvents[eventKey] then
-        combatState = "SEA_EVENT_AUTO_CLICK_BRING"
-    end
 
     SetState(combatState, SeaEventDisplayName(eventKey))
 
