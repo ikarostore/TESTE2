@@ -21,7 +21,14 @@ local function SetupCharacter(char)
     HRP = char:WaitForChild("HumanoidRootPart", 15)
 end
 
-SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
+-- O HUD precisa existir ainda na tela Pick a Side. Se não houver Character,
+-- continua carregando a interface e CharacterAdded configura tudo após a
+-- escolha manual de Pirates/Marines.
+if LocalPlayer.Character then
+    task.spawn(function()
+        SetupCharacter(LocalPlayer.Character)
+    end)
+end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.spawn(function()
