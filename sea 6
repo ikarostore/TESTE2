@@ -1,141 +1,139 @@
-- IKARO Sea 6 Direction Mapper v1
--- Objetivo:
--- 1) Salvar uma posição de referência na Tiki.
--- 2) Ir manualmente até o Sea/Danger Level 6.
--- 3) Salvar a posição no Sea 6.
--- 4) Calcular vetor/direção Tiki -> Sea 6.
--- 5) Copiar diagnóstico completo.
+-- IKARO Sea 6 Mapper v1.1 COMPAT
+-- Versão simplificada para maior compatibilidade.
+-- Não usa funções avançadas, hooks, regex, AlignOrientation, etc.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-if not player then return end
+if not player then
+    warn("IKARO SEA6: LocalPlayer nao encontrado")
+    return
+end
 
 local playerGui = player:WaitForChild("PlayerGui")
 
-local old = playerGui:FindFirstChild("IKARO_Sea6Mapper")
-if old then old:Destroy() end
+local old = playerGui:FindFirstChild("IKARO_Sea6MapperCompat")
+if old then
+    old:Destroy()
+end
 
 local tikiPos = nil
 local sea6Pos = nil
-local tikiBoatCFrame = nil
-local sea6BoatCFrame = nil
 local logs = {}
 
-local function log(msg)
+local function addLog(msg)
     msg = tostring(msg)
     table.insert(logs, msg)
     print("[IKARO SEA6]", msg)
 end
 
-local function getCharacterRoot()
-    local ch = player.Character
-    return ch and ch:FindFirstChild("HumanoidRootPart")
+local function getHRP()
+    local char = player.Character or player.CharacterAdded:Wait()
+    return char:FindFirstChild("HumanoidRootPart")
 end
 
-local function getBeastHunterSeat()
+local function getBoatSeat()
     local boats = Workspace:FindFirstChild("Boats")
-    local boat = boats and boats:FindFirstChild("Beast Hunter")
-    if not boat then return nil end
+    if not boats then
+        return nil
+    end
+
+    local boat = boats:FindFirstChild("Beast Hunter")
+    if not boat then
+        return nil
+    end
 
     return boat:FindFirstChild("VehicleSeat")
-        or boat.PrimaryPart
-        or boat:FindFirstChildWhichIsA("BasePart", true)
 end
 
-local function currentReference()
-    local seat = getBeastHunterSeat()
+local function getCurrentPosition()
+    local seat = getBoatSeat()
     if seat then
-        return seat.Position, seat.CFrame, "Beast Hunter"
+        return seat.Position, "Beast Hunter"
     end
 
-    local root = getCharacterRoot()
-    if root then
-        return root.Position, root.CFrame, "Player"
+    local hrp = getHRP()
+    if hrp then
+        return hrp.Position, "Player"
     end
 
-    return nil, nil, "none"
+    return nil, "none"
 end
 
-local function fmtV3(v)
-    if not v then return "nil" end
-    return string.format("Vector3.new(%.6f, %.6f, %.6f)", v.X, v.Y, v.Z)
-end
-
-local function fmtCF(cf)
-    if not cf then return "nil" end
-    local c = {cf:GetComponents()}
-    for i = 1, #c do
-        c[i] = string.format("%.6f", c[i])
-    end
-    return "CFrame.new(" .. table.concat(c, ", ") .. ")"
-end
-
-local function detectDangerTexts()
-    local found = {}
-
-    for _, obj in ipairs(playerGui:GetDescendants()) do
-        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
-            local txt = ""
-            pcall(function() txt = obj.Text end)
-
-            local l = string.lower(txt)
-
-            if txt ~= "" and (
-                string.find(l, "danger", 1, true)
-                or string.find(l, "sea", 1, true)
-                or string.find(l, "leviathan", 1, true)
-            ) then
-                table.insert(found, obj:GetFullName() .. " = " .. txt)
-            end
-        end
+local function formatVector3(v)
+    if not v then
+        return "nil"
     end
 
-    return found
+    return "Vector3.new("
+        .. tostring(v.X)
+        .. ", "
+        .. tostring(v.Y)
+        .. ", "
+        .. tostring(v.Z)
+        .. ")"
 end
 
--- UI
+local function calculateDirection()
+    if not tikiPos or not sea6Pos then
+        return nil, nil
+    end
+
+    local delta = Vector3.new(
+        sea6Pos.X - tikiPos.X,
+        0,
+        sea6Pos.Z - tikiPos.Z
+    )
+
+    if delta.Magnitude <= 0.01 then
+        return nil, 0
+    end
+
+    return delta.Unit, delta.Magnitude
+end
+
+-- GUI
 local gui = Instance.new("ScreenGui")
-gui.Name = "IKARO_Sea6Mapper"
+gui.Name = "IKARO_Sea6MapperCompat"
 gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
-local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 440, 0, 390)
-main.Position = UDim2.new(0.04, 0, 0.16, 0)
-main.BackgroundColor3 = Color3.fromRGB(28,28,31)
-main.BorderSizePixel = 0
-main.Active = true
-main.Draggable = true
-main.Parent = gui
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 410, 0, 330)
+frame.Position = UDim2.new(0.04, 0, 0.18, 0)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,33)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
 
 local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0,8)
-corner.Parent = main
+corner.Parent = frame
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,0,0,40)
+title.Size = UDim2.new(1,0,0,38)
 title.BackgroundColor3 = Color3.fromRGB(38,38,42)
 title.BorderSizePixel = 0
 title.TextColor3 = Color3.fromRGB(240,240,240)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 16
-title.Text = "IKARO • Sea 6 Direction Mapper"
-title.Parent = main
+title.Text = "IKARO - Sea 6 Mapper COMPAT"
+title.Parent = frame
 
 local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1,-20,0,80)
-status.Position = UDim2.new(0,10,0,48)
+status.Size = UDim2.new(1,-20,0,70)
+status.Position = UDim2.new(0,10,0,45)
 status.BackgroundTransparency = 1
 status.TextColor3 = Color3.fromRGB(215,215,215)
 status.Font = Enum.Font.SourceSans
 status.TextSize = 13
 status.TextWrapped = true
-status.Text = "Salve Tiki primeiro. Depois vá manualmente até Danger/Sea 6 e salve Sea 6."
-status.Parent = main
+status.Text = "1) Salve Tiki. 2) Va manualmente ao Sea 6. 3) Salve Sea 6. 4) Copie."
+status.Parent = frame
 
-local function button(text, y, callback)
+local function makeButton(text, y, callback)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1,-20,0,38)
     b.Position = UDim2.new(0,10,0,y)
@@ -145,169 +143,137 @@ local function button(text, y, callback)
     b.Font = Enum.Font.SourceSansBold
     b.TextSize = 13
     b.Text = text
-    b.Parent = main
+    b.Parent = frame
 
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0,6)
     c.Parent = b
 
     b.MouseButton1Click:Connect(function()
-        local ok, err = pcall(callback, b)
+        local ok, err = pcall(function()
+            callback(b)
+        end)
+
         if not ok then
+            warn("IKARO SEA6 ERRO:", err)
             status.Text = "ERRO: " .. tostring(err)
-            warn("[IKARO SEA6]", err)
         end
     end)
 
     return b
 end
 
-button("1. Salvar posição Tiki", 135, function()
-    local pos, cf, source = currentReference()
+makeButton("1. Salvar Tiki", 120, function()
+    local pos, source = getCurrentPosition()
+
     if not pos then
-        status.Text = "Não encontrei player nem Beast Hunter."
+        status.Text = "Nao encontrei Beast Hunter nem HumanoidRootPart."
         return
     end
 
     tikiPos = pos
-    tikiBoatCFrame = cf
 
-    log("TIKI_SOURCE=" .. source)
-    log("TIKI_POS=" .. fmtV3(tikiPos))
-    log("TIKI_CFRAME=" .. fmtCF(tikiBoatCFrame))
+    addLog("TIKI_SOURCE=" .. source)
+    addLog("TIKI_POS=" .. formatVector3(tikiPos))
 
-    status.Text = "Tiki salva usando: " .. source .. "\nAgora vá manualmente até o Sea/Danger Level 6."
+    status.Text = "Tiki salva usando " .. source .. ". Agora va manualmente ate o Sea 6."
 end)
 
-button("2. Salvar posição Sea 6", 179, function()
-    local pos, cf, source = currentReference()
+makeButton("2. Salvar Sea 6", 164, function()
+    local pos, source = getCurrentPosition()
+
     if not pos then
-        status.Text = "Não encontrei player nem Beast Hunter."
+        status.Text = "Nao encontrei Beast Hunter nem HumanoidRootPart."
         return
     end
 
     sea6Pos = pos
-    sea6BoatCFrame = cf
 
-    log("SEA6_SOURCE=" .. source)
-    log("SEA6_POS=" .. fmtV3(sea6Pos))
-    log("SEA6_CFRAME=" .. fmtCF(sea6BoatCFrame))
+    addLog("SEA6_SOURCE=" .. source)
+    addLog("SEA6_POS=" .. formatVector3(sea6Pos))
 
-    if tikiPos then
-        local flatDelta = Vector3.new(
-            sea6Pos.X - tikiPos.X,
-            0,
-            sea6Pos.Z - tikiPos.Z
-        )
+    local dir, dist = calculateDirection()
 
-        if flatDelta.Magnitude > 0.01 then
-            local dir = flatDelta.Unit
-            log("SEA6_DIRECTION=" .. fmtV3(dir))
-            log("DISTANCE_TIKI_TO_SEA6=" .. string.format("%.3f", flatDelta.Magnitude))
+    if dir then
+        addLog("SEA6_DIRECTION=" .. formatVector3(dir))
+        addLog("DISTANCE=" .. tostring(dist))
 
-            status.Text = string.format(
-                "Sea 6 salva!\nDireção X/Z: %.4f, %.4f | Distância: %.0f",
-                dir.X,
-                dir.Z,
-                flatDelta.Magnitude
-            )
-        else
-            status.Text = "Sea 6 salva, mas Tiki e Sea 6 ficaram praticamente iguais."
-        end
+        status.Text =
+            "Sea 6 salvo!\nDir X="
+            .. string.format("%.4f", dir.X)
+            .. " Z="
+            .. string.format("%.4f", dir.Z)
     else
-        status.Text = "Sea 6 salva. Falta salvar Tiki para calcular direção."
+        status.Text = "Sea 6 salvo. Falta Tiki ou as posicoes ficaram iguais."
     end
 end)
 
-button("3. Ler textos de Danger/Sea", 223, function()
-    local texts = detectDangerTexts()
+makeButton("3. Mostrar posicao atual", 208, function()
+    local pos, source = getCurrentPosition()
 
-    log("===== GUI SEA / DANGER TEXTS =====")
-    for _, line in ipairs(texts) do
-        log(line)
+    if pos then
+        status.Text =
+            source
+            .. "\nX=" .. math.floor(pos.X)
+            .. " Y=" .. math.floor(pos.Y)
+            .. " Z=" .. math.floor(pos.Z)
+
+        addLog("CURRENT=" .. formatVector3(pos))
+    else
+        status.Text = "Nenhuma posicao encontrada."
     end
-
-    status.Text = "Encontrados " .. tostring(#texts) .. " textos relacionados a Sea/Danger. Eles entrarão no diagnóstico."
 end)
 
-button("4. Copiar diagnóstico", 267, function(btn)
-    local output = {
-        "=== IKARO SEA 6 MAPPER ===",
-        "PlaceId=" .. tostring(game.PlaceId),
-        "Player=" .. player.Name,
-        "TIKI_POS=" .. fmtV3(tikiPos),
-        "SEA6_POS=" .. fmtV3(sea6Pos),
-        ""
-    }
+makeButton("4. Copiar diagnostico", 252, function(btn)
+    local dir, dist = calculateDirection()
 
-    if tikiPos and sea6Pos then
-        local delta = Vector3.new(
-            sea6Pos.X - tikiPos.X,
-            0,
-            sea6Pos.Z - tikiPos.Z
-        )
+    local output = {}
+    table.insert(output, "=== IKARO SEA6 MAPPER ===")
+    table.insert(output, "TIKI_POS=" .. formatVector3(tikiPos))
+    table.insert(output, "SEA6_POS=" .. formatVector3(sea6Pos))
 
-        if delta.Magnitude > 0.01 then
-            local dir = delta.Unit
-            table.insert(output, "SEA6_DIRECTION=" .. fmtV3(dir))
-            table.insert(output, "DISTANCE=" .. tostring(delta.Magnitude))
-        end
+    if dir then
+        table.insert(output, "SEA6_DIRECTION=" .. formatVector3(dir))
+        table.insert(output, "DISTANCE=" .. tostring(dist))
     end
 
     table.insert(output, "")
     table.insert(output, "=== LOGS ===")
 
-    for _, line in ipairs(logs) do
-        table.insert(output, line)
+    for i = 1, #logs do
+        table.insert(output, logs[i])
     end
 
-    local text = table.concat(output, "\n")
+    local result = table.concat(output, "\n")
+
     local copied = false
 
     if type(setclipboard) == "function" then
-        copied = pcall(function() setclipboard(text) end)
-    elseif type(toclipboard) == "function" then
-        copied = pcall(function() toclipboard(text) end)
+        copied = pcall(function()
+            setclipboard(result)
+        end)
+    end
+
+    if not copied and type(toclipboard) == "function" then
+        copied = pcall(function()
+            toclipboard(result)
+        end)
     end
 
     if copied then
         btn.Text = "Copiado!"
-        status.Text = "Diagnóstico copiado. Cole no ChatGPT."
+        status.Text = "Diagnostico copiado. Cole no chat."
+
         task.delay(2, function()
             if btn and btn.Parent then
-                btn.Text = "4. Copiar diagnóstico"
+                btn.Text = "4. Copiar diagnostico"
             end
         end)
     else
-        print(text)
-        status.Text = "Clipboard indisponível. Diagnóstico enviado ao console."
+        print("=== IKARO SEA6 MAPPER ===")
+        print(result)
+        status.Text = "Clipboard indisponivel. Veja o console."
     end
 end)
 
-button("Atualizar posição atual", 311, function()
-    local pos, cf, source = currentReference()
-
-    if pos then
-        status.Text =
-            source .. "\n"
-            .. string.format("X %.1f | Y %.1f | Z %.1f", pos.X, pos.Y, pos.Z)
-
-        log("CURRENT_" .. source .. "=" .. fmtV3(pos))
-        log("CURRENT_LOOK=" .. fmtV3(cf.LookVector))
-    else
-        status.Text = "Nenhuma referência encontrada."
-    end
-end)
-
-local note = Instance.new("TextLabel")
-note.Size = UDim2.new(1,-20,0,35)
-note.Position = UDim2.new(0,10,1,-42)
-note.BackgroundTransparency = 1
-note.TextColor3 = Color3.fromRGB(165,165,165)
-note.Font = Enum.Font.SourceSans
-note.TextSize = 11
-note.TextWrapped = true
-note.Text = "Se o Beast Hunter existir, o mapper usa o VehicleSeat; caso contrário usa seu HumanoidRootPart."
-note.Parent = main
-
-log("SEA6 MAPPER CARREGADO")
+addLog("SEA6 MAPPER COMPAT CARREGADO")
