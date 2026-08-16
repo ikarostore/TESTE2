@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local PathfindingService = game:GetService("PathfindingService")
 
 local player = Players.LocalPlayer
 
@@ -14,6 +15,10 @@ local camera = workspace.CurrentCamera
 local voando = false
 local velocidadeVoo = 50
 
+local movimentoNPCAtivado = true
+local npcSelecionado = nil
+local cancelToken = 0
+
 local character
 local humanoid
 local hrp
@@ -25,7 +30,6 @@ local function configurarPersonagem(char)
     humanoid = character:WaitForChild("Humanoid")
     hrp = character:WaitForChild("HumanoidRootPart")
 
-    -- Remove objetos antigos caso existam
     local oldAttachment = hrp:FindFirstChild("IKAROFlyAttachment")
     if oldAttachment then
         oldAttachment:Destroy()
@@ -42,31 +46,25 @@ local function configurarPersonagem(char)
 
     linearVelocity = Instance.new("LinearVelocity")
     linearVelocity.Name = "IKAROFlyVelocity"
-
     linearVelocity.Attachment0 = attachment
-
     linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
     linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-
     linearVelocity.ForceLimitsEnabled = false
-
     linearVelocity.VectorVelocity = Vector3.zero
     linearVelocity.Enabled = false
     linearVelocity.Parent = hrp
 end
 
--- Personagem inicial
 configurarPersonagem(
     player.Character or player.CharacterAdded:Wait()
 )
 
--- Reconfigura depois de morrer
 player.CharacterAdded:Connect(function(char)
     voando = false
+    cancelToken = cancelToken + 1
     configurarPersonagem(char)
 end)
 
--- Remove GUI antiga
 local playerGui = player:WaitForChild("PlayerGui")
 
 local antigaGui = playerGui:FindFirstChild("IKAROhubGui")
@@ -74,18 +72,20 @@ if antigaGui then
     antigaGui:Destroy()
 end
 
--- GUI
+-- ================================================
+-- INTERFACE
+-- ================================================
+
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "IKAROhubGui"
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = false
 screenGui.Parent = playerGui
 
--- Frame principal
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 220, 0, 130)
-mainFrame.Position = UDim2.new(0.05, 0, 0.3, 0)
+mainFrame.Size = UDim2.new(0, 260, 0, 390)
+mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -96,7 +96,6 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = mainFrame
 
--- Título
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
 titleLabel.Size = UDim2.new(1, 0, 0, 35)
@@ -113,11 +112,10 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = titleLabel
 
--- Botão Fly
 local flyButton = Instance.new("TextButton")
 flyButton.Name = "FlyButton"
-flyButton.Size = UDim2.new(0.85, 0, 0, 40)
-flyButton.Position = UDim2.new(0.075, 0, 0.48, 0)
+flyButton.Size = UDim2.new(0.9, 0, 0, 40)
+flyButton.Position = UDim2.new(0.05, 0, 0, 50)
 flyButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 flyButton.BorderSizePixel = 0
 flyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -126,19 +124,29 @@ flyButton.Font = Enum.Font.SourceSansBold
 flyButton.Text = "Voo: DESATIVADO (F)"
 flyButton.Parent = mainFrame
 
-local buttonCorner = Instance.new("UICorner")
-buttonCorner.CornerRadius = UDim.new(0, 6)
-buttonCorner.Parent = flyButton
+local flyButtonCorner = Instance.new("UICorner")
+flyButtonCorner.CornerRadius = UDim.new(0, 6)
+flyButtonCorner.Parent = flyButton
 
-local PathfindingService = game:GetService("PathfindingService")
+local npcToggleButton = Instance.new("TextButton")
+npcToggleButton.Name = "NPCToggleButton"
+npcToggleButton.Size = UDim2.new(0.9, 0, 0, 35)
+npcToggleButton.Position = UDim2.new(0.05, 0, 0, 100)
+npcToggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+npcToggleButton.BorderSizePixel = 0
+npcToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+npcToggleButton.TextSize = 13
+npcToggleButton.Font = Enum.Font.SourceSansBold
+npcToggleButton.Text = "Andar até NPC: ATIVADO"
+npcToggleButton.Parent = mainFrame
 
--- Aumenta a janela para caber a lista
-mainFrame.Size = UDim2.new(0, 260, 0, 360)
+local npcToggleCorner = Instance.new("UICorner")
+npcToggleCorner.CornerRadius = UDim.new(0, 6)
+npcToggleCorner.Parent = npcToggleButton
 
--- Título da lista
 local npcTitle = Instance.new("TextLabel")
 npcTitle.Size = UDim2.new(0.9, 0, 0, 25)
-npcTitle.Position = UDim2.new(0.05, 0, 0, 115)
+npcTitle.Position = UDim2.new(0.05, 0, 0, 145)
 npcTitle.BackgroundTransparency = 1
 npcTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
 npcTitle.TextSize = 14
@@ -146,11 +154,10 @@ npcTitle.Font = Enum.Font.SourceSansBold
 npcTitle.Text = "NPCs encontrados"
 npcTitle.Parent = mainFrame
 
--- Área rolável
 local npcList = Instance.new("ScrollingFrame")
 npcList.Name = "NPCList"
-npcList.Size = UDim2.new(0.9, 0, 0, 190)
-npcList.Position = UDim2.new(0.05, 0, 0, 145)
+npcList.Size = UDim2.new(0.9, 0, 0, 185)
+npcList.Position = UDim2.new(0.05, 0, 0, 175)
 npcList.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 npcList.BorderSizePixel = 0
 npcList.ScrollBarThickness = 5
@@ -167,9 +174,74 @@ layout.Parent = npcList
 
 local padding = Instance.new("UIPadding")
 padding.PaddingTop = UDim.new(0, 5)
+padding.PaddingBottom = UDim.new(0, 5)
 padding.PaddingLeft = UDim.new(0, 5)
 padding.PaddingRight = UDim.new(0, 5)
 padding.Parent = npcList
+
+-- ================================================
+-- LÓGICA DO VOO
+-- ================================================
+
+local function atualizarBotaoVoo()
+    if voando then
+        flyButton.Text = "Voo: ATIVADO (F)"
+        flyButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+    else
+        flyButton.Text = "Voo: DESATIVADO (F)"
+        flyButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+    end
+end
+
+local function alternarVoo()
+    if not character or not hrp or not linearVelocity then
+        return
+    end
+
+    voando = not voando
+    linearVelocity.Enabled = voando
+
+    if not voando then
+        linearVelocity.VectorVelocity = Vector3.zero
+    end
+
+    atualizarBotaoVoo()
+end
+
+flyButton.MouseButton1Click:Connect(alternarVoo)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.F then
+        alternarVoo()
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if not voando then
+        return
+    end
+
+    if not linearVelocity or not linearVelocity.Parent then
+        return
+    end
+
+    camera = workspace.CurrentCamera
+
+    if not camera then
+        return
+    end
+
+    linearVelocity.VectorVelocity =
+        camera.CFrame.LookVector * velocidadeVoo
+end)
+
+-- ================================================
+-- LÓGICA DOS NPCs
+-- ================================================
 
 local function pegarRoot(model)
     return model:FindFirstChild("HumanoidRootPart")
@@ -177,9 +249,42 @@ local function pegarRoot(model)
         or model:FindFirstChild("UpperTorso")
 end
 
+local function ehPersonagemDeJogador(model)
+    return Players:GetPlayerFromCharacter(model) ~= nil
+end
+
+local function pararMovimentoNPC()
+    cancelToken = cancelToken + 1
+    npcSelecionado = nil
+
+    if humanoid and hrp then
+        humanoid:MoveTo(hrp.Position)
+    end
+end
+
+npcToggleButton.MouseButton1Click:Connect(function()
+    movimentoNPCAtivado = not movimentoNPCAtivado
+
+    if movimentoNPCAtivado then
+        npcToggleButton.Text = "Andar até NPC: ATIVADO"
+        npcToggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+    else
+        npcToggleButton.Text = "Andar até NPC: DESATIVADO"
+        npcToggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+        pararMovimentoNPC()
+    end
+end)
+
 local function irAteNPC(npc)
+    if not movimentoNPCAtivado then
+        return
+    end
 
     if not character or not humanoid or not hrp then
+        return
+    end
+
+    if not npc or not npc.Parent then
         return
     end
 
@@ -190,7 +295,10 @@ local function irAteNPC(npc)
         return
     end
 
-    local destino = npcRoot.Position
+    npcSelecionado = npc
+
+    cancelToken = cancelToken + 1
+    local meuToken = cancelToken
 
     local path = PathfindingService:CreatePath({
         AgentRadius = 2,
@@ -200,7 +308,7 @@ local function irAteNPC(npc)
     })
 
     local sucesso, erro = pcall(function()
-        path:ComputeAsync(hrp.Position, destino)
+        path:ComputeAsync(hrp.Position, npcRoot.Position)
     end)
 
     if not sucesso then
@@ -214,8 +322,19 @@ local function irAteNPC(npc)
     end
 
     for _, waypoint in ipairs(path:GetWaypoints()) do
+        if meuToken ~= cancelToken then
+            return
+        end
+
+        if not movimentoNPCAtivado then
+            return
+        end
 
         if not humanoid or humanoid.Health <= 0 then
+            return
+        end
+
+        if not npc or not npc.Parent then
             return
         end
 
@@ -227,15 +346,17 @@ local function irAteNPC(npc)
 
         local chegou = humanoid.MoveToFinished:Wait()
 
+        if meuToken ~= cancelToken then
+            return
+        end
+
         if not chegou then
-            warn("Caminho interrompido")
             break
         end
     end
 end
 
 local function criarBotaoNPC(npc)
-
     local button = Instance.new("TextButton")
     button.Name = "NPC_" .. npc.Name
     button.Size = UDim2.new(1, -10, 0, 32)
@@ -247,17 +368,20 @@ local function criarBotaoNPC(npc)
     button.Text = npc.Name
     button.Parent = npcList
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 5)
-    corner.Parent = button
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 5)
+    buttonCorner.Parent = button
 
     button.MouseButton1Click:Connect(function()
-        irAteNPC(npc)
+        if movimentoNPCAtivado then
+            task.spawn(function()
+                irAteNPC(npc)
+            end)
+        end
     end)
 end
 
 local function atualizarListaNPCs()
-
     for _, child in ipairs(npcList:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
@@ -267,18 +391,19 @@ local function atualizarListaNPCs()
     local encontrados = {}
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-
         if obj:IsA("Model") then
-
             local humanoidNPC = obj:FindFirstChildOfClass("Humanoid")
             local root = pegarRoot(obj)
+            local jogador = ehPersonagemDeJogador(obj)
 
-            if humanoidNPC and root and obj ~= character then
+            if humanoidNPC
+                and root
+                and not jogador
+                and obj ~= character
+                and not encontrados[obj] then
 
-                if not encontrados[obj] then
-                    encontrados[obj] = true
-                    criarBotaoNPC(obj)
-                end
+                encontrados[obj] = true
+                criarBotaoNPC(obj)
             end
         end
     end
@@ -303,83 +428,5 @@ layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 atualizarListaNPCs()
-
--- Atualiza botão
-local function atualizarBotao()
-    if voando then
-        flyButton.Text = "Voo: ATIVADO (F)"
-        flyButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
-    else
-        flyButton.Text = "Voo: DESATIVADO (F)"
-        flyButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    end
-end
-
--- Liga/desliga voo
-local function alternarVoo()
-
-    if not character then
-        return
-    end
-
-    if not hrp then
-        return
-    end
-
-    if not linearVelocity then
-        return
-    end
-
-    voando = not voando
-
-    linearVelocity.Enabled = voando
-
-    if not voando then
-        linearVelocity.VectorVelocity = Vector3.zero
-    end
-
-    atualizarBotao()
-end
-
-flyButton.MouseButton1Click:Connect(function()
-    alternarVoo()
-end)
-
--- Tecla F
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-
-    if gameProcessed then
-        return
-    end
-
-    if input.KeyCode == Enum.KeyCode.F then
-        alternarVoo()
-    end
-end)
-
--- Movimento
-RunService.RenderStepped:Connect(function()
-
-    if not voando then
-        return
-    end
-
-    if not linearVelocity then
-        return
-    end
-
-    if not linearVelocity.Parent then
-        return
-    end
-
-    camera = workspace.CurrentCamera
-
-    if not camera then
-        return
-    end
-
-    linearVelocity.VectorVelocity =
-        camera.CFrame.LookVector * velocidadeVoo
-end)
 
 print("IKAROhub carregado com sucesso!")
