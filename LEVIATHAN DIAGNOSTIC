@@ -5,22 +5,35 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
+print("[IKARO DIAG] CARREGADO - aguardando dados de combate")
+
 local function FindNearestPiranha(root)
     local nearest
     local nearestPart
     local nearestDistance = math.huge
 
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and string.find(string.lower(obj.Name), "piranha", 1, true) then
-            local part = obj:FindFirstChild("HumanoidRootPart", true)
-                or obj.PrimaryPart
-                or obj:FindFirstChildWhichIsA("BasePart", true)
-            if part then
-                local distance = (part.Position - root.Position).Magnitude
-                if distance < nearestDistance then
-                    nearest = obj
-                    nearestPart = part
-                    nearestDistance = distance
+    local containers = {
+        workspace:FindFirstChild("Enemies"),
+        workspace:FindFirstChild("SeaBeasts"),
+        workspace
+    }
+
+    for _, container in ipairs(containers) do
+        if container then
+            for _, obj in ipairs(container:GetChildren()) do
+                if obj:IsA("Model")
+                and string.find(string.lower(obj.Name), "piranha", 1, true) then
+                    local part = obj:FindFirstChild("HumanoidRootPart", true)
+                        or obj.PrimaryPart
+                        or obj:FindFirstChildWhichIsA("BasePart", true)
+                    if part then
+                        local distance = (part.Position - root.Position).Magnitude
+                        if distance < nearestDistance then
+                            nearest = obj
+                            nearestPart = part
+                            nearestDistance = distance
+                        end
+                    end
                 end
             end
         end
