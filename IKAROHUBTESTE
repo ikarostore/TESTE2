@@ -20,7 +20,7 @@ local noclipAtivo = false
 local colisoesOriginais = {}
 
 -- Velocidade do voo automático em studs por segundo.
-local velocidadeVooAutomatico = 900
+local velocidadeVooAutomatico = 500
 
 local function atualizarPersonagem(char)
     character = char
