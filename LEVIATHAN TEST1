@@ -2055,7 +2055,7 @@ local function BMFastAttack(target)
     -- BM Fast Attack do script de referência: prepara o controlador interno e
     -- mantém VirtualUser Button1Down; não usa clique solto nem Tool:Activate.
     local controller = GetCombatFrameworkController()
-    if not controller or not BMVirtualUser then
+    if not BMVirtualUser then
         return false
     end
 
@@ -2063,13 +2063,17 @@ local function BMFastAttack(target)
     pcall(function()
         -- Mesmo método do script de referência: mantém o controller pronto e
         -- segura Button1Down continuamente, sem chamar controller:attack().
-        controller.attacking = false
-        controller.blocking = false
-        controller.timeToNextAttack = tick() - 1
-        controller.timeToNextBlock = 0
-        controller.increment = 3
-        controller.hitboxMagnitude = 120
-        controller.equipped = true
+        -- Alguns executores nao expoem activeController. Nesse caso o input
+        -- continua sendo enviado em vez de cancelar completamente o ataque.
+        if controller then
+            controller.attacking = false
+            controller.blocking = false
+            controller.timeToNextAttack = tick() - 1
+            controller.timeToNextBlock = 0
+            controller.increment = 3
+            controller.hitboxMagnitude = 120
+            controller.equipped = true
+        end
 
         local stun = Character and Character:FindFirstChild("Stun")
         if stun then
@@ -2423,7 +2427,11 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
 
         -- Sea Beast é muito alto e recebe dano por skills; manter grande
         -- altitude evita contato com a água sem sair do alcance das skills.
+        local isShipEvent = eventKey == "PirateBrigade"
+            or eventKey == "PirateGrandBrigade"
+            or eventKey == "FishBoat"
         local height = eventKey == "SeaBeast" and 260
+            or isShipEvent and 65
             or eventKey == "Piranha" and 0
             or useBasicClick and 6
             or 48
@@ -2431,7 +2439,8 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         -- o alto. Mantem o jogador ao lado, na mesma altura e sem tocar no mob.
         -- BM Fast Attack distante para os mobs que recebem M1. Dezoito studs
         -- evita contato/empurrao sem ultrapassar demais a validacao do servidor.
-        local sideDistance = useBasicClick and 18
+        local sideDistance = isShipEvent and 85
+            or useBasicClick and 18
             or 0
         local desired = target.Position + Vector3.new(0, height, sideDistance)
         local delta = desired - HRP.Position
