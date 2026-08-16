@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -35,6 +36,7 @@ local Running = false
 local State = "IDLE"
 
 local OwnerPlayer = nil
+local SavedOwnerName = nil
 local AccountBuyBoat = false
 
 local FollowConnection = nil
@@ -226,6 +228,106 @@ local CombatConfig = {
         Hold = {Z = 0.5, X = 0.5, C = 0.5, V = 0.5, F = 0.5}
     }
 }
+
+-- =========================================================
+-- LOCAL CONFIG PERSISTENCE
+-- =========================================================
+
+local CONFIG_FILE = "IKARO_Leviathan_Config_" .. tostring(LocalPlayer.UserId) .. ".json"
+local ConfigPersistenceAvailable =
+    type(writefile) == "function"
+    and type(readfile) == "function"
+    and type(isfile) == "function"
+
+local function CopyKnownValues(target, source)
+    if type(target) ~= "table" or type(source) ~= "table" then return end
+
+    for key, value in pairs(source) do
+        if target[key] ~= nil then
+            if type(target[key]) == "table" and type(value) == "table" then
+                CopyKnownValues(target[key], value)
+            elseif type(value) ~= "table" then
+                target[key] = value
+            end
+        end
+    end
+end
+
+local function BuildSavedConfig()
+    return {
+        Version = 1,
+        AccountBuyBoat = AccountBuyBoat,
+        OwnerName = OwnerPlayer and OwnerPlayer.Name or SavedOwnerName,
+        WaterWalkEnabled = WaterWalkEnabled,
+        AutoEscapeEnabled = AutoEscapeEnabled,
+        AutoPaySpy = SpyState.AutoPay,
+        SeaEventsSelected = SeaEventsSelected,
+        SeaConfig = SeaConfig,
+        BoatHeightY = BoatFlightConfig.HeightY,
+        CombatConfig = CombatConfig
+    }
+end
+
+local function SaveConfig()
+    if not ConfigPersistenceAvailable then return false end
+
+    local ok = pcall(function()
+        writefile(CONFIG_FILE, HttpService:JSONEncode(BuildSavedConfig()))
+    end)
+
+    return ok
+end
+
+local function LoadConfig()
+    if not ConfigPersistenceAvailable or not isfile(CONFIG_FILE) then
+        return false
+    end
+
+    local ok, saved = pcall(function()
+        return HttpService:JSONDecode(readfile(CONFIG_FILE))
+    end)
+
+    if not ok or type(saved) ~= "table" then
+        return false
+    end
+
+    if type(saved.AccountBuyBoat) == "boolean" then
+        AccountBuyBoat = saved.AccountBuyBoat
+    end
+    if type(saved.OwnerName) == "string" and saved.OwnerName ~= "" then
+        SavedOwnerName = saved.OwnerName
+    end
+    if type(saved.WaterWalkEnabled) == "boolean" then
+        WaterWalkEnabled = saved.WaterWalkEnabled
+    end
+    if type(saved.AutoEscapeEnabled) == "boolean" then
+        AutoEscapeEnabled = saved.AutoEscapeEnabled
+    end
+    if type(saved.AutoPaySpy) == "boolean" then
+        SpyState.AutoPay = saved.AutoPaySpy
+    end
+    if type(saved.BoatHeightY) == "number" then
+        BoatFlightConfig.HeightY = math.clamp(saved.BoatHeightY, 20, 120)
+    end
+
+    CopyKnownValues(SeaEventsSelected, saved.SeaEventsSelected)
+    CopyKnownValues(SeaConfig, saved.SeaConfig)
+    CopyKnownValues(CombatConfig, saved.CombatConfig)
+
+    EscapeStartHealthPercent = SeaConfig.PanicHealthPercent / 100
+    EscapeReturnHealthPercent = SeaConfig.ReturnHealthPercent / 100
+
+    if AccountBuyBoat then
+        OwnerPlayer = LocalPlayer
+        SavedOwnerName = LocalPlayer.Name
+    elseif SavedOwnerName then
+        OwnerPlayer = Players:FindFirstChild(SavedOwnerName)
+    end
+
+    return true
+end
+
+local ConfigLoaded = LoadConfig()
 
 -- =========================================================
 -- GUI ROOT
@@ -831,7 +933,11 @@ DropButton.Font = Enum.Font.SourceSans
 DropButton.TextSize = 13
 DropButton.TextXAlignment = Enum.TextXAlignment.Left
 DropButton.TextTruncate = Enum.TextTruncate.AtEnd
-DropButton.Text = "  --"
+DropButton.Text = AccountBuyBoat
+    and ("  " .. LocalPlayer.Name)
+    or SavedOwnerName
+    and ("  " .. SavedOwnerName)
+    or "  --"
 DropButton.ZIndex = 20
 DropButton.Parent = OwnerRow
 
@@ -942,8 +1048,10 @@ local function RefreshDropdown()
 
         b.MouseButton1Click:Connect(function()
             OwnerPlayer = p
+            SavedOwnerName = p.Name
             DropButton.Text = "  " .. p.Name
             CloseDropdown()
+            SaveConfig()
             SetState("OWNER_SELECTED", p.Name)
         end)
     end
@@ -972,29 +1080,49 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+Players.PlayerAdded:Connect(function(player)
+    if not AccountBuyBoat and SavedOwnerName and player.Name == SavedOwnerName then
+        OwnerPlayer = player
+        DropButton.Text = "  " .. player.Name
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if OwnerPlayer == player and not AccountBuyBoat then
+        SavedOwnerName = player.Name
+        OwnerPlayer = nil
+        DropButton.Text = "  " .. SavedOwnerName
+    end
+end)
+
 SimpleButton(HuntPage, "Refresh List Player", function()
     RefreshDropdown()
     SetState("PLAYER_LIST_REFRESHED", "Lista atualizada.")
 end)
 
-ToggleRow(HuntPage, "Account Buy Boat", false, function(v)
+ToggleRow(HuntPage, "Account Buy Boat", AccountBuyBoat, function(v)
     AccountBuyBoat = v
 
     if v then
         OwnerPlayer = LocalPlayer
+        SavedOwnerName = LocalPlayer.Name
         DropButton.Text = "  " .. LocalPlayer.Name
         CloseDropdown()
+        SaveConfig()
         SetState("MAIN_ACCOUNT", "Esta conta será a principal.")
     else
         OwnerPlayer = nil
+        SavedOwnerName = nil
         DropButton.Text = "  --"
         CloseDropdown()
+        SaveConfig()
         SetState("FOLLOWER_ACCOUNT", "Selecione o dono do barco.")
     end
 end)
 
-ToggleRow(HuntPage, "Auto Escape Low HP", true, function(v)
+ToggleRow(HuntPage, "Auto Escape Low HP", AutoEscapeEnabled, function(v)
     AutoEscapeEnabled = v
+    SaveConfig()
 
     if not v and EscapeActive then
         StopEscape()
@@ -1008,8 +1136,9 @@ ToggleRow(HuntPage, "Auto Escape Low HP", true, function(v)
     end
 end)
 
-ToggleRow(HuntPage, "Water Walk", true, function(v)
+ToggleRow(HuntPage, "Water Walk", WaterWalkEnabled, function(v)
     WaterWalkEnabled = v
+    SaveConfig()
     if not v then
         DestroyWaterPlatform()
         SetState("WATER_WALK_OFF", "Water Walk desativado.")
@@ -1019,8 +1148,9 @@ ToggleRow(HuntPage, "Water Walk", true, function(v)
 end)
 
 
-ToggleRow(HuntPage, "Auto Pay / Check Spy", true, function(v)
+ToggleRow(HuntPage, "Auto Pay / Check Spy", SpyState.AutoPay, function(v)
     SpyState.AutoPay = v
+    SaveConfig()
     SetState(v and "AUTO_SPY_ON" or "AUTO_SPY_OFF", v and "Spy será verificado automaticamente." or "Spy automático desativado.")
 end)
 
@@ -1071,22 +1201,26 @@ end
 NumberConfigRow(HuntPage, "Panic Health %", SeaConfig.PanicHealthPercent, 20, 70, "%", function(v)
     SeaConfig.PanicHealthPercent = v
     EscapeStartHealthPercent = v / 100
+    SaveConfig()
     SetState("PANIC_HP_UPDATED", tostring(v) .. "%")
 end)
 
 NumberConfigRow(HuntPage, "Return Health %", SeaConfig.ReturnHealthPercent, 50, 100, "%", function(v)
     SeaConfig.ReturnHealthPercent = v
     EscapeReturnHealthPercent = v / 100
+    SaveConfig()
     SetState("RETURN_HP_UPDATED", tostring(v) .. "%")
 end)
 
 NumberConfigRow(HuntPage, "Boat Speed", SeaConfig.BoatSpeed, 150, 450, "", function(v)
     SeaConfig.BoatSpeed = v
+    SaveConfig()
     SetState("BOAT_SPEED_UPDATED", tostring(v))
 end)
 
 NumberConfigRow(HuntPage, "Boat Flight Y", BoatFlightConfig.HeightY, 20, 120, "", function(v)
     BoatFlightConfig.HeightY = v
+    SaveConfig()
     SetState("BOAT_HEIGHT_UPDATED", "Y=" .. tostring(v))
 end)
 
@@ -1112,6 +1246,7 @@ SeaLevelBox.FocusLost:Connect(function()
     local allowed = {["1"]=true,["2"]=true,["3"]=true,["4"]=true,["5"]=true,["6"]=true,["inf"]=true}
     if allowed[v] then
         SeaConfig.TargetSeaLevel = v
+        SaveConfig()
         SetState("SEA_LEVEL_UPDATED", v)
     else
         SeaLevelBox.Text = SeaConfig.TargetSeaLevel
@@ -1224,6 +1359,7 @@ local function RebuildSeaEventDropdown()
             SeaEventsSelected[key] = not SeaEventsSelected[key]
             refresh()
             UpdateSeaEventButtonText()
+            SaveConfig()
         end)
     end
 
@@ -3027,6 +3163,7 @@ local function CombatTypeRow(text, category)
 
     b.MouseButton1Click:Connect(function()
         CombatConfig.Type = category
+        SaveConfig()
         SetState("COMBAT_CONFIG", category)
     end)
 end
@@ -3059,6 +3196,7 @@ local function SkillHoldRow(category, key)
         local n = tonumber(box.Text)
         if n then
             CombatConfig[category].Hold[key] = n
+            SaveConfig()
         else
             box.Text = tostring(CombatConfig[category].Hold[key])
         end
@@ -3126,7 +3264,21 @@ end)
 
 SectionTitle(HuntPage, "Tab Setup Hunt Leviathan")
 ShowPage("Hunt")
-SetState("IDLE", "Configure Owner / Account Buy Boat.")
+
+if ConfigPersistenceAvailable then
+    SaveConfig()
+    SetState(
+        ConfigLoaded and "CONFIG_RESTORED" or "CONFIG_READY",
+        ConfigLoaded
+            and "Configurações locais restauradas automaticamente."
+            or "Configurações serão salvas automaticamente."
+    )
+else
+    SetState(
+        "CONFIG_UNAVAILABLE",
+        "Executor sem readfile/writefile; configurações não podem ser persistidas."
+    )
+end
 
 print("IKARO Leviathan v2 carregado.")
 
