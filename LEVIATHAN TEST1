@@ -2423,8 +2423,9 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or 48
         -- Piranhas recebem M1, mas o contato por cima empurra o cardume para
         -- o alto. Mantem o jogador ao lado, na mesma altura e sem tocar no mob.
-        local sideDistance = eventKey == "Piranha" and 12
-            or useBasicClick and 5
+        -- BM Fast Attack distante para os mobs que recebem M1. Dezoito studs
+        -- evita contato/empurrao sem ultrapassar demais a validacao do servidor.
+        local sideDistance = useBasicClick and 18
             or 0
         local desired = target.Position + Vector3.new(0, height, sideDistance)
         local delta = desired - HRP.Position
