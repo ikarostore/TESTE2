@@ -88,7 +88,7 @@ local SeaConfig = {
     PanicHealthPercent = 40,
     ReturnHealthPercent = 90,
     TargetSeaLevel = "6",
-    BoatSpeed = 250
+    BoatSpeed = 330
 }
 
 local SeaNPCPositions = {
@@ -111,6 +111,24 @@ local SeaHuntState = {
     AtSea6 = false,
     CurrentEvent = nil,
     EventKills = 0
+}
+
+local BoatFlightConfig = {
+    HeightY = 18,
+    VerticalGain = 5.5,
+    MaxVerticalSpeed = 90,
+    TurnPower = 22000,
+
+    -- Beast Hunter NPC é usado como referência da costa/Tiki.
+    -- O barco segue para fora da ilha, aumentando a distância da origem.
+    SeaOrigin = Vector3.new(
+        SeaNPCPositions.BeastHunter.Position.X,
+        0,
+        SeaNPCPositions.BeastHunter.Position.Z
+    ),
+
+    -- Fallback derivado da posição em que o Beast Hunter apareceu no diagnóstico.
+    SpawnReference = Vector3.new(-16133.8, 0, 434.7)
 }
 
 
@@ -209,7 +227,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v3.0 FOLLOW BEAST HUNTER"
+AppTitle.Text = "IKARO Leviathan v3.1 FLYING BOAT"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -919,9 +937,14 @@ NumberConfigRow(HuntPage, "Return Health %", SeaConfig.ReturnHealthPercent, 50, 
     SetState("RETURN_HP_UPDATED", tostring(v) .. "%")
 end)
 
-NumberConfigRow(HuntPage, "Boat Speed", SeaConfig.BoatSpeed, 100, 300, "", function(v)
+NumberConfigRow(HuntPage, "Boat Speed", SeaConfig.BoatSpeed, 150, 450, "", function(v)
     SeaConfig.BoatSpeed = v
     SetState("BOAT_SPEED_UPDATED", tostring(v))
+end)
+
+NumberConfigRow(HuntPage, "Boat Flight Y", BoatFlightConfig.HeightY, 10, 35, "", function(v)
+    BoatFlightConfig.HeightY = v
+    SetState("BOAT_HEIGHT_UPDATED", "Y=" .. tostring(v))
 end)
 
 local SeaLevelRow = Row(HuntPage, 40)
@@ -2027,10 +2050,113 @@ SimpleButton(HuntPage, "Go to Spy NPC", function()
 end)
 
 -- =========================================================
--- BEAST HUNTER AUTO DRIVE
+-- BEAST HUNTER AUTO DRIVE v2
+--
+-- Não usa mais somente tecla W.
+-- O Beast Hunter é impulsionado fisicamente:
+--   • segue para fora da região do Tiki / direção do mar aberto;
+--   • mantém Y configurável (padrão 18);
+--   • velocidade configurável;
+--   • sem CFrame de teleporte contínuo.
 -- =========================================================
 
-local DriveInputConnection = nil
+local BoatBodyVelocity = nil
+local BoatBodyGyro = nil
+local BoatDrivePart = nil
+local LastSeaDirection = nil
+
+local function GetBoatDrivePart()
+    local boat = GetBeastHunter()
+    if not boat then
+        return nil
+    end
+
+    -- VehicleSeat é preferível porque é uma parte física central
+    -- e já sabemos que pertence ao Beast Hunter.
+    return boat:FindFirstChild("VehicleSeat")
+        or boat.PrimaryPart
+        or boat:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function GetSeaOutwardDirection(boatPart)
+    if not boatPart then
+        return Vector3.new(1, 0, 0)
+    end
+
+    local boatFlat = Vector3.new(
+        boatPart.Position.X,
+        0,
+        boatPart.Position.Z
+    )
+
+    local delta = boatFlat - BoatFlightConfig.SeaOrigin
+
+    -- Se ainda estiver quase em cima da origem, usa a direção
+    -- Tiki -> ponto onde o Beast Hunter normalmente nasce.
+    if delta.Magnitude < 80 then
+        delta = BoatFlightConfig.SpawnReference - BoatFlightConfig.SeaOrigin
+    end
+
+    if delta.Magnitude < 1 then
+        return LastSeaDirection or Vector3.new(1, 0, 0)
+    end
+
+    local direction = delta.Unit
+    LastSeaDirection = direction
+    return direction
+end
+
+local function DestroyBoatFlightPhysics()
+    if BoatBodyVelocity then
+        pcall(function()
+            BoatBodyVelocity:Destroy()
+        end)
+        BoatBodyVelocity = nil
+    end
+
+    if BoatBodyGyro then
+        pcall(function()
+            BoatBodyGyro:Destroy()
+        end)
+        BoatBodyGyro = nil
+    end
+
+    BoatDrivePart = nil
+end
+
+local function EnsureBoatFlightPhysics()
+    local drivePart = GetBoatDrivePart()
+    if not drivePart then
+        DestroyBoatFlightPhysics()
+        return nil
+    end
+
+    if BoatDrivePart ~= drivePart then
+        DestroyBoatFlightPhysics()
+        BoatDrivePart = drivePart
+    end
+
+    if not BoatBodyVelocity or not BoatBodyVelocity.Parent then
+        BoatBodyVelocity = Instance.new("BodyVelocity")
+        BoatBodyVelocity.Name = "IKARO_BeastHunterFlightVelocity"
+        BoatBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        BoatBodyVelocity.P = 18000
+        BoatBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        BoatBodyVelocity.Parent = drivePart
+    end
+
+    if not BoatBodyGyro or not BoatBodyGyro.Parent then
+        BoatBodyGyro = Instance.new("BodyGyro")
+        BoatBodyGyro.Name = "IKARO_BeastHunterFlightGyro"
+        BoatBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        BoatBodyGyro.P = BoatFlightConfig.TurnPower
+        BoatBodyGyro.D = 1400
+        BoatBodyGyro.CFrame = drivePart.CFrame
+        BoatBodyGyro.Parent = drivePart
+    end
+
+    return drivePart
+end
 
 local function DetectSeaLevel6FromGui()
     for _, item in ipairs(GetVisibleGuiTexts()) do
@@ -2038,7 +2164,10 @@ local function DetectSeaLevel6FromGui()
 
         if string.find(l, "danger level 6", 1, true)
         or string.find(l, "sea danger level 6", 1, true)
-        or string.find(l, "level 6", 1, true) and string.find(l, "sea", 1, true) then
+        or (
+            string.find(l, "level 6", 1, true)
+            and string.find(l, "sea", 1, true)
+        ) then
             SeaHuntState.AtSea6 = true
             return true
         end
@@ -2049,11 +2178,7 @@ end
 
 local function StopBoatDrive()
     SeaHuntState.Driving = false
-
-    if DriveInputConnection then
-        DriveInputConnection:Disconnect()
-        DriveInputConnection = nil
-    end
+    DestroyBoatFlightPhysics()
 
     if SeaVIM then
         pcall(function()
@@ -2068,30 +2193,68 @@ local function StartBoatDrive()
     end
 
     local seat = GetBeastHunterMainSeat()
+
     if not seat or not Humanoid or Humanoid.SeatPart ~= seat then
+        SetState("BOAT_DRIVE_WAIT", "A conta principal ainda não está no VehicleSeat.")
         return
     end
 
     SeaHuntState.Driving = true
-    SetState("BOAT_DRIVING", "Mantendo o Beast Hunter em movimento para frente.")
+
+    SetState(
+        "BOAT_FLYING_TO_SEA6",
+        "Velocidade " .. tostring(SeaConfig.BoatSpeed)
+        .. " | Altura Y=" .. tostring(BoatFlightConfig.HeightY)
+    )
 
     task.spawn(function()
         while Running and SeaHuntState.Driving do
             local currentSeat = GetBeastHunterMainSeat()
 
-            if not currentSeat or Humanoid.SeatPart ~= currentSeat then
+            if not currentSeat
+            or not Humanoid
+            or Humanoid.SeatPart ~= currentSeat then
                 break
             end
 
-            DetectSeaLevel6FromGui()
-
-            if SeaVIM then
-                pcall(function()
-                    SeaVIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
-                end)
+            local drivePart = EnsureBoatFlightPhysics()
+            if not drivePart then
+                break
             end
 
-            task.wait(0.1)
+            local seaDirection = GetSeaOutwardDirection(drivePart)
+
+            -- Mantém o barco na altura desejada.
+            local heightError =
+                BoatFlightConfig.HeightY - drivePart.Position.Y
+
+            local verticalVelocity = math.clamp(
+                heightError * BoatFlightConfig.VerticalGain,
+                -BoatFlightConfig.MaxVerticalSpeed,
+                BoatFlightConfig.MaxVerticalSpeed
+            )
+
+            BoatBodyVelocity.Velocity =
+                seaDirection * SeaConfig.BoatSpeed
+                + Vector3.new(0, verticalVelocity, 0)
+
+            -- Mantém o casco nivelado, olhando para o mar aberto.
+            BoatBodyGyro.CFrame = CFrame.lookAt(
+                drivePart.Position,
+                drivePart.Position + seaDirection,
+                Vector3.new(0, 1, 0)
+            )
+
+            local at6 = DetectSeaLevel6FromGui()
+
+            if at6 and State == "BOAT_FLYING_TO_SEA6" then
+                SetState(
+                    "SEA6_REACHED",
+                    "Sea 6 detectado. Mantendo navegação para spawn/eventos."
+                )
+            end
+
+            task.wait()
         end
 
         StopBoatDrive()
