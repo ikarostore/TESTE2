@@ -2170,6 +2170,10 @@ end
 -- SEA EVENT COMBAT
 -- =========================================================
 
+-- Implementada mais abaixo, depois das rotinas do Beast Hunter. A declaração
+-- antecipada garante que o combate use a função local correta em Luau.
+local FlyToPart
+
 local function GetModelTargetPart(model)
     if not model then return nil end
 
@@ -2205,6 +2209,51 @@ local function IsEventAlive(model)
     return model.Parent ~= nil
 end
 
+local function ForceExitBoatForCombat()
+    if not Humanoid or not Character or not HRP then return false end
+
+    local previousSeat = Humanoid.SeatPart
+
+    for _ = 1, 8 do
+        pcall(function()
+            Humanoid.Sit = false
+            Humanoid.PlatformStand = false
+            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end)
+
+        -- VehicleSeat pode manter um weld mesmo depois de Sit=false. Remove
+        -- somente welds ligados ao nosso personagem para liberar a conta.
+        if previousSeat and previousSeat.Parent then
+            for _, obj in ipairs(previousSeat:GetDescendants()) do
+                if obj:IsA("Weld") or obj:IsA("WeldConstraint") then
+                    local connectedToCharacter = false
+                    pcall(function()
+                        connectedToCharacter =
+                            (obj.Part0 and obj.Part0:IsDescendantOf(Character))
+                            or (obj.Part1 and obj.Part1:IsDescendantOf(Character))
+                    end)
+
+                    if connectedToCharacter
+                    or string.find(string.lower(obj.Name), "seatweld", 1, true) then
+                        pcall(function() obj:Destroy() end)
+                    end
+                end
+            end
+        end
+
+        if not Humanoid.SeatPart and not Humanoid.Sit then break end
+        task.wait(0.08)
+    end
+
+    pcall(function()
+        HRP.AssemblyLinearVelocity = Vector3.new(0, 45, 0)
+        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
+
+    task.wait(0.12)
+    return not Humanoid.SeatPart
+end
+
 local function CombatSelectedSeaEvent(eventKey, eventModel)
     if not eventModel then return end
 
@@ -2224,11 +2273,9 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         SeaEventDisplayName(eventKey)
     )
 
-    -- sai do assento se necessário
-    if Humanoid and Humanoid.Sit then
-        Humanoid.Sit = false
-        task.wait(0.2)
-    end
+    -- Sea Event selecionado tem prioridade total sobre barco/follow.
+    StopFollow()
+    ForceExitBoatForCombat()
 
     local combatMarker = Instance.new("Part")
     combatMarker.Name = "IKARO_SeaEventCombatTarget"
@@ -2337,7 +2384,7 @@ local function BuyBeastHunter()
     return false, "A chamada ocorreu, mas o barco não apareceu."
 end
 
-local function FlyToPart(part, stopDistance, ignoreRunning)
+FlyToPart = function(part, stopDistance, ignoreRunning)
     if not part or not HRP or not Humanoid then
         return false
     end
@@ -2993,41 +3040,53 @@ local function StartHunt()
 
     HuntThread = task.spawn(function()
         while Running do
-            local levi = FindLeviathan()
+            -- Só eventos marcados entram aqui. Eventos desmarcados são
+            -- ignorados e não interrompem barco/follow.
+            local eventKey, eventModel = FindSelectedSeaEvent()
 
-            if levi then
-                StopFollow()
-                SetState("LEVIATHAN_FOUND", levi:GetFullName())
-            else
-                local eventKey, eventModel = FindSelectedSeaEvent()
+            if eventModel then
+                if not SeaHuntState.CurrentEvent then
+                    -- Reserva imediatamente o estado para impedir duas tasks
+                    -- de combate contra o mesmo evento.
+                    SeaHuntState.CurrentEvent = eventModel
+                    StopBoatDrive()
+                    StopFollow()
 
-                if eventModel then
                     SetState(
-                        "SEA_EVENT_FOUND",
+                        "SEA_EVENT_PRIORITY",
                         SeaEventDisplayName(eventKey) .. " • " .. eventModel:GetFullName()
                     )
 
-                    if not SeaHuntState.CurrentEvent then
-                        task.spawn(function()
-                            StopBoatDrive()
+                    task.spawn(function()
+                        local okCombat, combatError = pcall(function()
                             CombatSelectedSeaEvent(eventKey, eventModel)
-
-                            -- depois de eventos, tenta atualizar o status do Spy.
-                            if SpyState.AutoPay and not SpyState.Ready then
-                                RefreshSpyStatusFromGui()
-                            end
-
-                            -- conta principal retorna ao assento e segue caçada.
-                            if Running and AccountBuyBoat then
-                                local okSeat = GoToBeastHunterSeat()
-                                if okSeat then
-                                    StartBoatDrive()
-                                end
-                            elseif Running and OwnerPlayer then
-                                StartFollowBeastHunter()
-                            end
                         end)
-                    end
+
+                        if not okCombat then
+                            SeaHuntState.CurrentEvent = nil
+                            SetState("SEA_EVENT_COMBAT_ERROR", tostring(combatError))
+                        end
+
+                        -- depois de eventos, tenta atualizar o status do Spy.
+                        if SpyState.AutoPay and not SpyState.Ready then
+                            RefreshSpyStatusFromGui()
+                        end
+
+                        -- conta principal retorna ao assento e segue caçada.
+                        if Running and AccountBuyBoat then
+                            local okSeat = GoToBeastHunterSeat()
+                            if okSeat then StartBoatDrive() end
+                        elseif Running and OwnerPlayer then
+                            StartFollowBeastHunter()
+                        end
+                    end)
+                end
+            else
+                local levi = FindLeviathan()
+
+                if levi then
+                    StopFollow()
+                    SetState("LEVIATHAN_FOUND", levi:GetFullName())
                 elseif not AccountBuyBoat and OwnerPlayer then
                     SetState("FOLLOW_BEAST_HUNTER", "Acompanhando o Beast Hunter de " .. OwnerPlayer.Name)
                 elseif AccountBuyBoat then
@@ -3038,7 +3097,7 @@ local function StartHunt()
                 end
             end
 
-            task.wait(1)
+            task.wait(0.25)
         end
     end)
 end
