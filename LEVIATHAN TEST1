@@ -97,6 +97,23 @@ local SeaNPCPositions = {
     Spy = CFrame.new(-16471, 528, 539)
 }
 
+local SpyState = {
+    Ready = false,
+    LastText = "Não verificado",
+    AutoPay = true,
+    CheckInterval = 8,
+    LastCheck = 0
+}
+
+local SeaHuntState = {
+    AutoDrive = true,
+    Driving = false,
+    AtSea6 = false,
+    CurrentEvent = nil,
+    EventKills = 0
+}
+
+
 -- =========================================================
 -- SURVIVAL / LOW HP ESCAPE
 -- =========================================================
@@ -192,7 +209,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v2.8 SEA CONFIG"
+AppTitle.Text = "IKARO Leviathan v2.9 SPY + SEA HUNT"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -470,6 +487,171 @@ local function SetState(state, message)
     print("[IKARO Leviathan]", state, message or "")
 end
 
+
+local SpyStatusRow = Row(HuntPage, 48)
+local SpyStatusLabel = Instance.new("TextLabel")
+SpyStatusLabel.Size = UDim2.new(1, -20, 1, 0)
+SpyStatusLabel.Position = UDim2.new(0, 10, 0, 0)
+SpyStatusLabel.BackgroundTransparency = 1
+SpyStatusLabel.TextColor3 = Color3.fromRGB(215, 215, 215)
+SpyStatusLabel.Font = Enum.Font.SourceSans
+SpyStatusLabel.TextSize = 12
+SpyStatusLabel.TextWrapped = true
+SpyStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+SpyStatusLabel.Text = "Status SPY: NÃO VERIFICADO"
+SpyStatusLabel.Parent = SpyStatusRow
+
+local function SetSpyStatus(ready, textValue)
+    SpyState.Ready = ready == true
+    SpyState.LastText = tostring(textValue or "")
+
+    if SpyState.Ready then
+        SpyStatusLabel.Text = "Status SPY: PRONTO / PAGO\n" .. SpyState.LastText
+    else
+        SpyStatusLabel.Text = "Status SPY: NÃO PRONTO\n" .. SpyState.LastText
+    end
+end
+
+-- =========================================================
+-- SPY STATUS / DIALOGUE DETECTOR
+-- =========================================================
+
+local function GetVisibleGuiTexts()
+    local results = {}
+
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+            local visible = true
+            pcall(function()
+                visible = obj.Visible
+            end)
+
+            local txt = ""
+            pcall(function()
+                txt = obj.Text
+            end)
+
+            if visible and txt and txt ~= "" then
+                table.insert(results, {
+                    Object = obj,
+                    Text = tostring(txt)
+                })
+            end
+        end
+    end
+
+    return results
+end
+
+local function RefreshSpyStatusFromGui()
+    local texts = GetVisibleGuiTexts()
+
+    for _, item in ipairs(texts) do
+        local lowerText = string.lower(item.Text)
+
+        -- Texto observado no hub pago para estado pronto.
+        if string.find(lowerText, "you can find leviathan now", 1, true)
+        or string.find(lowerText, "find leviathan now", 1, true)
+        or string.find(lowerText, "leviathan can be found", 1, true) then
+            SetSpyStatus(true, item.Text)
+            return true
+        end
+
+        -- Estados que indicam que ainda falta progresso/pagamento.
+        if string.find(lowerText, "leviathan", 1, true)
+        and (
+            string.find(lowerText, "not", 1, true)
+            or string.find(lowerText, "need", 1, true)
+            or string.find(lowerText, "more", 1, true)
+            or string.find(lowerText, "bribe", 1, true)
+            or string.find(lowerText, "pay", 1, true)
+        ) then
+            SetSpyStatus(false, item.Text)
+        end
+    end
+
+    return SpyState.Ready
+end
+
+local function FindNearestInteraction(position, radius)
+    radius = radius or 60
+
+    local bestPrompt = nil
+    local bestClick = nil
+    local bestDistPrompt = math.huge
+    local bestDistClick = math.huge
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            local parentPart = obj.Parent
+            if parentPart and parentPart:IsA("BasePart") then
+                local d = (parentPart.Position - position).Magnitude
+                if d < radius and d < bestDistPrompt then
+                    bestDistPrompt = d
+                    bestPrompt = obj
+                end
+            end
+        elseif obj:IsA("ClickDetector") then
+            local parentPart = obj.Parent
+            if parentPart and parentPart:IsA("BasePart") then
+                local d = (parentPart.Position - position).Magnitude
+                if d < radius and d < bestDistClick then
+                    bestDistClick = d
+                    bestClick = obj
+                end
+            end
+        end
+    end
+
+    return bestPrompt, bestClick
+end
+
+local function TryInteractSpy()
+    local spyPos = SeaNPCPositions.Spy.Position
+    local prompt, clickDetector = FindNearestInteraction(spyPos, 80)
+    local interacted = false
+
+    if prompt and type(fireproximityprompt) == "function" then
+        interacted = pcall(function()
+            fireproximityprompt(prompt)
+        end)
+    end
+
+    if not interacted and clickDetector and type(fireclickdetector) == "function" then
+        interacted = pcall(function()
+            fireclickdetector(clickDetector)
+        end)
+    end
+
+    task.wait(0.8)
+    RefreshSpyStatusFromGui()
+
+    -- Tenta opções de diálogo relacionadas a pagamento/informação.
+    for _, item in ipairs(GetVisibleGuiTexts()) do
+        if item.Object:IsA("TextButton") then
+            local l = string.lower(item.Text)
+
+            if string.find(l, "bribe", 1, true)
+            or string.find(l, "pay", 1, true)
+            or string.find(l, "leviathan", 1, true)
+            or string.find(l, "clue", 1, true)
+            or string.find(l, "information", 1, true) then
+                pcall(function()
+                    item.Object:Activate()
+                end)
+                task.wait(0.4)
+                RefreshSpyStatusFromGui()
+
+                if SpyState.Ready then
+                    break
+                end
+            end
+        end
+    end
+
+    return interacted
+end
+
 -- =========================================================
 -- DROPDOWN OWNER PLAYER
 -- Dropdown em overlay para não ser cortado pelo ScrollingFrame.
@@ -672,6 +854,21 @@ ToggleRow(HuntPage, "Water Walk", true, function(v)
         SetState("WATER_WALK_OFF", "Water Walk desativado.")
     else
         SetState("WATER_WALK_ON", "Plataforma invisível em Y=0 ativada.")
+    end
+end)
+
+
+ToggleRow(HuntPage, "Auto Pay / Check Spy", true, function(v)
+    SpyState.AutoPay = v
+    SetState(v and "AUTO_SPY_ON" or "AUTO_SPY_OFF", v and "Spy será verificado automaticamente." or "Spy automático desativado.")
+end)
+
+SimpleButton(HuntPage, "Check Status Spy", function()
+    RefreshSpyStatusFromGui()
+    if not SpyState.Ready then
+        SetState("SPY_CHECK", "Status ainda não confirmado como pronto.")
+    else
+        SetState("SPY_READY", SpyState.LastText)
     end
 end)
 
@@ -1286,6 +1483,34 @@ end)
 
 
 -- =========================================================
+-- SEA COMBAT INPUT HELPERS
+-- =========================================================
+
+local SeaVIM = nil
+pcall(function()
+    SeaVIM = game:GetService("VirtualInputManager")
+end)
+
+local function EquipSeaCombatType(category)
+    if not Humanoid then return nil end
+
+    local wanted = category == "Fruit" and "Blox Fruit" or category
+
+    for _, container in ipairs({LocalPlayer.Backpack, Character}) do
+        if container then
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tostring(tool.ToolTip) == wanted then
+                    pcall(function() Humanoid:EquipTool(tool) end)
+                    return tool
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+-- =========================================================
 -- SEA EVENT DETECTOR
 -- =========================================================
 
@@ -1335,6 +1560,108 @@ local function FindSelectedSeaEvent()
     end
 
     return nil, nil
+end
+
+-- =========================================================
+-- SEA EVENT COMBAT
+-- =========================================================
+
+local function GetModelTargetPart(model)
+    if not model then return nil end
+
+    if model:IsA("BasePart") then
+        return model
+    end
+
+    return model:FindFirstChild("HumanoidRootPart")
+        or model.PrimaryPart
+        or model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function IsEventAlive(model)
+    if not model or not model.Parent then return false end
+
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then
+        return hum.Health > 0
+    end
+
+    return model.Parent ~= nil
+end
+
+local function CombatSelectedSeaEvent(eventKey, eventModel)
+    if not eventModel then return end
+
+    SeaHuntState.CurrentEvent = eventModel
+    StopFollow()
+
+    local target = GetModelTargetPart(eventModel)
+    if not target then
+        SeaHuntState.CurrentEvent = nil
+        return
+    end
+
+    SetState("SEA_EVENT_COMBAT", SeaEventDisplayName(eventKey))
+
+    -- sai do assento se necessário
+    if Humanoid and Humanoid.Sit then
+        Humanoid.Sit = false
+        task.wait(0.2)
+    end
+
+    local combatMarker = Instance.new("Part")
+    combatMarker.Name = "IKARO_SeaEventCombatTarget"
+    combatMarker.Anchored = true
+    combatMarker.CanCollide = false
+    combatMarker.Transparency = 1
+    combatMarker.Parent = workspace
+
+    local started = os.clock()
+
+    while Running and IsEventAlive(eventModel) and os.clock() - started < 90 do
+        target = GetModelTargetPart(eventModel)
+        if not target then break end
+
+        -- posição segura acima do evento
+        combatMarker.CFrame = target.CFrame * CFrame.new(0, 55, 0)
+
+        FlyToPart(combatMarker, 18)
+        EquipSeaCombatType(CombatConfig.Type)
+
+        -- usa a rotação configurada
+        local cfg = CombatConfig[CombatConfig.Type]
+        local order = CombatConfig.Type == "Fruit"
+            and {"Z","X","C","V","F"}
+            or CombatConfig.Type == "Melee"
+            and {"Z","X","C"}
+            or {"Z","X"}
+
+        if SeaVIM and cfg then
+            for _, keyName in ipairs(order) do
+                if cfg.Selected[keyName] then
+                    local key = Enum.KeyCode[keyName]
+                    if key then
+                        pcall(function()
+                            SeaVIM:SendKeyEvent(true, key, false, game)
+                            task.wait(cfg.Hold[keyName] or 0.5)
+                            SeaVIM:SendKeyEvent(false, key, false, game)
+                        end)
+                    end
+                end
+            end
+        end
+
+        task.wait(0.15)
+    end
+
+    pcall(function() combatMarker:Destroy() end)
+
+    if not IsEventAlive(eventModel) then
+        SeaHuntState.EventKills = SeaHuntState.EventKills + 1
+        SetState("SEA_EVENT_DEFEATED", SeaEventDisplayName(eventKey) .. " | Total: " .. tostring(SeaHuntState.EventKills))
+    end
+
+    SeaHuntState.CurrentEvent = nil
 end
 
 -- =========================================================
@@ -1620,6 +1947,78 @@ SimpleButton(HuntPage, "Go to Spy NPC", function()
 end)
 
 -- =========================================================
+-- BEAST HUNTER AUTO DRIVE
+-- =========================================================
+
+local DriveInputConnection = nil
+
+local function DetectSeaLevel6FromGui()
+    for _, item in ipairs(GetVisibleGuiTexts()) do
+        local l = string.lower(item.Text)
+
+        if string.find(l, "danger level 6", 1, true)
+        or string.find(l, "sea danger level 6", 1, true)
+        or string.find(l, "level 6", 1, true) and string.find(l, "sea", 1, true) then
+            SeaHuntState.AtSea6 = true
+            return true
+        end
+    end
+
+    return SeaHuntState.AtSea6
+end
+
+local function StopBoatDrive()
+    SeaHuntState.Driving = false
+
+    if DriveInputConnection then
+        DriveInputConnection:Disconnect()
+        DriveInputConnection = nil
+    end
+
+    if SeaVIM then
+        pcall(function()
+            SeaVIM:SendKeyEvent(false, Enum.KeyCode.W, false, game)
+        end)
+    end
+end
+
+local function StartBoatDrive()
+    if not SeaHuntState.AutoDrive or SeaHuntState.Driving then
+        return
+    end
+
+    local seat = GetBeastHunterMainSeat()
+    if not seat or not Humanoid or Humanoid.SeatPart ~= seat then
+        return
+    end
+
+    SeaHuntState.Driving = true
+    SetState("BOAT_DRIVING", "Mantendo o Beast Hunter em movimento para frente.")
+
+    task.spawn(function()
+        while Running and SeaHuntState.Driving do
+            local currentSeat = GetBeastHunterMainSeat()
+
+            if not currentSeat or Humanoid.SeatPart ~= currentSeat then
+                break
+            end
+
+            DetectSeaLevel6FromGui()
+
+            if SeaVIM then
+                pcall(function()
+                    SeaVIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+                end)
+            end
+
+            task.wait(0.1)
+        end
+
+        StopBoatDrive()
+    end)
+end
+
+-- =========================================================
 -- START HUNT
 -- =========================================================
 
@@ -1659,6 +2058,8 @@ local function StartHunt()
             local okSeat, seatOrErr = GoToBeastHunterSeat()
             if okSeat then
                 SetState("BOAT_SEATED", "Conta principal sentada no VehicleSeat.")
+                task.wait(0.5)
+                StartBoatDrive()
             else
                 SetState("BOAT_SEAT_ERROR", tostring(seatOrErr))
             end
@@ -1683,6 +2084,28 @@ local function StartHunt()
                         "SEA_EVENT_FOUND",
                         SeaEventDisplayName(eventKey) .. " • " .. eventModel:GetFullName()
                     )
+
+                    if not SeaHuntState.CurrentEvent then
+                        task.spawn(function()
+                            StopBoatDrive()
+                            CombatSelectedSeaEvent(eventKey, eventModel)
+
+                            -- depois de eventos, tenta atualizar o status do Spy.
+                            if SpyState.AutoPay and not SpyState.Ready then
+                                RefreshSpyStatusFromGui()
+                            end
+
+                            -- conta principal retorna ao assento e segue caçada.
+                            if Running and AccountBuyBoat then
+                                local okSeat = GoToBeastHunterSeat()
+                                if okSeat then
+                                    StartBoatDrive()
+                                end
+                            elseif Running and OwnerPlayer then
+                                StartFollowOwner()
+                            end
+                        end)
+                    end
                 elseif not AccountBuyBoat and OwnerPlayer then
                     SetState("FOLLOW_OWNER", "Acompanhando " .. OwnerPlayer.Name)
                 elseif AccountBuyBoat then
@@ -1820,6 +2243,28 @@ end
 for _, key in ipairs({"Z","X","C","V","F"}) do
     SkillHoldRow("Fruit", key)
 end
+
+-- =========================================================
+-- AUTO SPY CHECK LOOP
+-- =========================================================
+
+task.spawn(function()
+    while Gui and Gui.Parent do
+        if Running and SpyState.AutoPay and not SpyState.Ready then
+            if os.clock() - SpyState.LastCheck >= SpyState.CheckInterval then
+                SpyState.LastCheck = os.clock()
+                RefreshSpyStatusFromGui()
+
+                -- Só tenta interação automática quando a conta está perto do Spy.
+                if HRP and (HRP.Position - SeaNPCPositions.Spy.Position).Magnitude <= 120 then
+                    TryInteractSpy()
+                end
+            end
+        end
+
+        task.wait(1)
+    end
+end)
 
 -- =========================================================
 -- INIT
