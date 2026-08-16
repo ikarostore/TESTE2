@@ -65,7 +65,14 @@ local function SetupCharacter(char)
     HRP = char:WaitForChild("HumanoidRootPart", 15)
 end
 
-SetupCharacter(LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait())
+-- Na tela de seleção de time ainda pode não existir Character. Não bloquear
+-- toda a inicialização aqui: a interface deve abrir e CharacterAdded conclui
+-- a configuração assim que Marines for selecionado pelo jogo/script.
+if LocalPlayer.Character then
+    task.spawn(function()
+        SetupCharacter(LocalPlayer.Character)
+    end)
+end
 
 LocalPlayer.CharacterAdded:Connect(function(char)
     task.spawn(function()
@@ -3773,4 +3780,5 @@ else
 end
 
 print("IKARO Leviathan v2 carregado.")
+
 
