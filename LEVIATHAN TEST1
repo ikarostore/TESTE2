@@ -2352,16 +2352,6 @@ local function EnsureSeaCombatHaki()
     end)
 end
 
--- Mantém o Armament/Buso Haki ligado mesmo após morte, respawn ou troca de
--- etapa. O marcador HasBuso impede chamadas remotas quando ele já está ativo.
-task.spawn(function()
-    while task.wait(2) do
-        if Character and Humanoid and Humanoid.Health > 0 then
-            EnsureSeaCombatHaki()
-        end
-    end
-end)
-
 local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     if not HRP or not Humanoid then return nil end
 
@@ -2496,6 +2486,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     end
 
     local started = os.clock()
+    local nextHakiCheck = 0
     local okCombat, combatError = pcall(function()
         while Running
         and SeaHuntState.CurrentEvent == eventModel
@@ -2503,6 +2494,12 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         and os.clock() - started < 180 do
             target = GetModelTargetPart(eventModel)
             if not target then break end
+
+            local now = os.clock()
+            if now >= nextHakiCheck then
+                nextHakiCheck = now + 2
+                EnsureSeaCombatHaki()
+            end
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
             local attackRange = eventKey == "SeaBeast" and 340
