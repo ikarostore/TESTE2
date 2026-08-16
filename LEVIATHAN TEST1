@@ -135,6 +135,26 @@ local BoatFlightConfig = {
     SpawnReference = Vector3.new(-16133.8, 0, 434.7)
 }
 
+local Sea6Route = {
+    -- Correção baseada no teste do usuário:
+    -- o Sea 6 fica na PARTE TRASEIRA da Tiki.
+    -- Em vez de usar "para fora do spawn do barco", calculamos o lado oposto
+    -- da ilha em relação ao ponto de spawn do Beast Hunter.
+
+    -- referência aproximada do centro da Tiki usando os NPCs marítimos
+    TikiCenter = Vector3.new(
+        (SeaNPCPositions.BeastHunter.Position.X + SeaNPCPositions.SharkHunter.Position.X) / 2,
+        0,
+        (SeaNPCPositions.BeastHunter.Position.Z + SeaNPCPositions.SharkHunter.Position.Z) / 2
+    ),
+
+    -- ponto de spawn físico do Beast Hunter que mapeamos
+    BeastHunterSpawn = Vector3.new(-16133.8, 0, 434.7),
+
+    -- distância virtual para trás da ilha
+    RearDistance = 12000
+}
+
 
 -- =========================================================
 -- SURVIVAL / LOW HP ESCAPE
@@ -231,7 +251,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v3.3 DRIVE FIX"
+AppTitle.Text = "IKARO Leviathan v3.5 CONTROL FIX"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -2007,7 +2027,7 @@ local function BuyBeastHunter()
     return false, "A chamada ocorreu, mas o barco não apareceu."
 end
 
-local function FlyToPart(part, stopDistance)
+local function FlyToPart(part, stopDistance, ignoreRunning)
     if not part or not HRP or not Humanoid then
         return false
     end
@@ -2060,7 +2080,7 @@ local function FlyToPart(part, stopDistance)
     local deadline = os.clock() + 30
     local nextNoclipRefresh = 0
 
-    while Running and part and part.Parent and HRP and HRP.Parent and os.clock() < deadline do
+    while (ignoreRunning or Running) and part and part.Parent and HRP and HRP.Parent and os.clock() < deadline do
         local now = os.clock()
 
         if now >= nextNoclipRefresh then
@@ -2163,11 +2183,6 @@ end
 
 -- Atalhos para NPCs marítimos com posições salvas.
 SimpleButton(HuntPage, "Go to Beast Hunter NPC", function()
-    if not Running then
-        SetState("INFO", "Ative Start Hunt para usar voo automático.")
-        return
-    end
-
     task.spawn(function()
         local marker = Instance.new("Part")
         marker.Name = "IKARO_BeastHunterNPC_Target"
@@ -2178,17 +2193,12 @@ SimpleButton(HuntPage, "Go to Beast Hunter NPC", function()
         marker.Parent = workspace
 
         SetState("GOING_BEAST_HUNTER_NPC", "Voando até o Beast Hunter.")
-        FlyToPart(marker, 8)
+        FlyToPart(marker, 8, true)
         marker:Destroy()
     end)
 end)
 
 SimpleButton(HuntPage, "Go to Shark Hunter NPC", function()
-    if not Running then
-        SetState("INFO", "Ative Start Hunt para usar voo automático.")
-        return
-    end
-
     task.spawn(function()
         local marker = Instance.new("Part")
         marker.Name = "IKARO_SharkHunterNPC_Target"
@@ -2199,17 +2209,12 @@ SimpleButton(HuntPage, "Go to Shark Hunter NPC", function()
         marker.Parent = workspace
 
         SetState("GOING_SHARK_HUNTER_NPC", "Voando até o Shark Hunter.")
-        FlyToPart(marker, 8)
+        FlyToPart(marker, 8, true)
         marker:Destroy()
     end)
 end)
 
 SimpleButton(HuntPage, "Go to Spy NPC", function()
-    if not Running then
-        SetState("INFO", "Ative Start Hunt para usar voo automático.")
-        return
-    end
-
     task.spawn(function()
         local marker = Instance.new("Part")
         marker.Name = "IKARO_SpyNPC_Target"
@@ -2220,76 +2225,48 @@ SimpleButton(HuntPage, "Go to Spy NPC", function()
         marker.Parent = workspace
 
         SetState("GOING_SPY_NPC", "Voando até o Spy.")
-        FlyToPart(marker, 8)
+        FlyToPart(marker, 8, true)
         marker:Destroy()
     end)
 end)
 
 -- =========================================================
--- BEAST HUNTER AUTO DRIVE v3
+-- BEAST HUNTER AUTO DRIVE v4
 --
--- Correções:
--- 1) usa AssemblyRootPart do VehicleSeat quando disponível;
--- 2) não depende somente de Humanoid.SeatPart para começar;
--- 3) aplica BodyVelocity + AssemblyLinearVelocity;
--- 4) desativa colisão de TODAS as partes do Beast Hunter durante a caça;
--- 5) mantém o barco em Y configurável (padrão 70);
--- 6) direção de mar aberto é fixada no início para não ficar curvando.
+-- Controle reforçado:
+-- * LinearVelocity no AssemblyRootPart do barco
+-- * AlignOrientation para apontar para a traseira da Tiki
+-- * Throttle/W continuam ativos como fallback aceito pelo servidor
+-- * noclip em todo o Beast Hunter
+-- * Y alvo = 70
 -- =========================================================
 
-local BoatBodyVelocity = nil
-local BoatBodyGyro = nil
+local BoatLinearVelocity = nil
+local BoatAlignOrientation = nil
+local BoatAttachment = nil
 local BoatDrivePart = nil
 local BoatCollisionCache = {}
 local FixedSeaDirection = nil
 
 local function GetBoatDrivePart()
     local boat = GetBeastHunter()
-    if not boat then
-        return nil
-    end
+    if not boat then return nil end
 
     local seat = boat:FindFirstChild("VehicleSeat")
-
     if seat then
         local root = nil
         pcall(function()
             root = seat.AssemblyRootPart
         end)
-
-        if root then
-            return root
-        end
-
-        return seat
+        return root or seat
     end
 
-    if boat.PrimaryPart then
-        return boat.PrimaryPart
-    end
-
-    -- fallback: maior BasePart do barco
-    local bestPart = nil
-    local bestVolume = -1
-
-    for _, obj in ipairs(boat:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local volume = obj.Size.X * obj.Size.Y * obj.Size.Z
-            if volume > bestVolume then
-                bestVolume = volume
-                bestPart = obj
-            end
-        end
-    end
-
-    return bestPart
+    return boat.PrimaryPart or boat:FindFirstChildWhichIsA("BasePart", true)
 end
 
 local function ApplyBoatNoclip()
     local boat = GetBeastHunter()
-    if not boat then
-        return
-    end
+    if not boat then return end
 
     for _, obj in ipairs(boat:GetDescendants()) do
         if obj:IsA("BasePart") then
@@ -2309,7 +2286,6 @@ local function RestoreBoatCollision()
             end)
         end
     end
-
     BoatCollisionCache = {}
 end
 
@@ -2318,44 +2294,40 @@ local function CalculateFixedSeaDirection(boatPart)
         return FixedSeaDirection
     end
 
-    if not boatPart then
-        FixedSeaDirection = Vector3.new(1, 0, 0)
-        return FixedSeaDirection
+    local spawnDir =
+        Sea6Route.BeastHunterSpawn
+        - Sea6Route.TikiCenter
+
+    if spawnDir.Magnitude < 1 then
+        spawnDir = Vector3.new(1, 0, 0)
     end
 
-    local boatFlat = Vector3.new(
-        boatPart.Position.X,
-        0,
-        boatPart.Position.Z
-    )
-
-    local delta = boatFlat - BoatFlightConfig.SeaOrigin
-
-    if delta.Magnitude < 80 then
-        delta = BoatFlightConfig.SpawnReference - BoatFlightConfig.SeaOrigin
-    end
-
-    if delta.Magnitude < 1 then
-        delta = Vector3.new(1, 0, 0)
-    end
-
-    FixedSeaDirection = delta.Unit
+    -- Sea 6 = lado traseiro da Tiki.
+    FixedSeaDirection = -spawnDir.Unit
     return FixedSeaDirection
 end
 
+local function GetSea6VirtualTarget()
+    local dir = CalculateFixedSeaDirection(GetBoatDrivePart())
+    return Sea6Route.TikiCenter
+        + dir * Sea6Route.RearDistance
+        + Vector3.new(0, BoatFlightConfig.HeightY, 0)
+end
+
 local function DestroyBoatFlightPhysics()
-    if BoatBodyVelocity then
-        pcall(function()
-            BoatBodyVelocity:Destroy()
-        end)
-        BoatBodyVelocity = nil
+    if BoatLinearVelocity then
+        pcall(function() BoatLinearVelocity:Destroy() end)
+        BoatLinearVelocity = nil
     end
 
-    if BoatBodyGyro then
-        pcall(function()
-            BoatBodyGyro:Destroy()
-        end)
-        BoatBodyGyro = nil
+    if BoatAlignOrientation then
+        pcall(function() BoatAlignOrientation:Destroy() end)
+        BoatAlignOrientation = nil
+    end
+
+    if BoatAttachment then
+        pcall(function() BoatAttachment:Destroy() end)
+        BoatAttachment = nil
     end
 
     BoatDrivePart = nil
@@ -2363,7 +2335,6 @@ end
 
 local function EnsureBoatFlightPhysics()
     local drivePart = GetBoatDrivePart()
-
     if not drivePart then
         DestroyBoatFlightPhysics()
         return nil
@@ -2376,23 +2347,32 @@ local function EnsureBoatFlightPhysics()
 
     ApplyBoatNoclip()
 
-    if not BoatBodyVelocity or not BoatBodyVelocity.Parent then
-        BoatBodyVelocity = Instance.new("BodyVelocity")
-        BoatBodyVelocity.Name = "IKARO_BeastHunterFlightVelocity"
-        BoatBodyVelocity.MaxForce = Vector3.new(1e10, 1e10, 1e10)
-        BoatBodyVelocity.P = 40000
-        BoatBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        BoatBodyVelocity.Parent = drivePart
+    if not BoatAttachment or not BoatAttachment.Parent then
+        BoatAttachment = Instance.new("Attachment")
+        BoatAttachment.Name = "IKARO_BoatFlightAttachment"
+        BoatAttachment.Parent = drivePart
     end
 
-    if not BoatBodyGyro or not BoatBodyGyro.Parent then
-        BoatBodyGyro = Instance.new("BodyGyro")
-        BoatBodyGyro.Name = "IKARO_BeastHunterFlightGyro"
-        BoatBodyGyro.MaxTorque = Vector3.new(1e10, 1e10, 1e10)
-        BoatBodyGyro.P = 45000
-        BoatBodyGyro.D = 1800
-        BoatBodyGyro.CFrame = drivePart.CFrame
-        BoatBodyGyro.Parent = drivePart
+    if not BoatLinearVelocity or not BoatLinearVelocity.Parent then
+        BoatLinearVelocity = Instance.new("LinearVelocity")
+        BoatLinearVelocity.Name = "IKARO_BoatLinearVelocity"
+        BoatLinearVelocity.Attachment0 = BoatAttachment
+        BoatLinearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+        BoatLinearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+        BoatLinearVelocity.MaxForce = math.huge
+        BoatLinearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+        BoatLinearVelocity.Parent = drivePart
+    end
+
+    if not BoatAlignOrientation or not BoatAlignOrientation.Parent then
+        BoatAlignOrientation = Instance.new("AlignOrientation")
+        BoatAlignOrientation.Name = "IKARO_BoatAlignOrientation"
+        BoatAlignOrientation.Attachment0 = BoatAttachment
+        BoatAlignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+        BoatAlignOrientation.RigidityEnabled = false
+        BoatAlignOrientation.Responsiveness = 35
+        BoatAlignOrientation.MaxTorque = math.huge
+        BoatAlignOrientation.Parent = drivePart
     end
 
     return drivePart
@@ -2436,10 +2416,7 @@ end
 
 local function TrySeatMainAccount()
     local seat = GetBeastHunterMainSeat()
-
-    if not seat or not Humanoid then
-        return false
-    end
+    if not seat or not Humanoid then return false end
 
     if Humanoid.SeatPart == seat then
         return true
@@ -2450,11 +2427,10 @@ local function TrySeatMainAccount()
     end)
 
     task.wait(0.15)
-
     return Humanoid.SeatPart == seat
 end
 
-local function StartBoatDrive()
+local function StartBoatDrive(forceStart)
     if not SeaHuntState.AutoDrive or SeaHuntState.Driving then
         return
     end
@@ -2465,7 +2441,6 @@ local function StartBoatDrive()
         return
     end
 
-    -- Tenta sentar, mas não bloqueia o motor caso SeatPart demore a atualizar.
     TrySeatMainAccount()
 
     FixedSeaDirection = nil
@@ -2473,57 +2448,47 @@ local function StartBoatDrive()
 
     SetState(
         "BOAT_FLYING_TO_SEA6",
-        "Velocidade " .. tostring(SeaConfig.BoatSpeed)
-        .. " | Altura Y=" .. tostring(BoatFlightConfig.HeightY)
+        "Rota traseira Tiki | Speed=" .. tostring(SeaConfig.BoatSpeed)
+        .. " | Y=" .. tostring(BoatFlightConfig.HeightY)
     )
 
     task.spawn(function()
         local nextNoclipRefresh = 0
 
-        while Running and SeaHuntState.Driving do
+        while (forceStart or Running) and SeaHuntState.Driving do
             local boatNow = GetBeastHunter()
-            if not boatNow then
-                break
-            end
+            if not boatNow then break end
 
             local drivePart = EnsureBoatFlightPhysics()
             if not drivePart then
+                SetState("BOAT_DRIVE_ERROR", "AssemblyRootPart não encontrado.")
                 break
             end
 
             local now = os.clock()
-
             if now >= nextNoclipRefresh then
                 ApplyBoatNoclip()
-                nextNoclipRefresh = now + 0.15
+                nextNoclipRefresh = now + 0.10
             end
 
             local seaDirection = CalculateFixedSeaDirection(drivePart)
+            local heightError = BoatFlightConfig.HeightY - drivePart.Position.Y
 
-            local heightError =
-                BoatFlightConfig.HeightY - drivePart.Position.Y
-
-            local verticalVelocity = math.clamp(
-                heightError * 8,
-                -120,
-                120
-            )
+            local verticalVelocity = math.clamp(heightError * 7, -140, 140)
 
             local wantedVelocity =
                 seaDirection * SeaConfig.BoatSpeed
                 + Vector3.new(0, verticalVelocity, 0)
 
-            BoatBodyVelocity.Velocity = wantedVelocity
+            BoatLinearVelocity.VectorVelocity = wantedVelocity
 
-            -- Mantém o comando normal do VehicleSeat ativo também.
-            -- Nas versões anteriores, W foi o método que o servidor aceitou
-            -- para mover o Beast Hunter, então ele fica como fallback.
-            if SeaVIM then
-                pcall(function()
-                    SeaVIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
-                end)
-            end
+            BoatAlignOrientation.CFrame = CFrame.lookAt(
+                Vector3.new(0, 0, 0),
+                seaDirection,
+                Vector3.new(0, 1, 0)
+            )
 
+            -- Fallback do controle nativo do barco.
             local mainSeat = GetBeastHunterMainSeat()
             if mainSeat then
                 pcall(function()
@@ -2531,24 +2496,22 @@ local function StartBoatDrive()
                 end)
             end
 
-            -- reforço físico; não usa CFrame de posição.
+            if SeaVIM then
+                pcall(function()
+                    SeaVIM:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+                end)
+            end
+
+            -- reforço adicional da assembly sem CFrame/teleporte.
             pcall(function()
                 drivePart.AssemblyLinearVelocity = wantedVelocity
                 drivePart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
             end)
 
-            BoatBodyGyro.CFrame = CFrame.lookAt(
-                drivePart.Position,
-                drivePart.Position + seaDirection,
-                Vector3.new(0, 1, 0)
-            )
-
-            local at6 = DetectSeaLevel6FromGui()
-
-            if at6 and State ~= "SEA6_REACHED" then
+            if DetectSeaLevel6FromGui() and State ~= "SEA6_REACHED" then
                 SetState(
                     "SEA6_REACHED",
-                    "Sea 6 detectado. Mantendo navegação e procura por eventos."
+                    "Sea 6 detectado. Mantendo navegação."
                 )
             end
 
@@ -2668,6 +2631,38 @@ ToggleRow(HuntPage, "Start Hunt Leviathan", false, function(v)
     else
         StopHunt()
     end
+end)
+
+SimpleButton(HuntPage, "TEST: Fly Beast Hunter", function()
+    local boat = GetBeastHunter()
+    if not boat then
+        SetState("TEST_BOAT", "Beast Hunter não encontrado.")
+        return
+    end
+
+    StopBoatDrive(false)
+    task.wait(0.15)
+    StartBoatDrive(true)
+end)
+
+SimpleButton(HuntPage, "TEST: Stop Beast Hunter", function()
+    StopBoatDrive(true)
+    SetState("TEST_BOAT_STOP", "Controle do barco parado.")
+end)
+
+SimpleButton(HuntPage, "Debug Sea 6 Route", function()
+    local drivePart = GetBoatDrivePart()
+    local dir = CalculateFixedSeaDirection(drivePart)
+    local target = GetSea6VirtualTarget()
+
+    SetState(
+        "SEA6_ROUTE_DEBUG",
+        string.format(
+            "Dir=(%.2f, %.2f, %.2f) | Target=(%.0f, %.0f, %.0f)",
+            dir.X, dir.Y, dir.Z,
+            target.X, target.Y, target.Z
+        )
+    )
 end)
 
 SimpleButton(HuntPage, "Debug Boat / Sea Event", function()
