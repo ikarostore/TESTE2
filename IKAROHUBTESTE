@@ -20,7 +20,7 @@ local noclipAtivo = false
 local colisoesOriginais = {}
 
 -- Velocidade do voo automático em studs por segundo.
-local velocidadeVooAutomatico = 450
+local velocidadeVooAutomatico = 900
 
 local function atualizarPersonagem(char)
     character = char
@@ -171,32 +171,77 @@ local function voarAteCFrame(destinoCFrame, statusCallback)
 
     local humanoidLocal = humanoid
     local autoRotateOriginal = nil
-    local platformStandOriginal = nil
 
     if humanoidLocal then
         pcall(function()
             autoRotateOriginal = humanoidLocal.AutoRotate
-            platformStandOriginal = humanoidLocal.PlatformStand
-
             humanoidLocal.AutoRotate = false
-            humanoidLocal.PlatformStand = true
+            humanoidLocal:ChangeState(Enum.HumanoidStateType.Physics)
         end)
     end
 
-    local function restaurarHumanoid()
+    -- Attachment/LinearVelocity dedicados à viagem.
+    local travelAttachment = Instance.new("Attachment")
+    travelAttachment.Name = "IKAROTravelAttachment"
+    travelAttachment.Parent = hrp
+
+    local travelVelocity = Instance.new("LinearVelocity")
+    travelVelocity.Name = "IKAROTravelVelocity"
+    travelVelocity.Attachment0 = travelAttachment
+    travelVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+    travelVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+    travelVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+
+    pcall(function()
+        travelVelocity.ForceLimitsEnabled = false
+    end)
+
+    travelVelocity.Parent = hrp
+
+    local gyro = Instance.new("AlignOrientation")
+    gyro.Name = "IKAROTravelOrientation"
+    gyro.Attachment0 = travelAttachment
+    gyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
+    gyro.RigidityEnabled = true
+    gyro.CFrame = destinoCFrame.Rotation
+    gyro.Parent = hrp
+
+    local function limparMovimento()
+        if travelVelocity then
+            pcall(function()
+                travelVelocity:Destroy()
+            end)
+        end
+
+        if gyro then
+            pcall(function()
+                gyro:Destroy()
+            end)
+        end
+
+        if travelAttachment then
+            pcall(function()
+                travelAttachment:Destroy()
+            end)
+        end
+
+        if hrp and hrp.Parent then
+            pcall(function()
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end)
+        end
+
         if humanoidLocal and humanoidLocal.Parent then
             pcall(function()
                 if autoRotateOriginal ~= nil then
                     humanoidLocal.AutoRotate = autoRotateOriginal
                 end
-
-                if platformStandOriginal ~= nil then
-                    humanoidLocal.PlatformStand = platformStandOriginal
-                else
-                    humanoidLocal.PlatformStand = false
-                end
+                humanoidLocal:ChangeState(Enum.HumanoidStateType.GettingUp)
             end)
         end
+
+        restaurarColisoes()
     end
 
     local distanciaInicial = (hrp.Position - destinoCFrame.Position).Magnitude
@@ -205,72 +250,48 @@ local function voarAteCFrame(destinoCFrame, statusCallback)
         statusCallback(
             "Voando... " ..
             math.floor(distanciaInicial) ..
-            " studs • " ..
-            tostring(velocidadeVooAutomatico) ..
-            " studs/s"
+            " studs • velocidade fixa " ..
+            tostring(velocidadeVooAutomatico)
         )
     end
 
-    -- Movimento manual por frame.
-    -- Isso deixa a trajetória realmente reta e evita o efeito
-    -- de "pular" que o TweenService pode causar no personagem.
+    -- Mantém velocidade CONSTANTE apontada para o destino.
+    -- Ao contrário do movimento por CFrame, não reduz o passo ao longo do trajeto.
     while meuToken == viagemToken do
         if not hrp or not hrp.Parent then
-            restaurarHumanoid()
-            restaurarColisoes()
+            limparMovimento()
             return false
         end
 
-        local atual = hrp.Position
-        local alvo = destinoCFrame.Position
-        local delta = alvo - atual
+        local delta = destinoCFrame.Position - hrp.Position
         local distancia = delta.Magnitude
 
-        if distancia <= 3 then
-            hrp.CFrame = destinoCFrame
-            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-            hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        if distancia <= 12 then
+            travelVelocity.VectorVelocity = Vector3.new(0, 0, 0)
 
-            restaurarHumanoid()
-            restaurarColisoes()
-            viagemAtual = nil
+            -- Só faz o pequeno ajuste final quando já está praticamente no destino.
+            hrp.CFrame = destinoCFrame
+            limparMovimento()
+
             return true
         end
 
-        local dt = RunService.Heartbeat:Wait()
-
-        if meuToken ~= viagemToken then
-            break
-        end
-
-        local passo = math.min(velocidadeVooAutomatico * dt, distancia)
         local direcao = delta.Unit
-        local proximaPosicao = atual + direcao * passo
 
-        -- Mantém a orientação estável durante o voo.
-        local look = destinoCFrame.LookVector
-        local lookHorizontal = Vector3.new(look.X, 0, look.Z)
+        travelVelocity.VectorVelocity =
+            direcao * velocidadeVooAutomatico
 
-        if lookHorizontal.Magnitude < 0.01 then
-            lookHorizontal = Vector3.new(0, 0, -1)
-        else
-            lookHorizontal = lookHorizontal.Unit
+        -- Mantém a física do Humanoid sem tentar andar/pular.
+        if humanoidLocal and humanoidLocal.Parent then
+            pcall(function()
+                humanoidLocal:ChangeState(Enum.HumanoidStateType.Physics)
+            end)
         end
 
-        hrp.CFrame = CFrame.new(
-            proximaPosicao,
-            proximaPosicao + lookHorizontal
-        )
-
-        -- Remove impulso físico que costuma causar tremidas/pulos.
-        hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-        hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        RunService.Heartbeat:Wait()
     end
 
-    restaurarHumanoid()
-    restaurarColisoes()
-    viagemAtual = nil
-
+    limparMovimento()
     return false
 end
 
