@@ -7,6 +7,50 @@ local LocalPlayer = Players.LocalPlayer
 
 print("[IKARO DIAG] CARREGADO - aguardando dados de combate")
 
+local gui = Instance.new("ScreenGui")
+gui.Name = "IKARO_LeviathanDiagnostic"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 390, 0, 210)
+frame.Position = UDim2.new(1, -410, 0, 20)
+frame.BackgroundColor3 = Color3.fromRGB(24, 25, 28)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -16, 0, 34)
+title.Position = UDim2.new(0, 8, 0, 3)
+title.BackgroundTransparency = 1
+title.Text = "IKARO - Diagnostico de Combate"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 17
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
+
+local output = Instance.new("TextLabel")
+output.Size = UDim2.new(1, -20, 1, -48)
+output.Position = UDim2.new(0, 10, 0, 40)
+output.BackgroundColor3 = Color3.fromRGB(34, 35, 39)
+output.BorderSizePixel = 0
+output.Text = "Diagnostico carregado.\nAguardando personagem e Piranha..."
+output.TextColor3 = Color3.fromRGB(220, 225, 230)
+output.Font = Enum.Font.Code
+output.TextSize = 14
+output.TextWrapped = true
+output.TextXAlignment = Enum.TextXAlignment.Left
+output.TextYAlignment = Enum.TextYAlignment.Top
+output.Parent = frame
+
 local function FindNearestPiranha(root)
     local nearest
     local nearestPart
@@ -42,7 +86,7 @@ local function FindNearestPiranha(root)
     return nearest, nearestPart, nearestDistance
 end
 
-while task.wait(2) do
+while task.wait(1) do
     local character = LocalPlayer.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -59,18 +103,20 @@ while task.wait(2) do
     if root then
         local mob, part, distance = FindNearestPiranha(root)
         local humanoidMob = mob and mob:FindFirstChildOfClass("Humanoid")
-        print(
-            "[IKARO DIAG]",
-            "Character=" .. tostring(character ~= nil),
-            "HP=" .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
-            "Buso=" .. tostring(hasBuso),
-            "Tool=" .. tostring(tool and tool.Name or "none"),
-            "Controller=" .. tostring(controllerFound),
-            "Piranha=" .. tostring(mob and mob:GetFullName() or "none"),
-            "Distance=" .. tostring(part and math.floor(distance * 10) / 10 or "nil"),
-            "MobHP=" .. tostring(humanoidMob and math.floor(humanoidMob.Health) or "unknown")
-        )
+        local diagnosticText = table.concat({
+            "Personagem: " .. tostring(character ~= nil),
+            "HP: " .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
+            "Buso: " .. tostring(hasBuso),
+            "Arma: " .. tostring(tool and tool.Name or "nenhuma"),
+            "CombatController: " .. tostring(controllerFound),
+            "Piranha: " .. tostring(mob and mob.Name or "nao encontrada"),
+            "Distancia: " .. tostring(part and math.floor(distance * 10) / 10 or "nil"),
+            "HP real da Piranha: " .. tostring(humanoidMob and math.floor(humanoidMob.Health) or "desconhecido")
+        }, "\n")
+        output.Text = diagnosticText
+        print("[IKARO DIAG] " .. string.gsub(diagnosticText, "\n", " | "))
     else
+        output.Text = "Diagnostico carregado.\nAguardando personagem/HRP..."
         print("[IKARO DIAG] aguardando personagem/HRP")
     end
 end
