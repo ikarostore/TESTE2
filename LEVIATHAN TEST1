@@ -155,6 +155,28 @@ local Sea6Route = {
     RearDistance = 12000
 }
 
+-- ROTA REAL MAPEADA NO JOGO
+local SEA6_MAPPED_TIKI = Vector3.new(
+    -16209.3115234375,
+    9.123141288757324,
+    436.32470703125
+)
+
+local SEA6_MAPPED_POSITION = Vector3.new(
+    -44718.37109375,
+    24.00019073486328,
+    150.4124755859375
+)
+
+local SEA6_MAPPED_DIRECTION = Vector3.new(
+    -0.9999496936798096,
+    0,
+    -0.010028315708041191
+)
+
+local SEA6_MAPPED_DISTANCE = 28510.4921875
+
+
 
 -- =========================================================
 -- SURVIVAL / LOW HP ESCAPE
@@ -251,7 +273,7 @@ AppTitle.TextXAlignment = Enum.TextXAlignment.Left
 AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
 AppTitle.Font = Enum.Font.SourceSansBold
 AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan v3.5 CONTROL FIX"
+AppTitle.Text = "IKARO Leviathan v3.6 EXACT SEA6 ROUTE"
 AppTitle.Parent = Top
 
 local Sidebar = Instance.new("Frame")
@@ -2290,28 +2312,18 @@ local function RestoreBoatCollision()
 end
 
 local function CalculateFixedSeaDirection(boatPart)
-    if FixedSeaDirection then
-        return FixedSeaDirection
-    end
-
-    local spawnDir =
-        Sea6Route.BeastHunterSpawn
-        - Sea6Route.TikiCenter
-
-    if spawnDir.Magnitude < 1 then
-        spawnDir = Vector3.new(1, 0, 0)
-    end
-
-    -- Sea 6 = lado traseiro da Tiki.
-    FixedSeaDirection = -spawnDir.Unit
+    -- Direção real medida com o mapper:
+    -- praticamente -X, com pequena componente -Z.
+    FixedSeaDirection = SEA6_MAPPED_DIRECTION
     return FixedSeaDirection
 end
 
 local function GetSea6VirtualTarget()
-    local dir = CalculateFixedSeaDirection(GetBoatDrivePart())
-    return Sea6Route.TikiCenter
-        + dir * Sea6Route.RearDistance
-        + Vector3.new(0, BoatFlightConfig.HeightY, 0)
+    return Vector3.new(
+        SEA6_MAPPED_POSITION.X,
+        BoatFlightConfig.HeightY,
+        SEA6_MAPPED_POSITION.Z
+    )
 end
 
 local function DestroyBoatFlightPhysics()
@@ -2448,7 +2460,7 @@ local function StartBoatDrive(forceStart)
 
     SetState(
         "BOAT_FLYING_TO_SEA6",
-        "Rota traseira Tiki | Speed=" .. tostring(SeaConfig.BoatSpeed)
+        "Rota EXATA Sea 6 | Speed=" .. tostring(SeaConfig.BoatSpeed)
         .. " | Y=" .. tostring(BoatFlightConfig.HeightY)
     )
 
@@ -2471,13 +2483,36 @@ local function StartBoatDrive(forceStart)
                 nextNoclipRefresh = now + 0.10
             end
 
-            local seaDirection = CalculateFixedSeaDirection(drivePart)
-            local heightError = BoatFlightConfig.HeightY - drivePart.Position.Y
+            local targetPos = GetSea6VirtualTarget()
 
+            local flatDelta = Vector3.new(
+                targetPos.X - drivePart.Position.X,
+                0,
+                targetPos.Z - drivePart.Position.Z
+            )
+
+            local seaDirection
+
+            if flatDelta.Magnitude > 250 then
+                seaDirection = flatDelta.Unit
+                FixedSeaDirection = seaDirection
+            else
+                seaDirection = CalculateFixedSeaDirection(drivePart)
+                SeaHuntState.AtSea6 = true
+            end
+
+            local heightError = BoatFlightConfig.HeightY - drivePart.Position.Y
             local verticalVelocity = math.clamp(heightError * 7, -140, 140)
 
+            local horizontalSpeed = SeaConfig.BoatSpeed
+
+            -- desacelera um pouco quando chega perto do ponto mapeado
+            if flatDelta.Magnitude < 1500 then
+                horizontalSpeed = math.max(180, SeaConfig.BoatSpeed * 0.65)
+            end
+
             local wantedVelocity =
-                seaDirection * SeaConfig.BoatSpeed
+                seaDirection * horizontalSpeed
                 + Vector3.new(0, verticalVelocity, 0)
 
             BoatLinearVelocity.VectorVelocity = wantedVelocity
@@ -2658,9 +2693,10 @@ SimpleButton(HuntPage, "Debug Sea 6 Route", function()
     SetState(
         "SEA6_ROUTE_DEBUG",
         string.format(
-            "Dir=(%.2f, %.2f, %.2f) | Target=(%.0f, %.0f, %.0f)",
+            "Dir=(%.5f, %.5f, %.5f) | Target=(%.0f, %.0f, %.0f) | DistMap=%.0f",
             dir.X, dir.Y, dir.Z,
-            target.X, target.Y, target.Z
+            target.X, target.Y, target.Z,
+            SEA6_MAPPED_DISTANCE
         )
     )
 end)
