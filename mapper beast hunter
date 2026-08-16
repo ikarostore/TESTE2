@@ -2,283 +2,242 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then
-    warn("IKARO Passive Mapper: LocalPlayer não encontrado.")
-    return
-end
+local player = Players.LocalPlayer
+if not player then return end
 
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
 
-local old = PlayerGui:FindFirstChild("IKARO_BeastHunterMapperPassive")
-if old then
-    old:Destroy()
+local oldGui = playerGui:FindFirstChild("IKARO_BH_PASSIVE")
+if oldGui then
+    oldGui:Destroy()
 end
 
 local logs = {}
 local capturing = false
-local connections = {}
 
-local function safeFullName(obj)
+local function log(msg)
+    msg = tostring(msg)
+    table.insert(logs, msg)
+    print("[IKARO BH]", msg)
+end
+
+local function lname(v)
+    return string.lower(tostring(v or ""))
+end
+
+local function relevant(text)
+    local s = lname(text)
+    return string.find(s, "beast", 1, true)
+        or string.find(s, "hunter", 1, true)
+        or string.find(s, "boat", 1, true)
+        or string.find(s, "ship", 1, true)
+        or string.find(s, "leviathan", 1, true)
+end
+
+local function fullname(obj)
     local ok, result = pcall(function()
         return obj:GetFullName()
     end)
-    return ok and result or tostring(obj)
+
+    if ok then
+        return result
+    end
+
+    return obj.Name
 end
 
-local function addLog(msg)
-    local line = os.date("%H:%M:%S") .. " | " .. tostring(msg)
-    table.insert(logs, line)
-    print("[IKARO PASSIVE MAPPER]", msg)
-end
-
-local function lower(s)
-    return string.lower(tostring(s or ""))
-end
-
-local function isRelevantName(name)
-    local n = lower(name)
-    return string.find(n, "beast", 1, true)
-        or string.find(n, "hunter", 1, true)
-        or string.find(n, "boat", 1, true)
-        or string.find(n, "ship", 1, true)
-        or string.find(n, "leviathan", 1, true)
-end
-
-local function describeInstance(obj, prefix)
+local function inspect(obj, prefix)
     if not obj then return end
 
-    local info = (prefix or "OBJ")
-        .. " | "
-        .. obj.ClassName
-        .. " | "
-        .. safeFullName(obj)
-
-    addLog(info)
+    log((prefix or "OBJ") .. " | " .. obj.ClassName .. " | " .. fullname(obj))
 
     if obj:IsA("VehicleSeat") then
-        addLog(
-            "VEHICLESEAT | "
-            .. safeFullName(obj)
-            .. " | Pos="
-            .. tostring(obj.Position)
-        )
-    elseif obj:IsA("ProximityPrompt") then
-        addLog(
+        log("SEAT | " .. fullname(obj) .. " | " .. tostring(obj.Position))
+    end
+
+    if obj:IsA("ProximityPrompt") then
+        log(
             "PROMPT | "
-            .. safeFullName(obj)
-            .. " | ActionText="
-            .. tostring(obj.ActionText)
-            .. " | ObjectText="
-            .. tostring(obj.ObjectText)
+            .. fullname(obj)
+            .. " | Action=" .. tostring(obj.ActionText)
+            .. " | Object=" .. tostring(obj.ObjectText)
         )
-    elseif obj:IsA("TextLabel") or obj:IsA("TextButton") then
+    end
+
+    if obj:IsA("TextLabel") or obj:IsA("TextButton") then
         local txt = ""
         pcall(function()
             txt = obj.Text
         end)
+
         if txt ~= "" then
-            addLog(
-                "GUI_TEXT | "
-                .. safeFullName(obj)
-                .. " | Text="
-                .. txt
-            )
+            log("GUI | " .. fullname(obj) .. " | " .. txt)
+        end
+    end
+end
+
+local function scanBoats()
+    log("===== BOATS =====")
+
+    local boats = Workspace:FindFirstChild("Boats")
+    if not boats then
+        log("Workspace.Boats nao encontrado")
+        return
+    end
+
+    local children = boats:GetChildren()
+
+    for i = 1, #children do
+        local boat = children[i]
+
+        log("BOAT | " .. boat.Name .. " | " .. fullname(boat))
+
+        local seat = boat:FindFirstChildWhichIsA("VehicleSeat", true)
+        if seat then
+            inspect(seat, "BOAT_SEAT")
+        end
+
+        if relevant(boat.Name) then
+            inspect(boat, "RELEVANT_BOAT")
         end
     end
 end
 
 local function scanRoot(root, label)
-    addLog("===== SCAN " .. label .. " =====")
+    log("===== " .. label .. " =====")
 
-    for _, obj in ipairs(root:GetDescendants()) do
-        local relevant = isRelevantName(obj.Name)
+    local all = root:GetDescendants()
 
-        if obj:IsA("ProximityPrompt") then
-            local txt = lower(
-                tostring(obj.ActionText)
-                .. " "
-                .. tostring(obj.ObjectText)
-                .. " "
-                .. obj.Name
-            )
-            if string.find(txt, "beast", 1, true)
-            or string.find(txt, "boat", 1, true)
-            or string.find(txt, "hunter", 1, true)
-            or string.find(txt, "buy", 1, true) then
-                relevant = true
-            end
-        end
+    for i = 1, #all do
+        local obj = all[i]
+        local shouldLog = relevant(obj.Name)
 
         if obj:IsA("TextLabel") or obj:IsA("TextButton") then
             local txt = ""
             pcall(function()
                 txt = obj.Text
             end)
-            if isRelevantName(txt) then
-                relevant = true
+
+            if relevant(txt) then
+                shouldLog = true
+            end
+        elseif obj:IsA("ProximityPrompt") then
+            local txt = tostring(obj.ActionText) .. " " .. tostring(obj.ObjectText)
+            if relevant(txt) or string.find(lname(txt), "buy", 1, true) then
+                shouldLog = true
             end
         end
 
-        if relevant then
-            describeInstance(obj, "SCAN")
+        if shouldLog then
+            inspect(obj, "SCAN")
         end
     end
 end
 
-local function scanBoats()
-    local boats = Workspace:FindFirstChild("Boats")
-    addLog("===== SCAN WORKSPACE.BOATS =====")
-
-    if not boats then
-        addLog("Workspace.Boats não existe neste momento.")
-        return
-    end
-
-    for _, boat in ipairs(boats:GetChildren()) do
-        addLog(
-            "BOAT | "
-            .. boat.ClassName
-            .. " | "
-            .. boat.Name
-            .. " | "
-            .. safeFullName(boat)
-        )
-
-        local seat = boat:FindFirstChildWhichIsA("VehicleSeat", true)
-        if seat then
-            addLog(
-                "BOAT_SEAT | "
-                .. boat.Name
-                .. " | "
-                .. safeFullName(seat)
-                .. " | Pos="
-                .. tostring(seat.Position)
-            )
-        end
-
-        for _, d in ipairs(boat:GetDescendants()) do
-            if d:IsA("ProximityPrompt") then
-                describeInstance(d, "BOAT_PROMPT")
-            end
-        end
-    end
-end
-
--- =========================================================
 -- GUI
--- =========================================================
-
 local gui = Instance.new("ScreenGui")
-gui.Name = "IKARO_BeastHunterMapperPassive"
+gui.Name = "IKARO_BH_PASSIVE"
 gui.ResetOnSpawn = false
-gui.Parent = PlayerGui
+gui.Parent = playerGui
 
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 440, 0, 360)
-main.Position = UDim2.new(0.03, 0, 0.18, 0)
-main.BackgroundColor3 = Color3.fromRGB(28,28,30)
+main.Size = UDim2.new(0, 420, 0, 320)
+main.Position = UDim2.new(0.04, 0, 0.2, 0)
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 33)
 main.BorderSizePixel = 0
 main.Active = true
 main.Draggable = true
 main.Parent = gui
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0,8)
+corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = main
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,0,0,38)
-title.BackgroundColor3 = Color3.fromRGB(36,36,39)
+title.Size = UDim2.new(1, 0, 0, 40)
+title.BackgroundColor3 = Color3.fromRGB(38, 38, 42)
 title.BorderSizePixel = 0
-title.TextColor3 = Color3.fromRGB(235,235,235)
+title.TextColor3 = Color3.fromRGB(240, 240, 240)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 16
-title.Text = "IKARO • Beast Hunter Mapper v2 PASSIVO"
+title.Text = "IKARO - Beast Hunter Mapper PASSIVO"
 title.Parent = main
 
 local status = Instance.new("TextLabel")
-status.Size = UDim2.new(1,-20,0,64)
-status.Position = UDim2.new(0,10,0,46)
+status.Size = UDim2.new(1, -20, 0, 55)
+status.Position = UDim2.new(0, 10, 0, 46)
 status.BackgroundTransparency = 1
-status.TextColor3 = Color3.fromRGB(215,215,215)
+status.TextColor3 = Color3.fromRGB(215, 215, 215)
 status.Font = Enum.Font.SourceSans
 status.TextSize = 13
 status.TextWrapped = true
-status.Text = "Nenhum hook. Apenas observação passiva."
+status.Text = "Mapper carregado. Nenhum hook ou remote spy."
 status.Parent = main
 
-local function button(text, y, callback)
+local function createButton(text, y, callback)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1,-20,0,36)
-    b.Position = UDim2.new(0,10,0,y)
-    b.BackgroundColor3 = Color3.fromRGB(48,48,52)
+    b.Size = UDim2.new(1, -20, 0, 36)
+    b.Position = UDim2.new(0, 10, 0, y)
+    b.BackgroundColor3 = Color3.fromRGB(50, 50, 54)
     b.BorderSizePixel = 0
-    b.TextColor3 = Color3.fromRGB(240,240,240)
+    b.TextColor3 = Color3.fromRGB(240, 240, 240)
     b.Font = Enum.Font.SourceSansBold
     b.TextSize = 13
     b.Text = text
     b.Parent = main
 
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0,6)
+    c.CornerRadius = UDim.new(0, 6)
     c.Parent = b
 
     b.MouseButton1Click:Connect(function()
-        callback(b)
+        local ok, err = pcall(callback, b)
+        if not ok then
+            warn("[IKARO BH] Botao erro:", err)
+            status.Text = "ERRO: " .. tostring(err)
+        end
     end)
 
     return b
 end
 
-local captureBtn
-captureBtn = button("Iniciar captura passiva", 120, function(btn)
+createButton("Iniciar / Parar captura", 110, function(btn)
     capturing = not capturing
 
     if capturing then
-        btn.Text = "Capturando passivamente..."
-        btn.BackgroundColor3 = Color3.fromRGB(45,120,80)
-        status.Text = "Agora compre/spawne o Beast Hunter normalmente."
-        addLog("CAPTURA PASSIVA INICIADA")
+        btn.Text = "Capturando..."
+        status.Text = "Agora compre o Beast Hunter manualmente."
+        log("CAPTURA INICIADA")
     else
-        btn.Text = "Iniciar captura passiva"
-        btn.BackgroundColor3 = Color3.fromRGB(48,48,52)
+        btn.Text = "Iniciar / Parar captura"
         status.Text = "Captura parada."
-        addLog("CAPTURA PASSIVA PARADA")
+        log("CAPTURA PARADA")
     end
 end)
 
-button("Scan completo agora", 162, function()
+createButton("Escanear barcos", 152, function()
+    scanBoats()
+    status.Text = "Scan de barcos concluido."
+end)
+
+createButton("Scan completo", 194, function()
     scanBoats()
     scanRoot(Workspace, "WORKSPACE")
     scanRoot(ReplicatedStorage, "REPLICATEDSTORAGE")
-    scanRoot(PlayerGui, "PLAYERGUI")
-    status.Text = "Scan completo executado."
+    scanRoot(playerGui, "PLAYERGUI")
+    status.Text = "Scan completo concluido."
 end)
 
-button("Scan somente barcos", 204, function()
-    scanBoats()
-    status.Text = "Workspace.Boats escaneado."
-end)
-
-button("Copiar diagnóstico", 246, function(btn)
-    local header = {
-        "=== IKARO BEAST HUNTER PASSIVE DIAGNOSTIC ===",
-        "Player=" .. LocalPlayer.Name,
-        "PlaceId=" .. tostring(game.PlaceId),
-        "JobId=" .. tostring(game.JobId),
-        ""
-    }
-
-    local txt = table.concat(header, "\n") .. table.concat(logs, "\n")
+createButton("Copiar diagnostico", 236, function(btn)
+    local txt = table.concat(logs, "\n")
 
     local copied = false
 
-    if type(setclipboard) == "function" then
+    if setclipboard then
         copied = pcall(function()
             setclipboard(txt)
         end)
-    elseif type(toclipboard) == "function" then
+    elseif toclipboard then
         copied = pcall(function()
             toclipboard(txt)
         end)
@@ -286,93 +245,61 @@ button("Copiar diagnóstico", 246, function(btn)
 
     if copied then
         btn.Text = "Copiado!"
-        status.Text = "Cole o diagnóstico no ChatGPT."
+        status.Text = "Cole o diagnostico no chat."
         task.delay(2, function()
             if btn and btn.Parent then
-                btn.Text = "Copiar diagnóstico"
+                btn.Text = "Copiar diagnostico"
             end
         end)
     else
+        print("===== IKARO DIAGNOSTICO =====")
         print(txt)
-        status.Text = "Clipboard indisponível. Diagnóstico enviado ao console."
+        status.Text = "Clipboard indisponivel; enviado ao console."
     end
 end)
 
-button("Limpar logs", 288, function()
-    logs = {}
-    status.Text = "Logs limpos."
-end)
-
--- =========================================================
--- OBSERVADORES PASSIVOS
--- =========================================================
-
-table.insert(connections, Workspace.DescendantAdded:Connect(function(obj)
+-- Observadores passivos
+Workspace.DescendantAdded:Connect(function(obj)
     if not capturing then return end
 
-    if isRelevantName(obj.Name) then
+    if relevant(obj.Name) then
         task.defer(function()
-            describeInstance(obj, "WORKSPACE_ADDED")
+            inspect(obj, "WORKSPACE_ADDED")
         end)
     elseif obj:IsA("VehicleSeat") then
         task.defer(function()
-            describeInstance(obj, "VEHICLESEAT_ADDED")
+            inspect(obj, "SEAT_ADDED")
         end)
-    elseif obj:IsA("ProximityPrompt") then
-        local txt = lower(
-            tostring(obj.ActionText)
-            .. " "
-            .. tostring(obj.ObjectText)
-            .. " "
-            .. obj.Name
-        )
-
-        if string.find(txt, "beast", 1, true)
-        or string.find(txt, "boat", 1, true)
-        or string.find(txt, "hunter", 1, true)
-        or string.find(txt, "buy", 1, true) then
-            task.defer(function()
-                describeInstance(obj, "PROMPT_ADDED")
-            end)
-        end
     end
-end))
+end)
 
-table.insert(connections, ReplicatedStorage.DescendantAdded:Connect(function(obj)
+ReplicatedStorage.DescendantAdded:Connect(function(obj)
     if not capturing then return end
 
-    if isRelevantName(obj.Name) then
+    if relevant(obj.Name) then
         task.defer(function()
-            describeInstance(obj, "RS_ADDED")
+            inspect(obj, "RS_ADDED")
         end)
     end
-end))
+end)
 
-table.insert(connections, PlayerGui.DescendantAdded:Connect(function(obj)
+playerGui.DescendantAdded:Connect(function(obj)
     if not capturing then return end
 
     if obj:IsA("TextLabel") or obj:IsA("TextButton") then
         task.defer(function()
             task.wait()
+
             local txt = ""
             pcall(function()
                 txt = obj.Text
             end)
 
-            if isRelevantName(txt) then
-                describeInstance(obj, "GUI_ADDED")
+            if relevant(txt) then
+                inspect(obj, "GUI_ADDED")
             end
         end)
     end
-end))
+end)
 
--- Monitora Workspace.Boats surgindo depois.
-table.insert(connections, Workspace.ChildAdded:Connect(function(obj)
-    if not capturing then return end
-
-    if obj.Name == "Boats" then
-        addLog("Workspace.Boats FOI CRIADO")
-    end
-end))
-
-addLog("Mapper passivo carregado. Nenhum hook instalado.")
+log("MAPPER PASSIVO v2.1 CARREGADO")
