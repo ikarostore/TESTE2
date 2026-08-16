@@ -455,6 +455,8 @@ end
 -- Detecta Marines na tela Pick a Side e continua selecionando em intervalo
 -- controlado. So encerra depois que o personagem realmente spawnar.
 task.spawn(function()
+    local teamVirtualUser = game:GetService("VirtualUser")
+
     while true do
         local spawnedCharacter = LocalPlayer.Character
         local spawnedHumanoid = spawnedCharacter
@@ -472,6 +474,22 @@ task.spawn(function()
         local marineOption = container and container:FindFirstChild("Marines")
 
         if marineOption and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible) then
+            local marineButton = marineOption:FindFirstChild("TextButton", true)
+
+            -- Metodo do script de referencia: torna o botao Marines clicavel
+            -- em toda a tela e usa input real ate o personagem spawnar.
+            if marineButton then
+                pcall(function()
+                    marineButton.Size = UDim2.new(0, 10000, 0, 10000)
+                    marineButton.Position = UDim2.new(-4, 0, -5, 0)
+                    marineButton.BackgroundTransparency = 1
+                    teamVirtualUser:CaptureController()
+                    teamVirtualUser:Button1Down(Vector2.new(99, 99))
+                    task.wait(0.08)
+                    teamVirtualUser:Button1Up(Vector2.new(99, 99))
+                end)
+            end
+
             pcall(function()
                 ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
             end)
