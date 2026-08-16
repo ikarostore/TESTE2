@@ -452,27 +452,33 @@ do
     end)
 end
 
--- Espera a opcao Marines existir e faz somente uma selecao depois da tela
--- estabilizar. Mantido simples para compatibilidade com os executores.
+-- Detecta Marines na tela Pick a Side e continua selecionando em intervalo
+-- controlado. So encerra depois que o personagem realmente spawnar.
 task.spawn(function()
-    local marineOption
+    while true do
+        local spawnedCharacter = LocalPlayer.Character
+        local spawnedHumanoid = spawnedCharacter
+            and spawnedCharacter:FindFirstChildOfClass("Humanoid")
+        local spawnedRoot = spawnedCharacter
+            and spawnedCharacter:FindFirstChild("HumanoidRootPart")
 
-    repeat
-        task.wait(1)
+        if spawnedHumanoid and spawnedHumanoid.Health > 0 and spawnedRoot then
+            return
+        end
+
         local mainGui = PlayerGui:FindFirstChild("Main")
         local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam")
         local container = chooseTeam and chooseTeam:FindFirstChild("Container")
-        marineOption = container and container:FindFirstChild("Marines")
-    until marineOption or LocalPlayer.Team
+        local marineOption = container and container:FindFirstChild("Marines")
 
-    if LocalPlayer.Team then
-        return
+        if marineOption and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible) then
+            pcall(function()
+                ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
+            end)
+        end
+
+        task.wait(2)
     end
-
-    task.wait(3)
-    pcall(function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
-    end)
 end)
 
 local Pages = {}
