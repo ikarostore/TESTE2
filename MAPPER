@@ -1,0 +1,262 @@
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+if not player then return end
+
+local playerGui = player:WaitForChild("PlayerGui")
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+player.CharacterAdded:Connect(function(char)
+    character = char
+    hrp = char:WaitForChild("HumanoidRootPart")
+end)
+
+local old = playerGui:FindFirstChild("IKARO_Mapper")
+if old then old:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "IKARO_Mapper"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 420, 0, 500)
+frame.Position = UDim2.new(0.03, 0, 0.12, 0)
+frame.BackgroundColor3 = Color3.fromRGB(24,24,24)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local c = Instance.new("UICorner")
+c.CornerRadius = UDim.new(0,8)
+c.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1,0,0,36)
+title.BackgroundColor3 = Color3.fromRGB(35,35,35)
+title.BorderSizePixel = 0
+title.TextColor3 = Color3.fromRGB(0,255,150)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 16
+title.Text = "IKARO Mapper - Salvar Coordenadas"
+title.Parent = frame
+
+local info = Instance.new("TextLabel")
+info.Size = UDim2.new(1,-20,0,52)
+info.Position = UDim2.new(0,10,0,42)
+info.BackgroundTransparency = 1
+info.TextColor3 = Color3.fromRGB(220,220,220)
+info.Font = Enum.Font.SourceSans
+info.TextSize = 13
+info.TextWrapped = true
+info.Text = "Vá até a ilha/NPC, digite o nome e clique em Salvar posição atual."
+info.Parent = frame
+
+local nameBox = Instance.new("TextBox")
+nameBox.Size = UDim2.new(0.94,0,0,34)
+nameBox.Position = UDim2.new(0.03,0,0,100)
+nameBox.BackgroundColor3 = Color3.fromRGB(40,40,40)
+nameBox.BorderSizePixel = 0
+nameBox.TextColor3 = Color3.fromRGB(255,255,255)
+nameBox.PlaceholderColor3 = Color3.fromRGB(150,150,150)
+nameBox.Font = Enum.Font.SourceSans
+nameBox.TextSize = 14
+nameBox.PlaceholderText = "Ex: Tiki Outpost / Elite Hunter"
+nameBox.Text = ""
+nameBox.Parent = frame
+
+local nc = Instance.new("UICorner")
+nc.CornerRadius = UDim.new(0,6)
+nc.Parent = nameBox
+
+local saveButton = Instance.new("TextButton")
+saveButton.Size = UDim2.new(0.45,0,0,34)
+saveButton.Position = UDim2.new(0.03,0,0,144)
+saveButton.BackgroundColor3 = Color3.fromRGB(40,130,80)
+saveButton.BorderSizePixel = 0
+saveButton.TextColor3 = Color3.fromRGB(255,255,255)
+saveButton.Font = Enum.Font.SourceSansBold
+saveButton.TextSize = 13
+saveButton.Text = "Salvar posição atual"
+saveButton.Parent = frame
+
+local sc = Instance.new("UICorner")
+sc.CornerRadius = UDim.new(0,6)
+sc.Parent = saveButton
+
+local copyButton = Instance.new("TextButton")
+copyButton.Size = UDim2.new(0.45,0,0,34)
+copyButton.Position = UDim2.new(0.52,0,0,144)
+copyButton.BackgroundColor3 = Color3.fromRGB(55,55,55)
+copyButton.BorderSizePixel = 0
+copyButton.TextColor3 = Color3.fromRGB(255,255,255)
+copyButton.Font = Enum.Font.SourceSansBold
+copyButton.TextSize = 13
+copyButton.Text = "Copiar tabela"
+copyButton.Parent = frame
+
+local cc = Instance.new("UICorner")
+cc.CornerRadius = UDim.new(0,6)
+cc.Parent = copyButton
+
+local clearButton = Instance.new("TextButton")
+clearButton.Size = UDim2.new(0.94,0,0,30)
+clearButton.Position = UDim2.new(0.03,0,0,186)
+clearButton.BackgroundColor3 = Color3.fromRGB(130,50,50)
+clearButton.BorderSizePixel = 0
+clearButton.TextColor3 = Color3.fromRGB(255,255,255)
+clearButton.Font = Enum.Font.SourceSansBold
+clearButton.TextSize = 12
+clearButton.Text = "Limpar posições desta sessão"
+clearButton.Parent = frame
+
+local clc = Instance.new("UICorner")
+clc.CornerRadius = UDim.new(0,6)
+clc.Parent = clearButton
+
+local list = Instance.new("ScrollingFrame")
+list.Size = UDim2.new(0.94,0,0,250)
+list.Position = UDim2.new(0.03,0,0,226)
+list.BackgroundColor3 = Color3.fromRGB(18,18,18)
+list.BorderSizePixel = 0
+list.ScrollBarThickness = 6
+list.CanvasSize = UDim2.new(0,0,0,0)
+list.Parent = frame
+
+local lc = Instance.new("UICorner")
+lc.CornerRadius = UDim.new(0,6)
+lc.Parent = list
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0,4)
+layout.Parent = list
+
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0,5)
+padding.PaddingBottom = UDim.new(0,5)
+padding.PaddingLeft = UDim.new(0,5)
+padding.PaddingRight = UDim.new(0,5)
+padding.Parent = list
+
+local saved = {}
+
+local function fmt(n)
+    return string.format("%.3f", n)
+end
+
+local function cframeToLua(cf)
+    local comps = {cf:GetComponents()}
+    local out = {}
+    for i, v in ipairs(comps) do
+        out[i] = fmt(v)
+    end
+    return "CFrame.new(" .. table.concat(out, ", ") .. ")"
+end
+
+local function refreshList()
+    for _, child in ipairs(list:GetChildren()) do
+        if child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+
+    local names = {}
+    for name in pairs(saved) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+
+    for _, name in ipairs(names) do
+        local row = Instance.new("TextLabel")
+        row.Size = UDim2.new(1,-10,0,44)
+        row.BackgroundColor3 = Color3.fromRGB(40,40,40)
+        row.BorderSizePixel = 0
+        row.TextColor3 = Color3.fromRGB(255,255,255)
+        row.Font = Enum.Font.Code
+        row.TextSize = 12
+        row.TextWrapped = true
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.Text = name .. "\n" .. tostring(saved[name].Position)
+        row.Parent = list
+
+        local rc = Instance.new("UICorner")
+        rc.CornerRadius = UDim.new(0,5)
+        rc.Parent = row
+    end
+
+    task.wait()
+    list.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 10)
+end
+
+local function buildTableText()
+    local names = {}
+    for name in pairs(saved) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+
+    local lines = {"local Locais = {"}
+    for _, name in ipairs(names) do
+        table.insert(lines, '    ["' .. name:gsub('"','\\"') .. '"] = ' .. cframeToLua(saved[name]) .. ",")
+    end
+    table.insert(lines, "}")
+
+    return table.concat(lines, "\n")
+end
+
+saveButton.MouseButton1Click:Connect(function()
+    local name = nameBox.Text
+    if not name or name == "" then
+        info.Text = "Digite um nome antes de salvar."
+        return
+    end
+
+    if not hrp then
+        info.Text = "HumanoidRootPart não encontrado."
+        return
+    end
+
+    saved[name] = hrp.CFrame
+    info.Text = "Salvo: " .. name
+    nameBox.Text = ""
+    refreshList()
+end)
+
+copyButton.MouseButton1Click:Connect(function()
+    local text = buildTableText()
+
+    if setclipboard then
+        local ok = pcall(function()
+            setclipboard(text)
+        end)
+        if ok then
+            info.Text = "Tabela copiada. Cole aqui no chat."
+            return
+        end
+    elseif toclipboard then
+        local ok = pcall(function()
+            toclipboard(text)
+        end)
+        if ok then
+            info.Text = "Tabela copiada. Cole aqui no chat."
+            return
+        end
+    end
+
+    print(text)
+    info.Text = "Clipboard indisponível. Tabela enviada ao console."
+end)
+
+clearButton.MouseButton1Click:Connect(function()
+    saved = {}
+    refreshList()
+    info.Text = "Posições limpas."
+end)
+
+layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    list.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 10)
+end)
+
+print("IKARO Mapper carregado.")
