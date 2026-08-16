@@ -1950,8 +1950,12 @@ local ClickSeaEvents = {
     FishCrewMember = true
 }
 
--- Bring Mob desativado: os inimigos permanecem sob controle do servidor.
-local BringableSeaEvents = {}
+local BringableSeaEvents = {
+    Shark = true,
+    Piranha = true,
+    Terrorshark = true,
+    FishCrewMember = true
+}
 
 local SeaVirtualUser = nil
 pcall(function()
@@ -3769,6 +3773,4 @@ else
 end
 
 print("IKARO Leviathan v2 carregado.")
-
-
 
