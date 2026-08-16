@@ -71,8 +71,8 @@ local function NewButton(text, x, width)
 end
 
 local copyButton = NewButton("Copiar diagnostico", 10, 150)
-local recordButton = NewButton("Gravar ponto Frozen", 170, 150)
-local autoButton = NewButton("Auto Frozen: OFF", 330, 160)
+local activateButton = NewButton("Ativar Watcher", 170, 150)
+local autoButton = NewButton("Auto Watcher: OFF", 330, 160)
 
 local EventNames = {
     Piranha = {"piranha"}, Shark = {"shark"},
@@ -145,22 +145,33 @@ local function FindFrozenDimension(forceScan)
     end
 end
 
-local function ObjectCFrame(obj)
-    if obj:IsA("Model") then return obj:GetPivot() end
-    if obj:IsA("BasePart") then return obj.CFrame end
+local function FindFrozenWatcher(frozen)
+    local searchRoot = frozen or workspace
+    for _, obj in ipairs(searchRoot:GetDescendants()) do
+        local lowered = string.lower(obj.Name)
+        if string.find(lowered, "frozen watcher", 1, true)
+        or string.find(lowered, "frozenwatcher", 1, true) then
+            if obj:IsA("Model") or obj:IsA("BasePart") then return obj end
+            local model = obj:FindFirstAncestorOfClass("Model")
+            if model then return model end
+        end
+    end
+
+    -- Fallback: a esfera pode ter nome interno diferente, mas possui a
+    -- interacao dentro da propria Frozen Dimension.
+    if frozen then
+        local prompt = frozen:FindFirstChildWhichIsA("ProximityPrompt", true)
+        local click = frozen:FindFirstChildWhichIsA("ClickDetector", true)
+        local interaction = prompt or click
+        if interaction then
+            return interaction:FindFirstAncestorOfClass("Model") or interaction.Parent
+        end
+    end
 end
 
-local MacroFile = "IKARO_FROZEN_MACRO.json"
-local frozenOffset
-local autoFrozen = false
-local frozenBusy = false
+local autoWatcher = false
+local watcherBusy = false
 local lastReport = "Diagnostico ainda sem dados."
-
-pcall(function()
-    if isfile and isfile(MacroFile) and readfile then
-        frozenOffset = CFrame.new(table.unpack(HttpService:JSONDecode(readfile(MacroFile))))
-    end
-end)
 
 copyButton.MouseButton1Click:Connect(function()
     if setclipboard then
@@ -172,41 +183,46 @@ copyButton.MouseButton1Click:Connect(function()
     end
 end)
 
-recordButton.MouseButton1Click:Connect(function()
-    local character = LocalPlayer.Character
-    local root = character and character:FindFirstChild("HumanoidRootPart")
-    local frozen = FindFrozenDimension(true)
-    local frozenCFrame = frozen and ObjectCFrame(frozen)
-    if not root or not frozenCFrame then recordButton.Text = "Frozen nao detectada" return end
-    frozenOffset = frozenCFrame:ToObjectSpace(root.CFrame)
-    pcall(function()
-        if writefile then writefile(MacroFile, HttpService:JSONEncode({frozenOffset:GetComponents()})) end
-    end)
-    recordButton.Text = "Ponto gravado!"
-    task.delay(2, function() recordButton.Text = "Gravar ponto Frozen" end)
-end)
-
 autoButton.MouseButton1Click:Connect(function()
-    autoFrozen = not autoFrozen
-    autoButton.Text = autoFrozen and "Auto Frozen: ON" or "Auto Frozen: OFF"
-    autoButton.BackgroundColor3 = autoFrozen and Color3.fromRGB(55, 125, 82) or Color3.fromRGB(55, 91, 75)
+    autoWatcher = not autoWatcher
+    autoButton.Text = autoWatcher and "Auto Watcher: ON" or "Auto Watcher: OFF"
+    autoButton.BackgroundColor3 = autoWatcher and Color3.fromRGB(55, 125, 82) or Color3.fromRGB(55, 91, 75)
 end)
 
-local function ActivateFrozen(frozen)
-    if frozenBusy or not frozenOffset then return end
-    frozenBusy = true
+local function ClickWatcherDialogue()
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        if obj:IsA("TextButton") and obj.Visible then
+            local text = string.lower(obj.Text)
+            if string.find(text, "yes", 1, true)
+            or string.find(text, "open", 1, true)
+            or string.find(text, "gate", 1, true)
+            or string.find(text, "leviathan", 1, true)
+            or string.find(text, "continue", 1, true) then
+                pcall(function()
+                    if firesignal then firesignal(obj.MouseButton1Click) else obj:Activate() end
+                end)
+            end
+        end
+    end
+end
+
+local function ActivateWatcher(watcher, frozen)
+    if watcherBusy or not watcher then return end
+    watcherBusy = true
     task.spawn(function()
         local character = LocalPlayer.Character
         local root = character and character:FindFirstChild("HumanoidRootPart")
-        local frozenCFrame = ObjectCFrame(frozen)
-        if root and frozenCFrame then
-            local destination = frozenCFrame * frozenOffset
+        local watcherPart = watcher:IsA("BasePart") and watcher or TargetPart(watcher)
+        if root and watcherPart then
+            local destination = watcherPart.CFrame * CFrame.new(0, 2, 4)
             local duration = math.clamp((root.Position - destination.Position).Magnitude / 250, 0.2, 20)
             local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = destination})
             tween:Play()
             tween.Completed:Wait()
-            local prompt = frozen:FindFirstChildWhichIsA("ProximityPrompt", true)
-            local click = frozen:FindFirstChildWhichIsA("ClickDetector", true)
+            local prompt = watcher:FindFirstChildWhichIsA("ProximityPrompt", true)
+                or (frozen and frozen:FindFirstChildWhichIsA("ProximityPrompt", true))
+            local click = watcher:FindFirstChildWhichIsA("ClickDetector", true)
+                or (frozen and frozen:FindFirstChildWhichIsA("ClickDetector", true))
             if prompt and fireproximityprompt then
                 pcall(fireproximityprompt, prompt)
             elseif click and fireclickdetector then
@@ -216,11 +232,27 @@ local function ActivateFrozen(frozen)
                 task.wait(0.15)
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
             end
+            task.wait(0.8)
+            ClickWatcherDialogue()
+            task.wait(0.8)
+            ClickWatcherDialogue()
         end
         task.wait(3)
-        frozenBusy = false
+        watcherBusy = false
     end)
 end
+
+activateButton.MouseButton1Click:Connect(function()
+    local frozen = FindFrozenDimension(true)
+    local watcher = FindFrozenWatcher(frozen)
+    if watcher then
+        activateButton.Text = "Ativando..."
+        ActivateWatcher(watcher, frozen)
+        task.delay(3, function() activateButton.Text = "Ativar Watcher" end)
+    else
+        activateButton.Text = "Watcher nao achado"
+    end
+end)
 
 while task.wait(1) do
     local character = LocalPlayer.Character
@@ -238,7 +270,7 @@ while task.wait(1) do
     local lines = {
         "Personagem: " .. tostring(character ~= nil), "HP: " .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
         "Buso: " .. tostring(hasBuso), "Arma: " .. tostring(tool and tool.Name or "nenhuma"),
-        "CombatController: " .. tostring(controllerFound), "Macro Frozen: " .. tostring(frozenOffset ~= nil)
+        "CombatController: " .. tostring(controllerFound), "Auto Watcher: " .. tostring(autoWatcher)
     }
     if root then
         for _, key in ipairs(EventOrder) do
@@ -253,10 +285,12 @@ while task.wait(1) do
         table.insert(lines, "Aguardando personagem/HRP...")
     end
     local frozen = FindFrozenDimension()
+    local watcher = FindFrozenWatcher(frozen)
     table.insert(lines, "Frozen Dimension: " .. tostring(frozen and frozen:GetFullName() or "nao detectada"))
+    table.insert(lines, "Frozen Watcher: " .. tostring(watcher and watcher:GetFullName() or "nao detectado"))
     lastReport = table.concat(lines, "\n")
     output.Text = lastReport
     print("[IKARO DIAG] " .. string.gsub(lastReport, "\n", " | "))
-    if autoFrozen and frozen and frozenOffset then ActivateFrozen(frozen) end
+    if autoWatcher and watcher then ActivateWatcher(watcher, frozen) end
 end
 
