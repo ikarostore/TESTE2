@@ -96,7 +96,8 @@ local SeaConfig = {
     PanicHealthPercent = 40,
     ReturnHealthPercent = 90,
     TargetSeaLevel = "6",
-    BoatSpeed = 330
+    BoatSpeed = 330,
+    AutoDodgeEnabled = true
 }
 
 local SeaNPCPositions = {
@@ -215,21 +216,25 @@ local CombatConfig = {
     Type = "Melee",
 
     Melee = {
+        Enabled = true,
         Selected = {Z = true, X = true, C = true},
         Hold = {Z = 0.5, X = 0.5, C = 0.5}
     },
 
     Sword = {
+        Enabled = true,
         Selected = {Z = true, X = true},
         Hold = {Z = 0.5, X = 0.5}
     },
 
     Gun = {
+        Enabled = true,
         Selected = {Z = true, X = true},
         Hold = {Z = 0.5, X = 0.5}
     },
 
     Fruit = {
+        Enabled = true,
         Selected = {Z = true, X = true, C = true, V = true, F = true},
         Hold = {Z = 0.5, X = 0.5, C = 0.5, V = 0.5, F = 0.5}
     }
@@ -2139,7 +2144,7 @@ local function UseConfiguredSeaSkills()
             and {"Z","X","C"}
             or {"Z","X"}
 
-        if tool and cfg then
+        if tool and cfg and cfg.Enabled ~= false then
             task.wait(0.10)
             for _, keyName in ipairs(order) do
                 if cfg.Selected[keyName] then
@@ -2465,6 +2470,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or eventKey == "FishBoat"
         local height = eventKey == "SeaBeast" and 260
             or isShipEvent and 110
+            or eventKey == "Terrorshark" and 36
             or useBasicClick and 18
             or 60
         -- Todos os Sea Events sao atacados diretamente por cima. Somente o
@@ -2611,6 +2617,46 @@ local function FindLeviathan()
     end
     return nil
 end
+
+-- Auto Dodge: usa dash lateral sem mover mobs ou barcos. O foco de combate
+-- reposiciona o personagem logo depois de cada esquiva.
+task.spawn(function()
+    local dodgeRight = true
+    while Gui and Gui.Parent do
+        if SeaConfig.AutoDodgeEnabled and Running and HRP and Humanoid and Humanoid.Health > 0 then
+            local threat = SeaHuntState.CurrentEvent
+            local threatName = threat and string.lower(threat.Name) or ""
+            local dangerous = string.find(threatName, "terror", 1, true)
+                or string.find(threatName, "sea beast", 1, true)
+                or string.find(threatName, "seabeast", 1, true)
+
+            if not dangerous then
+                threat = FindLeviathan()
+                dangerous = threat ~= nil
+            end
+
+            local threatPart = threat and GetModelTargetPart(threat)
+            if dangerous and threatPart
+            and (threatPart.Position - HRP.Position).Magnitude <= 900
+            and SeaVIM then
+                local directionKey = dodgeRight and Enum.KeyCode.D or Enum.KeyCode.A
+                dodgeRight = not dodgeRight
+                pcall(function()
+                    SeaVIM:SendKeyEvent(true, directionKey, false, game)
+                    SeaVIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
+                    task.wait(0.10)
+                    SeaVIM:SendKeyEvent(false, Enum.KeyCode.Q, false, game)
+                    SeaVIM:SendKeyEvent(false, directionKey, false, game)
+                end)
+                task.wait(1.05)
+            else
+                task.wait(0.20)
+            end
+        else
+            task.wait(0.25)
+        end
+    end
+end)
 
 
 -- =========================================================
@@ -3675,6 +3721,30 @@ end
 
 SectionTitle(SkillsPage, "Setting Hold\nand Select Skill")
 
+ToggleRow(SkillsPage, "Auto Dodge Sea Bosses", SeaConfig.AutoDodgeEnabled, function(v)
+    SeaConfig.AutoDodgeEnabled = v
+    SaveConfig()
+end)
+
+do
+    ToggleRow(SkillsPage, "Use Melee Skills", CombatConfig.Melee.Enabled ~= false, function(v)
+        CombatConfig.Melee.Enabled = v
+        SaveConfig()
+    end)
+    ToggleRow(SkillsPage, "Use Sword Skills", CombatConfig.Sword.Enabled ~= false, function(v)
+        CombatConfig.Sword.Enabled = v
+        SaveConfig()
+    end)
+    ToggleRow(SkillsPage, "Use Gun Skills", CombatConfig.Gun.Enabled ~= false, function(v)
+        CombatConfig.Gun.Enabled = v
+        SaveConfig()
+    end)
+    ToggleRow(SkillsPage, "Use Fruit Skills", CombatConfig.Fruit.Enabled ~= false, function(v)
+        CombatConfig.Fruit.Enabled = v
+        SaveConfig()
+    end)
+end
+
 local function CombatTypeRow(text, category)
     local row = Row(SkillsPage, 40)
     local label = RowLabel(row, text)
@@ -3710,9 +3780,32 @@ local function SkillHoldRow(category, key)
     local row = Row(SkillsPage, 40)
     RowLabel(row, "Skill " .. key .. " " .. category)
 
+    local enabled = Instance.new("TextButton")
+    enabled.Size = UDim2.new(0, 52, 0, 30)
+    enabled.Position = UDim2.new(1, -182, 0.5, -15)
+    enabled.BackgroundColor3 = CombatConfig[category].Selected[key]
+        and Color3.fromRGB(70, 130, 95)
+        or Color3.fromRGB(70, 70, 73)
+    enabled.BorderSizePixel = 0
+    enabled.TextColor3 = Color3.fromRGB(235, 235, 235)
+    enabled.Font = Enum.Font.SourceSansBold
+    enabled.TextSize = 12
+    enabled.Text = CombatConfig[category].Selected[key] and "ON" or "OFF"
+    enabled.Parent = row
+
+    enabled.MouseButton1Click:Connect(function()
+        local value = not CombatConfig[category].Selected[key]
+        CombatConfig[category].Selected[key] = value
+        enabled.Text = value and "ON" or "OFF"
+        enabled.BackgroundColor3 = value
+            and Color3.fromRGB(70, 130, 95)
+            or Color3.fromRGB(70, 70, 73)
+        SaveConfig()
+    end)
+
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0, 120, 0, 30)
-    box.Position = UDim2.new(1, -130, 0.5, -15)
+    box.Size = UDim2.new(0, 78, 0, 30)
+    box.Position = UDim2.new(1, -88, 0.5, -15)
     box.BackgroundColor3 = Color3.fromRGB(57,57,60)
     box.BorderSizePixel = 0
     box.TextColor3 = Color3.fromRGB(225,225,225)
