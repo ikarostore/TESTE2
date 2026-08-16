@@ -20,8 +20,8 @@ gui.ResetOnSpawn = false
 gui.Parent = playerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 430, 0, 500)
-frame.Position = UDim2.new(0.03, 0, 0.12, 0)
+frame.Size = UDim2.new(0, 440, 0, 540)
+frame.Position = UDim2.new(0.03, 0, 0.08, 0)
 frame.BackgroundColor3 = Color3.fromRGB(24,24,24)
 frame.BorderSizePixel = 0
 frame.Active = true
@@ -50,11 +50,11 @@ info.TextColor3 = Color3.fromRGB(220,220,220)
 info.Font = Enum.Font.SourceSans
 info.TextSize = 13
 info.TextWrapped = true
-info.Text = "Lista modelos não-jogadores que parecem NPCs. Copie os nomes/caminhos encontrados e me envie."
+info.Text = "Escaneia NPCs e permite copiar todos os nomes/caminhos em um clique."
 info.Parent = frame
 
 local refresh = Instance.new("TextButton")
-refresh.Size = UDim2.new(0.94,0,0,32)
+refresh.Size = UDim2.new(0.45,0,0,32)
 refresh.Position = UDim2.new(0.03,0,0,98)
 refresh.BackgroundColor3 = Color3.fromRGB(55,55,55)
 refresh.BorderSizePixel = 0
@@ -64,12 +64,27 @@ refresh.TextSize = 13
 refresh.Text = "Atualizar diagnóstico"
 refresh.Parent = frame
 
-local rc = Instance.new("UICorner")
-rc.CornerRadius = UDim.new(0,6)
-rc.Parent = refresh
+local refreshCorner = Instance.new("UICorner")
+refreshCorner.CornerRadius = UDim.new(0,6)
+refreshCorner.Parent = refresh
+
+local copyButton = Instance.new("TextButton")
+copyButton.Size = UDim2.new(0.45,0,0,32)
+copyButton.Position = UDim2.new(0.52,0,0,98)
+copyButton.BackgroundColor3 = Color3.fromRGB(40,130,80)
+copyButton.BorderSizePixel = 0
+copyButton.TextColor3 = Color3.fromRGB(255,255,255)
+copyButton.Font = Enum.Font.SourceSansBold
+copyButton.TextSize = 13
+copyButton.Text = "Copiar todos"
+copyButton.Parent = frame
+
+local copyCorner = Instance.new("UICorner")
+copyCorner.CornerRadius = UDim.new(0,6)
+copyCorner.Parent = copyButton
 
 local list = Instance.new("ScrollingFrame")
-list.Size = UDim2.new(0.94,0,0,340)
+list.Size = UDim2.new(0.94,0,0,380)
 list.Position = UDim2.new(0.03,0,0,140)
 list.BackgroundColor3 = Color3.fromRGB(18,18,18)
 list.BorderSizePixel = 0
@@ -77,9 +92,9 @@ list.ScrollBarThickness = 6
 list.CanvasSize = UDim2.new(0,0,0,0)
 list.Parent = frame
 
-local lc = Instance.new("UICorner")
-lc.CornerRadius = UDim.new(0,6)
-lc.Parent = list
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0,6)
+listCorner.Parent = list
 
 local layout = Instance.new("UIListLayout")
 layout.Padding = UDim.new(0,4)
@@ -91,6 +106,8 @@ padding.PaddingBottom = UDim.new(0,5)
 padding.PaddingLeft = UDim.new(0,5)
 padding.PaddingRight = UDim.new(0,5)
 padding.Parent = list
+
+local resultadoCompleto = ""
 
 local function isPlayerCharacter(model)
     return Players:GetPlayerFromCharacter(model) ~= nil
@@ -143,6 +160,7 @@ local function scan()
 
     local found = {}
     local count = 0
+    local linhas = {}
 
     local function scanRoot(root, rootName)
         for _, obj in ipairs(root:GetDescendants()) do
@@ -152,17 +170,18 @@ local function scan()
             and hasInterestingMarker(obj) then
 
                 found[obj] = true
-                count += 1
+                count = count + 1
 
                 local fullName = ""
                 pcall(function()
                     fullName = obj:GetFullName()
                 end)
 
-                local line = "[" .. rootName .. "] " .. obj.Name .. "\n" .. fullName
+                local line = "[" .. rootName .. "] " .. obj.Name .. " | " .. fullName
+                table.insert(linhas, line)
                 addRow(line)
 
-                print("IKARO NPC DEBUG:", rootName, "|", obj.Name, "|", fullName)
+                print("IKARO NPC DEBUG:", line)
             end
         end
     end
@@ -170,9 +189,47 @@ local function scan()
     scanRoot(workspace, "Workspace")
     scanRoot(ReplicatedStorage, "ReplicatedStorage")
 
-    info.Text = "Encontrados: " .. tostring(count) .. ". Veja a lista e o console. Envie os nomes/caminhos dos NPCs corretos."
+    resultadoCompleto = table.concat(linhas, "\n")
+
+    info.Text = "Encontrados: " .. tostring(count) .. ". Clique em 'Copiar todos' e cole o resultado aqui."
+
     task.wait()
     list.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 10)
+end
+
+local function copiarTudo()
+    if resultadoCompleto == "" then
+        info.Text = "Nenhum resultado para copiar. Clique em 'Atualizar diagnóstico'."
+        return
+    end
+
+    local copiado = false
+
+    if setclipboard then
+        local ok = pcall(function()
+            setclipboard(resultadoCompleto)
+        end)
+        copiado = ok
+    elseif toclipboard then
+        local ok = pcall(function()
+            toclipboard(resultadoCompleto)
+        end)
+        copiado = ok
+    end
+
+    if copiado then
+        copyButton.Text = "Copiado!"
+        info.Text = "Lista copiada para a área de transferência. Cole aqui no chat."
+
+        task.delay(2, function()
+            if copyButton and copyButton.Parent then
+                copyButton.Text = "Copiar todos"
+            end
+        end)
+    else
+        info.Text = "Seu ambiente não expõe setclipboard/toclipboard."
+        warn("IKARO DEBUG: função de clipboard não disponível.")
+    end
 end
 
 layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
@@ -183,9 +240,11 @@ refresh.MouseButton1Click:Connect(function()
     task.spawn(scan)
 end)
 
+copyButton.MouseButton1Click:Connect(copiarTudo)
+
 task.spawn(function()
     task.wait(0.5)
     scan()
 end)
 
-print("IKARO NPC DEBUG carregado.")
+print("IKARO NPC DEBUG com copiar todos carregado.")
