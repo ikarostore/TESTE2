@@ -2281,6 +2281,8 @@ local function IsLikelyCombatModel(obj)
     return false
 end
 
+local IsEventAlive
+
 local function FindSelectedSeaEvent()
     -- Sea Beast tem container próprio conhecido.
     local seaBeasts = workspace:FindFirstChild("SeaBeasts")
@@ -2289,6 +2291,7 @@ local function FindSelectedSeaEvent()
         for _, obj in ipairs(seaBeasts:GetChildren()) do
             if obj:IsA("Model")
             and not IsExcludedSeaEventModel(obj)
+            and IsEventAlive(obj)
             and NameMatchesAny(obj.Name, SeaEventNames.SeaBeast, "SeaBeast") then
                 return "SeaBeast", obj
             end
@@ -2300,7 +2303,7 @@ local function FindSelectedSeaEvent()
 
     if enemies then
         for _, obj in ipairs(enemies:GetChildren()) do
-            if obj:IsA("Model") and IsLikelyCombatModel(obj) then
+            if obj:IsA("Model") and IsLikelyCombatModel(obj) and IsEventAlive(obj) then
                 for _, key in ipairs(SeaEventOrder) do
                     if key ~= "SeaBeast" and SeaEventsSelected[key] then
                         local variants = SeaEventNames[key]
@@ -2316,7 +2319,7 @@ local function FindSelectedSeaEvent()
 
     -- Fallback global, mas só para modelos com sinais de combate.
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and IsLikelyCombatModel(obj) then
+        if obj:IsA("Model") and IsLikelyCombatModel(obj) and IsEventAlive(obj) then
             for _, key in ipairs(SeaEventOrder) do
                 if key ~= "SeaBeast" and SeaEventsSelected[key] then
                     local variants = SeaEventNames[key]
@@ -2373,7 +2376,7 @@ local function GetModelTargetPart(model)
     return bestPart
 end
 
-local function IsEventAlive(model)
+IsEventAlive = function(model)
     if not model or not model.Parent then return false end
 
     local hum = model:FindFirstChildOfClass("Humanoid")
@@ -2518,6 +2521,15 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local desired = target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
+
+        if isShipEvent then
+            -- Skills com dash podem jogar o personagem contra o casco. A
+            -- trava vertical corrige apenas o jogador a cada frame.
+            bodyVelocity.Velocity = target.AssemblyLinearVelocity
+            HRP.CFrame = CFrame.lookAt(desired, target.Position)
+            bodyGyro.CFrame = HRP.CFrame
+            return
+        end
 
         if distance > 7 then
             local speed = distance > 800 and 340
@@ -3460,7 +3472,31 @@ local function StartHunt()
 
                     task.spawn(function()
                         local okCombat, combatError = pcall(function()
-                            CombatSelectedSeaEvent(eventKey, eventModel)
+                            local combatKey = eventKey
+                            local combatModel = eventModel
+
+                            while Running and combatModel do
+                                SeaHuntState.CurrentEvent = combatModel
+                                SetState(
+                                    "SEA_EVENT_PRIORITY",
+                                    SeaEventDisplayName(combatKey) .. " • " .. combatModel:GetFullName()
+                                )
+                                CombatSelectedSeaEvent(combatKey, combatModel)
+
+                                if EscapeActive then
+                                    repeat task.wait(0.25)
+                                    until not EscapeActive or not Running
+                                end
+                                if not Running then break end
+
+                                -- Mantem prioridade total: procura o proximo
+                                -- evento vivo antes de considerar voltar ao barco.
+                                combatKey, combatModel = FindSelectedSeaEvent()
+                                if combatModel then
+                                    SeaHuntState.CurrentEvent = combatModel
+                                    task.wait(0.15)
+                                end
+                            end
                         end)
 
                         -- Sair e voltar ao barco após um evento é normal. Dá
