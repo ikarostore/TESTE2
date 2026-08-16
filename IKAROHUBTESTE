@@ -4,20 +4,13 @@ local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
 
 local player = Players.LocalPlayer
-
 if not player then
     warn("IKAROhub: LocalPlayer não encontrado")
     return
 end
 
+local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
-
-local voando = false
-local velocidadeVoo = 50
-
-local movimentoNPCAtivado = true
-local npcSelecionado = nil
-local cancelToken = 0
 
 local character
 local humanoid
@@ -25,19 +18,29 @@ local hrp
 local attachment
 local linearVelocity
 
+local voando = false
+local velocidadeVoo = 50
+
+local movimentoNPCAtivado = false
+local cancelToken = 0
+
+-- =========================================================
+-- PERSONAGEM / FLY
+-- =========================================================
+
 local function configurarPersonagem(char)
     character = char
-    humanoid = character:WaitForChild("Humanoid")
-    hrp = character:WaitForChild("HumanoidRootPart")
-
-    local oldAttachment = hrp:FindFirstChild("IKAROFlyAttachment")
-    if oldAttachment then
-        oldAttachment:Destroy()
-    end
+    humanoid = char:WaitForChild("Humanoid")
+    hrp = char:WaitForChild("HumanoidRootPart")
 
     local oldVelocity = hrp:FindFirstChild("IKAROFlyVelocity")
     if oldVelocity then
         oldVelocity:Destroy()
+    end
+
+    local oldAttachment = hrp:FindFirstChild("IKAROFlyAttachment")
+    if oldAttachment then
+        oldAttachment:Destroy()
     end
 
     attachment = Instance.new("Attachment")
@@ -49,15 +52,18 @@ local function configurarPersonagem(char)
     linearVelocity.Attachment0 = attachment
     linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
     linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
-    linearVelocity.ForceLimitsEnabled = false
-    linearVelocity.VectorVelocity = Vector3.zero
+    linearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
+
+    -- Compatibilidade entre ambientes/versões
+    pcall(function()
+        linearVelocity.ForceLimitsEnabled = false
+    end)
+
     linearVelocity.Enabled = false
     linearVelocity.Parent = hrp
 end
 
-configurarPersonagem(
-    player.Character or player.CharacterAdded:Wait()
-)
+configurarPersonagem(player.Character or player.CharacterAdded:Wait())
 
 player.CharacterAdded:Connect(function(char)
     voando = false
@@ -65,26 +71,27 @@ player.CharacterAdded:Connect(function(char)
     configurarPersonagem(char)
 end)
 
-local playerGui = player:WaitForChild("PlayerGui")
+-- =========================================================
+-- REMOVE GUI ANTIGA
+-- =========================================================
 
-local antigaGui = playerGui:FindFirstChild("IKAROhubGui")
-if antigaGui then
-    antigaGui:Destroy()
+local guiAntiga = playerGui:FindFirstChild("IKAROhubGui")
+if guiAntiga then
+    guiAntiga:Destroy()
 end
 
--- ================================================
+-- =========================================================
 -- INTERFACE
--- ================================================
+-- =========================================================
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "IKAROhubGui"
 screenGui.ResetOnSpawn = false
-screenGui.IgnoreGuiInset = false
 screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 260, 0, 390)
+mainFrame.Size = UDim2.new(0, 270, 0, 410)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 mainFrame.BorderSizePixel = 0
@@ -92,20 +99,18 @@ mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = mainFrame
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 8)
+mainCorner.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, 0, 0, 35)
-titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.Size = UDim2.new(1, 0, 0, 36)
 titleLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 titleLabel.BorderSizePixel = 0
 titleLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
 titleLabel.TextSize = 16
 titleLabel.Font = Enum.Font.SourceSansBold
-titleLabel.Text = "⚡ IKAROhub"
+titleLabel.Text = "IKAROhub"
 titleLabel.Parent = mainFrame
 
 local titleCorner = Instance.new("UICorner")
@@ -113,51 +118,64 @@ titleCorner.CornerRadius = UDim.new(0, 8)
 titleCorner.Parent = titleLabel
 
 local flyButton = Instance.new("TextButton")
-flyButton.Name = "FlyButton"
-flyButton.Size = UDim2.new(0.9, 0, 0, 40)
+flyButton.Size = UDim2.new(0.9, 0, 0, 38)
 flyButton.Position = UDim2.new(0.05, 0, 0, 50)
 flyButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 flyButton.BorderSizePixel = 0
 flyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-flyButton.TextSize = 14
 flyButton.Font = Enum.Font.SourceSansBold
+flyButton.TextSize = 14
 flyButton.Text = "Voo: DESATIVADO (F)"
 flyButton.Parent = mainFrame
 
-local flyButtonCorner = Instance.new("UICorner")
-flyButtonCorner.CornerRadius = UDim.new(0, 6)
-flyButtonCorner.Parent = flyButton
+local flyCorner = Instance.new("UICorner")
+flyCorner.CornerRadius = UDim.new(0, 6)
+flyCorner.Parent = flyButton
 
 local npcToggleButton = Instance.new("TextButton")
-npcToggleButton.Name = "NPCToggleButton"
 npcToggleButton.Size = UDim2.new(0.9, 0, 0, 35)
-npcToggleButton.Position = UDim2.new(0.05, 0, 0, 100)
-npcToggleButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
+npcToggleButton.Position = UDim2.new(0.05, 0, 0, 98)
+npcToggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
 npcToggleButton.BorderSizePixel = 0
 npcToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-npcToggleButton.TextSize = 13
 npcToggleButton.Font = Enum.Font.SourceSansBold
-npcToggleButton.Text = "Andar até NPC: ATIVADO"
+npcToggleButton.TextSize = 13
+npcToggleButton.Text = "Andar até NPC: DESATIVADO"
 npcToggleButton.Parent = mainFrame
 
-local npcToggleCorner = Instance.new("UICorner")
-npcToggleCorner.CornerRadius = UDim.new(0, 6)
-npcToggleCorner.Parent = npcToggleButton
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 6)
+toggleCorner.Parent = npcToggleButton
+
+local refreshButton = Instance.new("TextButton")
+refreshButton.Size = UDim2.new(0.9, 0, 0, 30)
+refreshButton.Position = UDim2.new(0.05, 0, 0, 143)
+refreshButton.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+refreshButton.BorderSizePixel = 0
+refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshButton.Font = Enum.Font.SourceSansBold
+refreshButton.TextSize = 13
+refreshButton.Text = "Atualizar lista de NPCs"
+refreshButton.Parent = mainFrame
+
+local refreshCorner = Instance.new("UICorner")
+refreshCorner.CornerRadius = UDim.new(0, 6)
+refreshCorner.Parent = refreshButton
 
 local npcTitle = Instance.new("TextLabel")
-npcTitle.Size = UDim2.new(0.9, 0, 0, 25)
-npcTitle.Position = UDim2.new(0.05, 0, 0, 145)
+npcTitle.Size = UDim2.new(0.9, 0, 0, 24)
+npcTitle.Position = UDim2.new(0.05, 0, 0, 181)
 npcTitle.BackgroundTransparency = 1
 npcTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-npcTitle.TextSize = 14
 npcTitle.Font = Enum.Font.SourceSansBold
+npcTitle.TextSize = 14
 npcTitle.Text = "NPCs encontrados"
 npcTitle.Parent = mainFrame
 
 local npcList = Instance.new("ScrollingFrame")
 npcList.Name = "NPCList"
 npcList.Size = UDim2.new(0.9, 0, 0, 185)
-npcList.Position = UDim2.new(0.05, 0, 0, 175)
+npcList.Position = UDim2.new(0.05, 0, 0, 210)
 npcList.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 npcList.BorderSizePixel = 0
 npcList.ScrollBarThickness = 5
@@ -168,22 +186,22 @@ local listCorner = Instance.new("UICorner")
 listCorner.CornerRadius = UDim.new(0, 6)
 listCorner.Parent = npcList
 
-local layout = Instance.new("UIListLayout")
-layout.Padding = UDim.new(0, 5)
-layout.Parent = npcList
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 5)
+listLayout.Parent = npcList
 
-local padding = Instance.new("UIPadding")
-padding.PaddingTop = UDim.new(0, 5)
-padding.PaddingBottom = UDim.new(0, 5)
-padding.PaddingLeft = UDim.new(0, 5)
-padding.PaddingRight = UDim.new(0, 5)
-padding.Parent = npcList
+local listPadding = Instance.new("UIPadding")
+listPadding.PaddingTop = UDim.new(0, 5)
+listPadding.PaddingBottom = UDim.new(0, 5)
+listPadding.PaddingLeft = UDim.new(0, 5)
+listPadding.PaddingRight = UDim.new(0, 5)
+listPadding.Parent = npcList
 
--- ================================================
--- LÓGICA DO VOO
--- ================================================
+-- =========================================================
+-- FLY
+-- =========================================================
 
-local function atualizarBotaoVoo()
+local function atualizarFlyButton()
     if voando then
         flyButton.Text = "Voo: ATIVADO (F)"
         flyButton.BackgroundColor3 = Color3.fromRGB(40, 180, 80)
@@ -194,7 +212,7 @@ local function atualizarBotaoVoo()
 end
 
 local function alternarVoo()
-    if not character or not hrp or not linearVelocity then
+    if not linearVelocity or not linearVelocity.Parent then
         return
     end
 
@@ -202,16 +220,16 @@ local function alternarVoo()
     linearVelocity.Enabled = voando
 
     if not voando then
-        linearVelocity.VectorVelocity = Vector3.zero
+        linearVelocity.VectorVelocity = Vector3.new(0, 0, 0)
     end
 
-    atualizarBotaoVoo()
+    atualizarFlyButton()
 end
 
 flyButton.MouseButton1Click:Connect(alternarVoo)
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then
+UserInputService.InputBegan:Connect(function(input, processado)
+    if processado then
         return
     end
 
@@ -221,41 +239,37 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 RunService.RenderStepped:Connect(function()
-    if not voando then
-        return
+    if voando and linearVelocity and linearVelocity.Parent then
+        camera = workspace.CurrentCamera
+
+        if camera then
+            linearVelocity.VectorVelocity =
+                camera.CFrame.LookVector * velocidadeVoo
+        end
     end
-
-    if not linearVelocity or not linearVelocity.Parent then
-        return
-    end
-
-    camera = workspace.CurrentCamera
-
-    if not camera then
-        return
-    end
-
-    linearVelocity.VectorVelocity =
-        camera.CFrame.LookVector * velocidadeVoo
 end)
 
--- ================================================
--- LÓGICA DOS NPCs
--- ================================================
+-- =========================================================
+-- NPC
+-- =========================================================
 
 local function pegarRoot(model)
+    if not model then
+        return nil
+    end
+
     return model:FindFirstChild("HumanoidRootPart")
-        or model:FindFirstChild("Torso")
         or model:FindFirstChild("UpperTorso")
+        or model:FindFirstChild("Torso")
+        or model.PrimaryPart
 end
 
-local function ehPersonagemDeJogador(model)
+local function ehJogador(model)
     return Players:GetPlayerFromCharacter(model) ~= nil
 end
 
-local function pararMovimentoNPC()
+local function pararMovimento()
     cancelToken = cancelToken + 1
-    npcSelecionado = nil
 
     if humanoid and hrp then
         humanoid:MoveTo(hrp.Position)
@@ -271,7 +285,7 @@ npcToggleButton.MouseButton1Click:Connect(function()
     else
         npcToggleButton.Text = "Andar até NPC: DESATIVADO"
         npcToggleButton.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-        pararMovimentoNPC()
+        pararMovimento()
     end
 end)
 
@@ -280,49 +294,47 @@ local function irAteNPC(npc)
         return
     end
 
-    if not character or not humanoid or not hrp then
-        return
-    end
-
     if not npc or not npc.Parent then
         return
     end
 
-    local npcRoot = pegarRoot(npc)
-
-    if not npcRoot then
-        warn("NPC sem RootPart:", npc.Name)
+    if not character or not humanoid or not hrp then
         return
     end
 
-    npcSelecionado = npc
+    local npcRoot = pegarRoot(npc)
+    if not npcRoot then
+        warn("IKAROhub: NPC sem RootPart:", npc.Name)
+        return
+    end
 
     cancelToken = cancelToken + 1
-    local meuToken = cancelToken
+    local tokenAtual = cancelToken
 
     local path = PathfindingService:CreatePath({
         AgentRadius = 2,
         AgentHeight = 5,
-        AgentCanJump = true,
-        AgentCanClimb = true
+        AgentCanJump = true
     })
 
-    local sucesso, erro = pcall(function()
+    local ok, erro = pcall(function()
         path:ComputeAsync(hrp.Position, npcRoot.Position)
     end)
 
-    if not sucesso then
-        warn("Erro no path:", erro)
+    if not ok then
+        warn("IKAROhub: erro no Pathfinding:", erro)
         return
     end
 
     if path.Status ~= Enum.PathStatus.Success then
-        warn("Não foi possível criar caminho até:", npc.Name)
+        warn("IKAROhub: caminho não encontrado para:", npc.Name)
         return
     end
 
-    for _, waypoint in ipairs(path:GetWaypoints()) do
-        if meuToken ~= cancelToken then
+    local waypoints = path:GetWaypoints()
+
+    for _, waypoint in ipairs(waypoints) do
+        if tokenAtual ~= cancelToken then
             return
         end
 
@@ -334,10 +346,6 @@ local function irAteNPC(npc)
             return
         end
 
-        if not npc or not npc.Parent then
-            return
-        end
-
         if waypoint.Action == Enum.PathWaypointAction.Jump then
             humanoid.Jump = true
         end
@@ -346,87 +354,113 @@ local function irAteNPC(npc)
 
         local chegou = humanoid.MoveToFinished:Wait()
 
-        if meuToken ~= cancelToken then
+        if tokenAtual ~= cancelToken then
             return
         end
 
         if not chegou then
-            break
+            return
         end
     end
 end
 
 local function criarBotaoNPC(npc)
     local button = Instance.new("TextButton")
-    button.Name = "NPC_" .. npc.Name
+    button.Name = "NPCButton"
     button.Size = UDim2.new(1, -10, 0, 32)
     button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
     button.BorderSizePixel = 0
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.TextSize = 13
     button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 13
     button.Text = npc.Name
     button.Parent = npcList
 
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 5)
-    buttonCorner.Parent = button
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 5)
+    c.Parent = button
 
     button.MouseButton1Click:Connect(function()
-        if movimentoNPCAtivado then
-            task.spawn(function()
+        if not movimentoNPCAtivado then
+            warn("IKAROhub: ative 'Andar até NPC' primeiro.")
+            return
+        end
+
+        task.spawn(function()
+            local ok, erro = pcall(function()
                 irAteNPC(npc)
             end)
-        end
+
+            if not ok then
+                warn("IKAROhub: erro ao andar até NPC:", erro)
+            end
+        end)
     end)
 end
 
-local function atualizarListaNPCs()
+local function limparListaNPCs()
     for _, child in ipairs(npcList:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
         end
     end
+end
 
-    local encontrados = {}
-
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            local humanoidNPC = obj:FindFirstChildOfClass("Humanoid")
-            local root = pegarRoot(obj)
-            local jogador = ehPersonagemDeJogador(obj)
-
-            if humanoidNPC
-                and root
-                and not jogador
-                and obj ~= character
-                and not encontrados[obj] then
-
-                encontrados[obj] = true
-                criarBotaoNPC(obj)
-            end
-        end
-    end
-
-    task.wait()
-
+local function atualizarCanvas()
     npcList.CanvasSize = UDim2.new(
         0,
         0,
         0,
-        layout.AbsoluteContentSize.Y + 10
+        listLayout.AbsoluteContentSize.Y + 10
     )
 end
 
-layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    npcList.CanvasSize = UDim2.new(
-        0,
-        0,
-        0,
-        layout.AbsoluteContentSize.Y + 10
-    )
+local function atualizarListaNPCs()
+    limparListaNPCs()
+    npcTitle.Text = "Procurando NPCs..."
+
+    local encontrados = {}
+    local quantidade = 0
+
+    local ok, erro = pcall(function()
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Model")
+                and obj ~= character
+                and not ehJogador(obj)
+                and not encontrados[obj] then
+
+                local npcHumanoid = obj:FindFirstChildOfClass("Humanoid")
+                local root = pegarRoot(obj)
+
+                if npcHumanoid and root then
+                    encontrados[obj] = true
+                    quantidade = quantidade + 1
+                    criarBotaoNPC(obj)
+                end
+            end
+        end
+    end)
+
+    if not ok then
+        warn("IKAROhub: erro ao procurar NPCs:", erro)
+        npcTitle.Text = "Erro ao procurar NPCs"
+        return
+    end
+
+    npcTitle.Text = "NPCs encontrados: " .. tostring(quantidade)
+    atualizarCanvas()
+end
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(atualizarCanvas)
+
+refreshButton.MouseButton1Click:Connect(function()
+    task.spawn(atualizarListaNPCs)
 end)
 
-atualizarListaNPCs()
+-- Faz a busca depois da interface aparecer, para evitar travar o carregamento.
+task.spawn(function()
+    task.wait(0.5)
+    atualizarListaNPCs()
+end)
 
 print("IKAROhub carregado com sucesso!")
