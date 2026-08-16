@@ -1,3 +1,21 @@
+--[[
+    IKARO LEVIATHAN - TEST BUILD v2
+
+    Nesta versão:
+    - Interface reorganizada e mais próxima do estilo mostrado pelo usuário.
+    - Dropdown real para escolher Owner Boat.
+    - Refresh List Player.
+    - Account Buy Boat.
+    - Start Hunt Leviathan.
+    - Follow corrigido: mantém altura e vai em linha reta até o owner.
+    - Detector simples de Leviathan.
+    - Aba Skills organizada.
+
+    Ainda NÃO compra o Beast Hunter automaticamente.
+    Esse botão apenas marca esta conta como principal/compradora
+    até mapearmos a ação real de compra do jogo.
+]]
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -38,9 +56,12 @@ local OwnerPlayer = nil
 local AccountBuyBoat = false
 
 local FollowConnection = nil
-local FollowSpeed = 190
+local FollowSpeed = 220
 local FollowHeight = 22
 local FollowBack = 8
+local FollowSpeedFar = 300
+local FollowSpeedMid = 250
+local FollowSpeedNear = 190
 
 -- =========================================================
 -- SURVIVAL / LOW HP ESCAPE
@@ -66,347 +87,13 @@ local EscapeBodyGyro = nil
 local EscapeConnection = nil
 
 -- =========================================================
--- WATER WALK
+-- WATER WALK v3
+-- Método simples e robusto baseado no source analisado:
+-- uma plataforma invisível grande acompanha X/Z do jogador em Y=0.
 -- =========================================================
 
-local WaterWalkEnabled = true
-local WaterPlatform = nil
-local WaterWalkConnection = nil
-
--- =========================================================
--- SEA EVENTS
--- =========================================================
-
-local SeaEventsSelected = {
-    SeaBeast = true,
-    Ship = false,
-    Shark = true,
-    Terrorshark = true,
-    Piranha = false
-}
-
-local SeaEventNames = {
-    SeaBeast = {"Sea Beast", "SeaBeast"},
-    Ship = {"Ship Raid", "Ship", "Pirate Ship", "Marine Ship"},
-    Shark = {"Shark"},
-    Terrorshark = {"Terrorshark", "Terror Shark"},
-    Piranha = {"Piranha"}
-}
-
-local CurrentSeaEventTarget = nil
-
-local savedCollisions = {}
-
-local CombatConfig = {
-    Type = "Melee",
-
-    Melee = {
-        Selected = {Z = true, X = true, C = true},
-        Hold = {Z = 0.5, X = 0.5, C = 0.5}
-    },
-
-    Sword = {
-        Selected = {Z = true, X = true},
-        Hold = {Z = 0.5, X = 0.5}
-    },
-
-    Gun = {
-        Selected = {Z = true, X = true},
-        Hold = {Z = 0.5, X = 0.5}
-    },
-
-    Fruit = {
-        Selected = {Z = true, X = true, C = true, V = true, F = true},
-        Hold = {Z = 0.5, X = 0.5, C = 0.5, V = 0.5, F = 0.5}
-    }
-}
-
--- =========================================================
--- GUI ROOT
--- =========================================================
-
-local old = PlayerGui:FindFirstChild("IKARO_Leviathan")
-if old then
-    old:Destroy()
-end
-
-local Gui = Instance.new("ScreenGui")
-Gui.Name = "IKARO_Leviathan"
-Gui.ResetOnSpawn = false
-Gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Gui.Parent = PlayerGui
-
-local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 500, 0, 355)
-Main.Position = UDim2.new(0.04, 0, 0.16, 0)
-Main.BackgroundColor3 = Color3.fromRGB(31, 31, 33)
-Main.BorderSizePixel = 0
-Main.Active = true
-Main.Draggable = true
-Main.Parent = Gui
-
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 8)
-MainCorner.Parent = Main
-
-local Top = Instance.new("Frame")
-Top.Size = UDim2.new(1, 0, 0, 38)
-Top.BackgroundColor3 = Color3.fromRGB(36, 36, 39)
-Top.BorderSizePixel = 0
-Top.Parent = Main
-
-local TopCorner = Instance.new("UICorner")
-TopCorner.CornerRadius = UDim.new(0, 8)
-TopCorner.Parent = Top
-
-local AppTitle = Instance.new("TextLabel")
-AppTitle.Size = UDim2.new(1, -20, 1, 0)
-AppTitle.Position = UDim2.new(0, 12, 0, 0)
-AppTitle.BackgroundTransparency = 1
-AppTitle.TextXAlignment = Enum.TextXAlignment.Left
-AppTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
-AppTitle.Font = Enum.Font.SourceSansBold
-AppTitle.TextSize = 14
-AppTitle.Text = "IKARO Leviathan [Test]"
-AppTitle.Parent = Top
-
-local Sidebar = Instance.new("Frame")
-Sidebar.Size = UDim2.new(0, 145, 1, -48)
-Sidebar.Position = UDim2.new(0, 8, 0, 44)
-Sidebar.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = Main
-
-local SideCorner = Instance.new("UICorner")
-SideCorner.CornerRadius = UDim.new(0, 7)
-SideCorner.Parent = Sidebar
-
-local PageHost = Instance.new("Frame")
-PageHost.Size = UDim2.new(1, -169, 1, -48)
-PageHost.Position = UDim2.new(0, 161, 0, 44)
-PageHost.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
-PageHost.BorderSizePixel = 0
-PageHost.Parent = Main
-
-local PageCorner = Instance.new("UICorner")
-PageCorner.CornerRadius = UDim.new(0, 7)
-PageCorner.Parent = PageHost
-
-local Pages = {}
-local TabButtons = {}
-
-local function NewPage(name)
-    local page = Instance.new("ScrollingFrame")
-    page.Name = name
-    page.Size = UDim2.new(1, -12, 1, -12)
-    page.Position = UDim2.new(0, 6, 0, 6)
-    page.BackgroundTransparency = 1
-    page.BorderSizePixel = 0
-    page.ScrollBarThickness = 4
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-    page.Visible = false
-    page.Parent = PageHost
-
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 6)
-    layout.Parent = page
-
-    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 8)
-    end)
-
-    Pages[name] = page
-    return page
-end
-
-local HuntPage = NewPage("Hunt")
-local SkillsPage = NewPage("Skills")
-
-local function ShowPage(name)
-    for pageName, page in pairs(Pages) do
-        page.Visible = (pageName == name)
-    end
-
-    for tabName, btn in pairs(TabButtons) do
-        if tabName == name then
-            btn.BackgroundColor3 = Color3.fromRGB(48, 48, 52)
-            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        else
-            btn.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
-            btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-        end
-    end
-end
-
-local function NewTab(name, text, y)
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -12, 0, 42)
-    b.Position = UDim2.new(0, 6, 0, y)
-    b.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
-    b.BorderSizePixel = 0
-    b.TextColor3 = Color3.fromRGB(200, 200, 200)
-    b.Font = Enum.Font.SourceSans
-    b.TextSize = 12
-    b.TextWrapped = true
-    b.TextXAlignment = Enum.TextXAlignment.Left
-    b.Text = "  " .. text
-    b.Parent = Sidebar
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = b
-
-    TabButtons[name] = b
-
-    b.MouseButton1Click:Connect(function()
-        ShowPage(name)
-    end)
-end
-
-NewTab("Hunt", "Tab Setup Hunt Leviathan", 8)
-NewTab("Skills", "Setting Hold\nand Select Skill", 54)
-
--- =========================================================
--- UI HELPERS
--- =========================================================
-
-local function SectionTitle(parent, text)
-    local t = Instance.new("TextLabel")
-    t.Size = UDim2.new(1, 0, 0, 38)
-    t.BackgroundTransparency = 1
-    t.TextColor3 = Color3.fromRGB(245, 245, 245)
-    t.Font = Enum.Font.SourceSansBold
-    t.TextSize = 22
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    t.Text = text
-    t.Parent = parent
-    return t
-end
-
-local function Row(parent, height)
-    local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, 0, 0, height or 42)
-    f.BackgroundColor3 = Color3.fromRGB(46, 46, 49)
-    f.BorderSizePixel = 0
-    f.ClipsDescendants = false
-    f.Parent = parent
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 5)
-    c.Parent = f
-
-    return f
-end
-
-local function RowLabel(row, text)
-    local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(0.5, -8, 1, 0)
-    l.Position = UDim2.new(0, 10, 0, 0)
-    l.BackgroundTransparency = 1
-    l.TextColor3 = Color3.fromRGB(230, 230, 230)
-    l.Font = Enum.Font.SourceSans
-    l.TextSize = 13
-    l.TextWrapped = true
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Text = text
-    l.Parent = row
-    return l
-end
-
-local function SimpleButton(parent, text, callback)
-    local row = Row(parent, 40)
-
-    local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, 0, 1, 0)
-    b.BackgroundTransparency = 1
-    b.TextColor3 = Color3.fromRGB(235, 235, 235)
-    b.TextXAlignment = Enum.TextXAlignment.Left
-    b.Font = Enum.Font.SourceSans
-    b.TextSize = 13
-    b.Text = "  " .. text
-    b.Parent = row
-
-    local arrow = Instance.new("TextLabel")
-    arrow.Size = UDim2.new(0, 22, 1, 0)
-    arrow.Position = UDim2.new(1, -28, 0, 0)
-    arrow.BackgroundTransparency = 1
-    arrow.TextColor3 = Color3.fromRGB(210, 210, 210)
-    arrow.Font = Enum.Font.SourceSansBold
-    arrow.TextSize = 18
-    arrow.Text = "›"
-    arrow.Parent = row
-
-    b.MouseButton1Click:Connect(callback)
-    return row
-end
-
-local function ToggleRow(parent, text, initial, callback)
-    local value = initial
-    local row = Row(parent, 40)
-
-    RowLabel(row, text)
-
-    local track = Instance.new("TextButton")
-    track.Size = UDim2.new(0, 42, 0, 22)
-    track.Position = UDim2.new(1, -52, 0.5, -11)
-    track.BackgroundColor3 = value and Color3.fromRGB(70, 130, 95) or Color3.fromRGB(70, 70, 73)
-    track.BorderSizePixel = 0
-    track.Text = ""
-    track.Parent = row
-
-    local tc = Instance.new("UICorner")
-    tc.CornerRadius = UDim.new(1, 0)
-    tc.Parent = track
-
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 18, 0, 18)
-    knob.Position = value and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
-    knob.BackgroundColor3 = Color3.fromRGB(210, 210, 210)
-    knob.BorderSizePixel = 0
-    knob.Parent = track
-
-    local kc = Instance.new("UICorner")
-    kc.CornerRadius = UDim.new(1, 0)
-    kc.Parent = knob
-
-    track.MouseButton1Click:Connect(function()
-        value = not value
-        track.BackgroundColor3 = value and Color3.fromRGB(70, 130, 95) or Color3.fromRGB(70, 70, 73)
-        knob.Position = value and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
-        callback(value)
-    end)
-
-    return row
-end
-
--- =========================================================
--- STATUS
--- =========================================================
-
-local StatusRow = Row(HuntPage, 46)
-local StatusLabel = Instance.new("TextLabel")
-StatusLabel.Size = UDim2.new(1, -20, 1, 0)
-StatusLabel.Position = UDim2.new(0, 10, 0, 0)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.TextColor3 = Color3.fromRGB(215, 215, 215)
-StatusLabel.Font = Enum.Font.SourceSans
-StatusLabel.TextSize = 12
-StatusLabel.TextWrapped = true
-StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-StatusLabel.Text = "Status: IDLE"
-StatusLabel.Parent = StatusRow
-
-local function SetState(state, message)
-    State = state
-    StatusLabel.Text = "Status: " .. state .. (message and ("\n" .. message) or "")
-    print("[IKARO Leviathan]", state, message or "")
-end
-
--- =========================================================
--- WATER WALK
--- Cria uma plataforma local sobre a superfície da água.
--- Serve para evitar o personagem afundar enquanto estiver sobre o mar.
--- =========================================================
+local WATER_Y = 0
+local WATER_PLATFORM_SIZE = 500
 
 local function DestroyWaterPlatform()
     if WaterPlatform then
@@ -418,48 +105,42 @@ local function DestroyWaterPlatform()
 end
 
 local function EnsureWaterPlatform()
-    if not WaterWalkEnabled or not HRP or not Character then
+    if not WaterWalkEnabled or not HRP or not HRP.Parent then
         DestroyWaterPlatform()
         return
     end
 
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {Character}
-    params.IgnoreWater = false
-
-    local result = workspace:Raycast(
-        HRP.Position + Vector3.new(0, 3, 0),
-        Vector3.new(0, -80, 0),
-        params
-    )
-
-    if result and result.Material == Enum.Material.Water then
-        if not WaterPlatform or not WaterPlatform.Parent then
-            WaterPlatform = Instance.new("Part")
-            WaterPlatform.Name = "IKAROWaterWalk"
-            WaterPlatform.Size = Vector3.new(10, 1, 10)
-            WaterPlatform.Anchored = true
-            WaterPlatform.CanCollide = true
-            WaterPlatform.Transparency = 1
-            WaterPlatform.Parent = workspace
-        end
-
-        WaterPlatform.CFrame = CFrame.new(
-            HRP.Position.X,
-            result.Position.Y + 1.8,
-            HRP.Position.Z
+    if not WaterPlatform or not WaterPlatform.Parent then
+        WaterPlatform = Instance.new("Part")
+        WaterPlatform.Name = "IKARO_WaterWalk"
+        WaterPlatform.Size = Vector3.new(
+            WATER_PLATFORM_SIZE,
+            1,
+            WATER_PLATFORM_SIZE
         )
-    else
-        DestroyWaterPlatform()
+        WaterPlatform.Anchored = true
+        WaterPlatform.Transparency = 1
+        WaterPlatform.CanCollide = true
+        WaterPlatform.CanTouch = false
+        WaterPlatform.CanQuery = false
+        WaterPlatform.Parent = workspace
     end
+
+    WaterPlatform.CFrame = CFrame.new(
+        HRP.Position.X,
+        WATER_Y,
+        HRP.Position.Z
+    )
 end
 
-WaterWalkConnection = RunService.Heartbeat:Connect(function()
-    if WaterWalkEnabled then
-        pcall(EnsureWaterPlatform)
-    else
-        DestroyWaterPlatform()
+task.spawn(function()
+    while Gui and Gui.Parent do
+        if WaterWalkEnabled then
+            pcall(EnsureWaterPlatform)
+        else
+            DestroyWaterPlatform()
+        end
+        task.wait(0.1)
     end
 end)
 
@@ -827,29 +508,54 @@ UpdateSeaEventButtonText()
 
 
 -- =========================================================
--- FOLLOW OWNER - VOO REAL ATÉ O OWNER
+-- FOLLOW OWNER - SMOOTH v3
 --
--- IMPORTANTE:
--- Esta versão NÃO usa CFrame para "puxar" o seguidor até o owner.
--- Ela usa BodyVelocity para o personagem voar fisicamente em linha reta.
--- Isso reduz o efeito de rollback causado por teleporte/CFrame contínuo.
+-- Correção da "lagadinha":
+-- A versão anterior revarria todas as partes do personagem a cada Heartbeat.
+-- Agora as partes são cacheadas e o controle de voo só atualiza a velocidade.
 -- =========================================================
 
 local FollowBodyVelocity = nil
 local FollowBodyGyro = nil
+local FollowParts = {}
+
+local function CacheFollowParts()
+    FollowParts = {}
+
+    if not Character then
+        return
+    end
+
+    for _, obj in ipairs(Character:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            table.insert(FollowParts, obj)
+
+            if savedCollisions[obj] == nil then
+                savedCollisions[obj] = obj.CanCollide
+            end
+        end
+    end
+end
+
+local function SetFollowNoclip()
+    for _, part in ipairs(FollowParts) do
+        if part and part.Parent then
+            part.CanCollide = false
+        end
+    end
+end
 
 local function RestoreFollowPhysics()
-    if Character then
-        for part, oldValue in pairs(savedCollisions) do
-            if part and part.Parent then
-                pcall(function()
-                    part.CanCollide = oldValue
-                end)
-            end
+    for part, oldValue in pairs(savedCollisions) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = oldValue
+            end)
         end
     end
 
     savedCollisions = {}
+    FollowParts = {}
 
     if FollowBodyVelocity then
         pcall(function()
@@ -885,15 +591,8 @@ local function ApplyFollowPhysics()
         return
     end
 
-    -- Noclip durante o voo.
-    for _, obj in ipairs(Character:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            if savedCollisions[obj] == nil then
-                savedCollisions[obj] = obj.CanCollide
-            end
-            obj.CanCollide = false
-        end
-    end
+    CacheFollowParts()
+    SetFollowNoclip()
 
     if Humanoid then
         pcall(function()
@@ -902,24 +601,20 @@ local function ApplyFollowPhysics()
         end)
     end
 
-    if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
-        FollowBodyVelocity = Instance.new("BodyVelocity")
-        FollowBodyVelocity.Name = "IKAROFollowVelocity"
-        FollowBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-        FollowBodyVelocity.P = 9000
-        FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        FollowBodyVelocity.Parent = HRP
-    end
+    FollowBodyVelocity = Instance.new("BodyVelocity")
+    FollowBodyVelocity.Name = "IKAROFollowVelocity"
+    FollowBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    FollowBodyVelocity.P = 11000
+    FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    FollowBodyVelocity.Parent = HRP
 
-    if not FollowBodyGyro or not FollowBodyGyro.Parent then
-        FollowBodyGyro = Instance.new("BodyGyro")
-        FollowBodyGyro.Name = "IKAROFollowGyro"
-        FollowBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-        FollowBodyGyro.P = 12000
-        FollowBodyGyro.D = 700
-        FollowBodyGyro.CFrame = HRP.CFrame
-        FollowBodyGyro.Parent = HRP
-    end
+    FollowBodyGyro = Instance.new("BodyGyro")
+    FollowBodyGyro.Name = "IKAROFollowGyro"
+    FollowBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    FollowBodyGyro.P = 13000
+    FollowBodyGyro.D = 900
+    FollowBodyGyro.CFrame = HRP.CFrame
+    FollowBodyGyro.Parent = HRP
 end
 
 local function StopFollow()
@@ -940,8 +635,7 @@ local function StartFollowOwner()
 
     ApplyFollowPhysics()
 
-    local lastDistance = nil
-    local rollbackCount = 0
+    local nextNoclipRefresh = 0
 
     FollowConnection = RunService.Heartbeat:Connect(function()
         if not Running or EscapeActive then
@@ -956,13 +650,19 @@ local function StartFollowOwner()
         local ownerHRP = ownerChar and ownerChar:FindFirstChild("HumanoidRootPart")
 
         if not ownerHRP then
-            FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            if FollowBodyVelocity then
+                FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
             return
         end
 
-        ApplyFollowPhysics()
+        -- Reaplica noclip só 5x/s, não em todo frame.
+        local now = os.clock()
+        if now >= nextNoclipRefresh then
+            SetFollowNoclip()
+            nextNoclipRefresh = now + 0.20
+        end
 
-        -- Ponto-alvo: um pouco atrás e acima do jogador principal.
         local target =
             ownerHRP.Position
             - ownerHRP.CFrame.LookVector * FollowBack
@@ -971,56 +671,40 @@ local function StartFollowOwner()
         local delta = target - HRP.Position
         local distance = delta.Magnitude
 
-        if distance > 10 then
+        if distance > 9 then
             local direction = delta.Unit
+            local dynamicSpeed = FollowSpeedNear
 
-            -- Voo real com velocidade constante.
-            -- Sem teleporte, sem CFrame de posição.
-            FollowBodyVelocity.Velocity = direction * FollowSpeed
+            if distance > 1000 then
+                dynamicSpeed = FollowSpeedFar
+            elseif distance > 300 then
+                dynamicSpeed = FollowSpeedMid
+            else
+                dynamicSpeed = FollowSpeedNear
+            end
 
-            -- Faz o corpo olhar para a direção do voo.
+            FollowBodyVelocity.Velocity =
+                direction * dynamicSpeed
+
             FollowBodyGyro.CFrame = CFrame.new(
                 HRP.Position,
                 HRP.Position + direction
             )
         else
-            -- Quando chega perto, acompanha a velocidade do owner
-            -- sem ficar tentando corrigir a posição agressivamente.
-            local ownerVelocity = ownerHRP.AssemblyLinearVelocity
-            local correction = delta * 2.2
+            -- Perto do owner, acompanha a velocidade dele e faz
+            -- uma correção suave, evitando microtravadas.
+            local correction = delta * 1.6
 
             FollowBodyVelocity.Velocity =
-                ownerVelocity + correction
+                ownerHRP.AssemblyLinearVelocity + correction
+
+            local look = ownerHRP.CFrame.LookVector
 
             FollowBodyGyro.CFrame = CFrame.new(
                 HRP.Position,
-                HRP.Position + ownerHRP.CFrame.LookVector
+                HRP.Position + look
             )
         end
-
-        -- Detector simples de rollback.
-        -- Se o servidor estiver devolvendo a conta repetidamente,
-        -- apenas reduz a velocidade; nunca teleporta.
-        if lastDistance then
-            if distance > lastDistance + 25 then
-                rollbackCount = rollbackCount + 1
-            else
-                rollbackCount = math.max(rollbackCount - 1, 0)
-            end
-
-            if rollbackCount >= 3 then
-                FollowSpeed = math.max(FollowSpeed * 0.75, 70)
-                rollbackCount = 0
-
-                SetState(
-                    "FOLLOW_OWNER",
-                    "Servidor corrigiu posição; reduzindo velocidade para " ..
-                    math.floor(FollowSpeed)
-                )
-            end
-        end
-
-        lastDistance = distance
     end)
 end
 
@@ -1275,6 +959,165 @@ local function FindLeviathan()
 end
 
 -- =========================================================
+-- BEAST HUNTER
+-- Diagnóstico confirmou:
+-- workspace.Boats["Beast Hunter"]
+-- workspace.Boats["Beast Hunter"].VehicleSeat   -> assento principal
+-- workspace.Boats["Beast Hunter"].Harpoon.Seat -> assento do arpão
+-- =========================================================
+
+local function GetBeastHunter()
+    local boats = workspace:FindFirstChild("Boats")
+    if not boats then
+        return nil
+    end
+
+    return boats:FindFirstChild("Beast Hunter")
+end
+
+local function GetBeastHunterMainSeat()
+    local boat = GetBeastHunter()
+    if not boat then
+        return nil
+    end
+
+    return boat:FindFirstChild("VehicleSeat")
+        or boat:FindFirstChildWhichIsA("VehicleSeat", true)
+end
+
+local function GetBeastHunterHarpoonSeat()
+    local boat = GetBeastHunter()
+    if not boat then
+        return nil
+    end
+
+    local harpoon = boat:FindFirstChild("Harpoon")
+    return harpoon and harpoon:FindFirstChild("Seat")
+end
+
+local function BuyBeastHunter()
+    local existing = GetBeastHunter()
+    if existing then
+        return true, existing
+    end
+
+    local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+    local comm = remotes and remotes:FindFirstChild("CommF_")
+
+    if not comm then
+        return false, "CommF_ não encontrado"
+    end
+
+    SetState("BUYING_BEAST_HUNTER", "Tentando comprar Beast Hunter...")
+
+    -- O padrão BuyBoat foi confirmado em outro source.
+    -- O diagnóstico confirmou o nome físico exato "Beast Hunter".
+    local ok, result = pcall(function()
+        return comm:InvokeServer("BuyBoat", "Beast Hunter")
+    end)
+
+    if not ok then
+        return false, tostring(result)
+    end
+
+    local timeout = os.clock() + 8
+    repeat
+        task.wait(0.2)
+        existing = GetBeastHunter()
+    until existing or os.clock() >= timeout
+
+    if existing then
+        return true, existing
+    end
+
+    return false, "Compra chamada, mas Beast Hunter não apareceu em Workspace.Boats"
+end
+
+local function FlyToPart(part, stopDistance)
+    if not part or not HRP then
+        return false
+    end
+
+    stopDistance = stopDistance or 8
+
+    local bodyVel = Instance.new("BodyVelocity")
+    bodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bodyVel.P = 10000
+    bodyVel.Parent = HRP
+
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bodyGyro.P = 12000
+    bodyGyro.D = 900
+    bodyGyro.Parent = HRP
+
+    local started = os.clock()
+
+    while Running and HRP and HRP.Parent and part and part.Parent do
+        local delta = part.Position - HRP.Position
+        local dist = delta.Magnitude
+
+        if dist <= stopDistance then
+            break
+        end
+
+        local dir = delta.Unit
+        local speed = dist > 1000 and 300 or dist > 300 and 250 or 190
+
+        bodyVel.Velocity = dir * speed
+        bodyGyro.CFrame = CFrame.new(HRP.Position, HRP.Position + dir)
+
+        if Humanoid then
+            Humanoid.PlatformStand = true
+        end
+
+        if os.clock() - started > 25 then
+            break
+        end
+
+        task.wait()
+    end
+
+    pcall(function() bodyVel:Destroy() end)
+    pcall(function() bodyGyro:Destroy() end)
+
+    if Humanoid then
+        Humanoid.PlatformStand = false
+    end
+
+    return part and part.Parent and HRP
+        and (part.Position - HRP.Position).Magnitude <= stopDistance + 5
+end
+
+local function GoToBeastHunterSeat()
+    local seat = GetBeastHunterMainSeat()
+
+    if not seat then
+        return false, "VehicleSeat principal não encontrado"
+    end
+
+    SetState("GOING_TO_BOAT", "Voando até o VehicleSeat do Beast Hunter.")
+
+    local arrived = FlyToPart(seat, 6)
+    if not arrived then
+        return false, "Não conseguiu chegar próximo ao assento"
+    end
+
+    -- tenta sentar sem teleportar
+    pcall(function()
+        seat:Sit(Humanoid)
+    end)
+
+    task.wait(0.6)
+
+    if Humanoid and Humanoid.Sit then
+        return true, seat
+    end
+
+    return false, "Chegou ao barco, mas não sentou"
+end
+
+-- =========================================================
 -- START HUNT
 -- =========================================================
 
@@ -1299,7 +1142,25 @@ local function StartHunt()
     Running = true
 
     if AccountBuyBoat then
-        SetState("MAIN_ACCOUNT", "Conta principal ativa. Compra automática do barco ainda não implementada.")
+        SetState("MAIN_ACCOUNT", "Conta principal ativa.")
+
+        task.spawn(function()
+            local okBuy, boatOrErr = BuyBeastHunter()
+
+            if not okBuy then
+                SetState("BUY_BOAT_ERROR", tostring(boatOrErr))
+                return
+            end
+
+            SetState("BEAST_HUNTER_READY", "Beast Hunter encontrado/comprado.")
+
+            local okSeat, seatOrErr = GoToBeastHunterSeat()
+            if okSeat then
+                SetState("BOAT_SEATED", "Conta principal sentada no VehicleSeat.")
+            else
+                SetState("BOAT_SEAT_ERROR", tostring(seatOrErr))
+            end
+        end)
     else
         SetState("FOLLOW_OWNER", "Seguindo " .. OwnerPlayer.Name)
         StartFollowOwner()
@@ -1362,6 +1223,84 @@ SimpleButton(HuntPage, "Scan Leviathan Now", function()
         SetState("NO_LEVIATHAN", "Nenhum Leviathan detectado.")
     end
 end)
+
+-- =========================================================
+-- EQUIP POR TIPO / SKILL INPUT
+-- =========================================================
+
+local function EquipByTooltip(category)
+    if not Character or not Humanoid then
+        return nil
+    end
+
+    local wanted = category
+    if category == "Fruit" then
+        wanted = "Blox Fruit"
+    end
+
+    local containers = {LocalPlayer.Backpack, Character}
+
+    for _, container in ipairs(containers) do
+        if container then
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") and tostring(tool.ToolTip) == wanted then
+                    pcall(function()
+                        Humanoid:EquipTool(tool)
+                    end)
+                    return tool
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+local VIM = nil
+pcall(function()
+    VIM = game:GetService("VirtualInputManager")
+end)
+
+local function UseConfiguredSkill(keyName, holdTime)
+    if not VIM then
+        return false
+    end
+
+    local key = Enum.KeyCode[keyName]
+    if not key then
+        return false
+    end
+
+    local ok = pcall(function()
+        VIM:SendKeyEvent(true, key, false, game)
+        task.wait(holdTime or 0.1)
+        VIM:SendKeyEvent(false, key, false, game)
+    end)
+
+    return ok
+end
+
+local function RunConfiguredCombatRotation()
+    local category = CombatConfig.Type
+    local cfg = CombatConfig[category]
+    if not cfg then
+        return
+    end
+
+    EquipByTooltip(category)
+
+    local order =
+        category == "Fruit" and {"Z","X","C","V","F"}
+        or category == "Melee" and {"Z","X","C"}
+        or {"Z","X"}
+
+    for _, key in ipairs(order) do
+        if cfg.Selected[key] then
+            UseConfiguredSkill(key, cfg.Hold[key] or 0.5)
+            task.wait(0.1)
+        end
+    end
+end
 
 -- =========================================================
 -- SKILLS PAGE
