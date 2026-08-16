@@ -452,42 +452,28 @@ do
     end)
 end
 
--- Aguarda especificamente o botao Marines aparecer na tela Pick a Side.
--- Depois de uma curta estabilizacao, faz poucas tentativas bem espacadas.
-do
-    task.spawn(function()
-        local mainGui = PlayerGui:WaitForChild("Main", 20)
-        local chooseTeam = mainGui and mainGui:WaitForChild("ChooseTeam", 20)
-        local container = chooseTeam and chooseTeam:WaitForChild("Container", 10)
-        local marines = container and container:WaitForChild("Marines", 10)
-        local button = marines and marines:FindFirstChild("TextButton", true)
+-- Espera a opcao Marines existir e faz somente uma selecao depois da tela
+-- estabilizar. Mantido simples para compatibilidade com os executores.
+task.spawn(function()
+    local marineOption
 
-        if button then
-            task.wait(3)
+    repeat
+        task.wait(1)
+        local mainGui = PlayerGui:FindFirstChild("Main")
+        local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam")
+        local container = chooseTeam and chooseTeam:FindFirstChild("Container")
+        marineOption = container and container:FindFirstChild("Marines")
+    until marineOption or LocalPlayer.Team
 
-            for attempt = 1, 3 do
-                local team = LocalPlayer.Team
-                if team and string.find(string.lower(team.Name), "marine", 1, true) then
-                    return
-                end
+    if LocalPlayer.Team then
+        return
+    end
 
-                pcall(function()
-                    if type(firesignal) == "function" then
-                        if attempt == 1 then
-                            firesignal(button.Activated)
-                        else
-                            firesignal(button.MouseButton1Click)
-                        end
-                    else
-                        button:Activate()
-                    end
-                end)
-
-                task.wait(4)
-            end
-        end
+    task.wait(3)
+    pcall(function()
+        ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
     end)
-end
+end)
 
 local Pages = {}
 local TabButtons = {}
