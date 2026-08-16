@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -2181,9 +2182,30 @@ local function GetModelTargetPart(model)
         return model
     end
 
-    return model:FindFirstChild("HumanoidRootPart")
+    local preferred = model:FindFirstChild("HumanoidRootPart", true)
+        or model:FindFirstChild("VehicleSeat", true)
+        or model:FindFirstChild("Engine", true)
+        or model:FindFirstChild("Root", true)
         or model.PrimaryPart
-        or model:FindFirstChildWhichIsA("BasePart", true)
+
+    if preferred and preferred:IsA("BasePart") then return preferred end
+
+    -- Em Pirate Brigade/Fish Boat nem sempre existe HRP. Usa a maior peça
+    -- física da assembly em vez de escolher um detalhe visual aleatório.
+    local bestPart = nil
+    local bestSize = -1
+    for _, part in ipairs(model:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local size = part.Size.X * part.Size.Y * part.Size.Z
+            if not part.Anchored then size = size + 1000000 end
+            if size > bestSize then
+                bestSize = size
+                bestPart = part
+            end
+        end
+    end
+
+    return bestPart
 end
 
 local function IsEventAlive(model)
@@ -2254,6 +2276,112 @@ local function ForceExitBoatForCombat()
     return not Humanoid.SeatPart
 end
 
+local function EnsureSeaCombatHaki()
+    if not Character or Character:FindFirstChild("HasBuso") then return true end
+
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local comm = remotes and remotes:FindFirstChild("CommF_")
+    if not comm then return false end
+
+    return pcall(function()
+        comm:InvokeServer("Buso")
+    end)
+end
+
+local function StartSeaEventFocus(eventModel, useBasicClick)
+    if not HRP or not Humanoid then return nil end
+
+    local oldPlatformStand = Humanoid.PlatformStand
+    local oldAutoRotate = Humanoid.AutoRotate
+    local collisionCache = {}
+
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
+    bodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bodyVelocity.P = 18000
+    bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    bodyVelocity.Parent = HRP
+
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.Name = "IKARO_SeaEventFocusGyro"
+    bodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bodyGyro.P = 18000
+    bodyGyro.D = 700
+    bodyGyro.CFrame = HRP.CFrame
+    bodyGyro.Parent = HRP
+
+    Humanoid.PlatformStand = true
+    Humanoid.AutoRotate = false
+
+    local nextNoclip = 0
+    local connection = RunService.Heartbeat:Connect(function()
+        if not Running or SeaHuntState.CurrentEvent ~= eventModel then
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            return
+        end
+
+        local target = GetModelTargetPart(eventModel)
+        if not target or not HRP or not HRP.Parent then return end
+
+        local now = os.clock()
+        if now >= nextNoclip and Character then
+            nextNoclip = now + 0.10
+            for _, part in ipairs(Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if collisionCache[part] == nil then
+                        collisionCache[part] = part.CanCollide
+                    end
+                    part.CanCollide = false
+                end
+            end
+        end
+
+        local height = useBasicClick and 18 or 48
+        local desired = target.Position + Vector3.new(0, height, 0)
+        local delta = desired - HRP.Position
+        local distance = delta.Magnitude
+
+        if distance > 7 then
+            local speed = distance > 800 and 340
+                or distance > 250 and 280
+                or distance > 70 and 210
+                or 145
+            bodyVelocity.Velocity = delta.Unit * speed
+        else
+            bodyVelocity.Velocity = target.AssemblyLinearVelocity + delta * 5
+        end
+
+        local lookPosition = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
+        if (lookPosition - HRP.Position).Magnitude > 0.01 then
+            bodyGyro.CFrame = CFrame.lookAt(HRP.Position, lookPosition)
+        end
+    end)
+
+    return function()
+        if connection then connection:Disconnect() end
+        pcall(function() bodyVelocity:Destroy() end)
+        pcall(function() bodyGyro:Destroy() end)
+
+        if Humanoid then
+            Humanoid.PlatformStand = oldPlatformStand
+            Humanoid.AutoRotate = oldAutoRotate
+        end
+
+        for part, oldValue in pairs(collisionCache) do
+            if part and part.Parent then
+                pcall(function() part.CanCollide = oldValue end)
+            end
+        end
+
+        if HRP then
+            pcall(function()
+                HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            end)
+        end
+    end
+end
+
 local function CombatSelectedSeaEvent(eventKey, eventModel)
     if not eventModel then return end
 
@@ -2276,41 +2404,45 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     -- Sea Event selecionado tem prioridade total sobre barco/follow.
     StopFollow()
     ForceExitBoatForCombat()
+    EnsureSeaCombatHaki()
 
-    local combatMarker = Instance.new("Part")
-    combatMarker.Name = "IKARO_SeaEventCombatTarget"
-    combatMarker.Anchored = true
-    combatMarker.CanCollide = false
-    combatMarker.Transparency = 1
-    combatMarker.Parent = workspace
-
-    local started = os.clock()
-
-    while Running and IsEventAlive(eventModel) and os.clock() - started < 180 do
-        target = GetModelTargetPart(eventModel)
-        if not target then break end
-
-        -- Sharks/Piranhas/Terrorshark usam clique com alcance ampliado.
-        -- Ships e demais eventos permanecem na posição aérea de skills.
-        local combatHeight = useBasicClick and 24 or 55
-        combatMarker.CFrame = CFrame.new(
-            target.Position + Vector3.new(0, combatHeight, 0),
-            target.Position
-        )
-
-        FlyToPart(combatMarker, 18)
-
-        if useBasicClick then
-            FireRangedBasicAttack(target)
-        else
-            AimAtSeaTarget(target)
-            UseConfiguredSeaSkills()
-        end
-
-        task.wait(useBasicClick and 0.08 or 0.15)
+    local stopFocus = StartSeaEventFocus(eventModel, useBasicClick)
+    if not stopFocus then
+        SeaHuntState.CurrentEvent = nil
+        error("Não foi possível iniciar o foco físico no Sea Event")
     end
 
-    pcall(function() combatMarker:Destroy() end)
+    local started = os.clock()
+    local okCombat, combatError = pcall(function()
+        while Running and IsEventAlive(eventModel) and os.clock() - started < 180 do
+            target = GetModelTargetPart(eventModel)
+            if not target then break end
+
+            local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
+            local attackRange = useBasicClick and 115 or 140
+
+            if distance <= attackRange then
+                AimAtSeaTarget(target)
+
+                if useBasicClick then
+                    FireRangedBasicAttack(target)
+                else
+                    -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
+                    -- o perfil de skills configurado, com mira mantida no alvo.
+                    UseConfiguredSeaSkills()
+                end
+            end
+
+            task.wait(useBasicClick and 0.06 or 0.12)
+        end
+    end)
+
+    stopFocus()
+
+    if not okCombat then
+        SeaHuntState.CurrentEvent = nil
+        error(combatError)
+    end
 
     if not IsEventAlive(eventModel) then
         SeaHuntState.EventKills = SeaHuntState.EventKills + 1
