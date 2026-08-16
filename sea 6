@@ -1,7 +1,3 @@
--- IKARO Sea 6 Mapper v1.1 COMPAT
--- Versão simplificada para maior compatibilidade.
--- Não usa funções avançadas, hooks, regex, AlignOrientation, etc.
-
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
