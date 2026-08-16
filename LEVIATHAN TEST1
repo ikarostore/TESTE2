@@ -58,7 +58,6 @@ local WATER_PLATFORM_SIZE = 500
 local SeaEventsSelected = {
     Terrorshark = true,
     Piranha = true,
-    FishCrewMember = true,
     Shark = true,
     PirateBrigade = true,
     PirateGrandBrigade = true,
@@ -69,7 +68,6 @@ local SeaEventsSelected = {
 local SeaEventNames = {
     Terrorshark = {"Terrorshark", "Terror Shark"},
     Piranha = {"Piranha"},
-    FishCrewMember = {"Fish Crew Member", "FishCrewMember"},
     Shark = {"Shark"},
     PirateBrigade = {"Pirate Brigade", "PirateBrigade"},
     PirateGrandBrigade = {"Pirate Grand Brigade", "PirateGrandBrigade"},
@@ -84,8 +82,7 @@ local SeaEventOrder = {
     "PirateBrigade",
     "FishBoat",
     "Shark",
-    "Piranha",
-    "FishCrewMember"
+    "Piranha"
 }
 
 local SeaConfig = {
@@ -1902,16 +1899,11 @@ end
 local ClickSeaEvents = {
     Shark = true,
     Piranha = true,
-    Terrorshark = true,
-    FishCrewMember = true
+    Terrorshark = true
 }
 
-local BringableSeaEvents = {
-    Shark = true,
-    Piranha = true,
-    Terrorshark = true,
-    FishCrewMember = true
-}
+-- Bring Mob desativado para todos os Sea Events.
+local BringableSeaEvents = {}
 
 local SeaVirtualUser = nil
 pcall(function()
@@ -1950,10 +1942,9 @@ local function AimAtSeaTarget(target)
     if not target then return end
 
     if HRP and HRP.Parent then
-        local flatTarget = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        if (flatTarget - HRP.Position).Magnitude > 0.01 then
+        if (target.Position - HRP.Position).Magnitude > 0.01 then
             pcall(function()
-                HRP.CFrame = CFrame.lookAt(HRP.Position, flatTarget)
+                HRP.CFrame = CFrame.lookAt(HRP.Position, target.Position)
             end)
         end
     end
@@ -2025,28 +2016,32 @@ local function FireRangedBasicAttack(target)
 end
 
 local function UseConfiguredSeaSkills()
-    EquipSeaCombatType(CombatConfig.Type)
-
-    local cfg = CombatConfig[CombatConfig.Type]
-    local order = CombatConfig.Type == "Fruit"
-        and {"Z","X","C","V","F"}
-        or CombatConfig.Type == "Melee"
-        and {"Z","X","C"}
-        or {"Z","X"}
-
-    if not SeaVIM or not cfg then return false end
+    if not SeaVIM then return false end
 
     local used = false
-    for _, keyName in ipairs(order) do
-        if cfg.Selected[keyName] then
-            local key = Enum.KeyCode[keyName]
-            if key then
-                pcall(function()
-                    SeaVIM:SendKeyEvent(true, key, false, game)
-                    task.wait(cfg.Hold[keyName] or 0.5)
-                    SeaVIM:SendKeyEvent(false, key, false, game)
-                    used = true
-                end)
+    for _, category in ipairs({"Melee", "Sword", "Gun", "Fruit"}) do
+        local tool = EquipSeaCombatType(category)
+        local cfg = CombatConfig[category]
+        local order = category == "Fruit"
+            and {"Z","X","C","V","F"}
+            or category == "Melee"
+            and {"Z","X","C"}
+            or {"Z","X"}
+
+        if tool and cfg then
+            task.wait(0.10)
+            for _, keyName in ipairs(order) do
+                if cfg.Selected[keyName] then
+                    local key = Enum.KeyCode[keyName]
+                    if key then
+                        pcall(function()
+                            SeaVIM:SendKeyEvent(true, key, false, game)
+                            task.wait(cfg.Hold[keyName] or 0.5)
+                            SeaVIM:SendKeyEvent(false, key, false, game)
+                            used = true
+                        end)
+                    end
+                end
             end
         end
     end
@@ -2359,7 +2354,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local height = eventKey == "SeaBeast" and 260
             or useBasicClick and 8
             or 48
-        local desired = target.Position + Vector3.new(0, height, 0)
+        local desired = target.Position + Vector3.new(0, height, useBasicClick and 3 or 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
@@ -2373,9 +2368,8 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             bodyVelocity.Velocity = target.AssemblyLinearVelocity + delta * 5
         end
 
-        local lookPosition = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
-        if (lookPosition - HRP.Position).Magnitude > 0.01 then
-            bodyGyro.CFrame = CFrame.lookAt(HRP.Position, lookPosition)
+        if (target.Position - HRP.Position).Magnitude > 0.01 then
+            bodyGyro.CFrame = CFrame.lookAt(HRP.Position, target.Position)
         end
 
         -- Bring Mob é restrito a entidades vivas pequenas/bosses marítimos.
@@ -2488,7 +2482,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
             local attackRange = eventKey == "SeaBeast" and 340
-                or useBasicClick and 115
+                or useBasicClick and 40
                 or 140
 
             if distance <= attackRange then
@@ -3263,6 +3257,7 @@ local function StartHunt()
                     -- Reserva imediatamente o estado para impedir duas tasks
                     -- de combate contra o mesmo evento.
                     SeaHuntState.CurrentEvent = eventModel
+                    RecoveryState.IgnoreBoatMissingUntil = math.huge
                     StopBoatDrive()
                     StopFollow()
 
@@ -3275,6 +3270,12 @@ local function StartHunt()
                         local okCombat, combatError = pcall(function()
                             CombatSelectedSeaEvent(eventKey, eventModel)
                         end)
+
+                        -- Sair e voltar ao barco após um evento é normal. Dá
+                        -- tempo para streaming/assento reencontrarem a instância
+                        -- sem interpretar o término do combate como destruição.
+                        RecoveryState.MissingSince = nil
+                        RecoveryState.IgnoreBoatMissingUntil = os.clock() + 20
 
                         if not okCombat then
                             SeaHuntState.CurrentEvent = nil
@@ -3331,6 +3332,7 @@ RecoveryState = {
     SeenBoat = false,
     KnownBoat = nil,
     MissingSince = nil,
+    IgnoreBoatMissingUntil = 0,
     LastDeadOwnerCharacter = nil
 }
 
@@ -3440,6 +3442,7 @@ task.spawn(function()
             if RecoveryState.SeenBoat
             and RecoveryState.KnownBoat
             and not RecoveryState.KnownBoat.Parent
+            and os.clock() >= (RecoveryState.IgnoreBoatMissingUntil or 0)
             and not RecoveryState.Resetting then
                 ResetLocalForBoatRecovery("Beast Hunter destruído durante a caçada.")
             end
@@ -3478,7 +3481,9 @@ task.spawn(function()
                     RecoveryState.KnownBoat = visibleBoat
                     RecoveryState.SeenBoat = true
                     RecoveryState.MissingSince = nil
-                elseif RecoveryState.SeenBoat and not RecoveryState.Resetting then
+                elseif RecoveryState.SeenBoat
+                and os.clock() >= (RecoveryState.IgnoreBoatMissingUntil or 0)
+                and not RecoveryState.Resetting then
                     RecoveryState.MissingSince = RecoveryState.MissingSince or os.clock()
                     if os.clock() - RecoveryState.MissingSince >= 1.5 then
                         ResetLocalForBoatRecovery("Beast Hunter destruído/desaparecido.")
@@ -3727,6 +3732,18 @@ else
         "Executor sem readfile/writefile; configurações não podem ser persistidas."
     )
 end
+
+-- Auto Buso/Haki permanente. Só envia o remote quando HasBuso não existe,
+-- evitando alternar/desligar um Haki que já está ativo.
+task.spawn(function()
+    while Gui and Gui.Parent do
+        if Character and Humanoid and Humanoid.Health > 0
+        and not Character:FindFirstChild("HasBuso") then
+            EnsureSeaCombatHaki()
+        end
+        task.wait(1)
+    end
+end)
 
 print("IKARO Leviathan v2 carregado.")
 
