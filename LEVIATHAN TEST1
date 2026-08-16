@@ -38,9 +38,9 @@ local OwnerPlayer = nil
 local AccountBuyBoat = false
 
 local FollowConnection = nil
-local FollowSpeed = 260
-local FollowHeight = 8
-local FollowBack = 9
+local FollowSpeed = 320
+local FollowHeight = 35
+local FollowBack = 6
 
 local savedCollisions = {}
 
@@ -351,6 +351,7 @@ end
 
 -- =========================================================
 -- DROPDOWN OWNER PLAYER
+-- Dropdown em overlay para não ser cortado pelo ScrollingFrame.
 -- =========================================================
 
 local OwnerRow = Row(HuntPage, 52)
@@ -365,6 +366,7 @@ DropButton.TextColor3 = Color3.fromRGB(225, 225, 225)
 DropButton.Font = Enum.Font.SourceSans
 DropButton.TextSize = 13
 DropButton.TextXAlignment = Enum.TextXAlignment.Left
+DropButton.TextTruncate = Enum.TextTruncate.AtEnd
 DropButton.Text = "  --"
 DropButton.ZIndex = 20
 DropButton.Parent = OwnerRow
@@ -384,16 +386,17 @@ DropArrow.Text = "⌄"
 DropArrow.ZIndex = 21
 DropArrow.Parent = DropButton
 
+-- Overlay fica direto no ScreenGui, fora do ScrollingFrame.
 local Dropdown = Instance.new("ScrollingFrame")
-Dropdown.Size = UDim2.new(0, 160, 0, 0)
-Dropdown.Position = UDim2.new(1, -170, 1, 4)
+Dropdown.Name = "OwnerDropdownOverlay"
+Dropdown.Size = UDim2.new(0, 190, 0, 0)
 Dropdown.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
 Dropdown.BorderSizePixel = 0
-Dropdown.ScrollBarThickness = 3
+Dropdown.ScrollBarThickness = 4
 Dropdown.CanvasSize = UDim2.new(0, 0, 0, 0)
 Dropdown.Visible = false
-Dropdown.ZIndex = 50
-Dropdown.Parent = OwnerRow
+Dropdown.ZIndex = 100
+Dropdown.Parent = Gui
 
 local DropdownCorner = Instance.new("UICorner")
 DropdownCorner.CornerRadius = UDim.new(0, 6)
@@ -406,9 +409,27 @@ DropLayout.Parent = Dropdown
 local DropPadding = Instance.new("UIPadding")
 DropPadding.PaddingTop = UDim.new(0, 4)
 DropPadding.PaddingBottom = UDim.new(0, 4)
+DropPadding.PaddingLeft = UDim.new(0, 3)
+DropPadding.PaddingRight = UDim.new(0, 3)
 DropPadding.Parent = Dropdown
 
 local dropdownOpen = false
+
+local function PositionDropdown()
+    local pos = DropButton.AbsolutePosition
+    local size = DropButton.AbsoluteSize
+
+    Dropdown.Position = UDim2.fromOffset(
+        pos.X,
+        pos.Y + size.Y + 4
+    )
+end
+
+local function CloseDropdown()
+    dropdownOpen = false
+    Dropdown.Visible = false
+    DropArrow.Text = "⌄"
+end
 
 local function RefreshDropdown()
     for _, child in ipairs(Dropdown:GetChildren()) do
@@ -431,36 +452,60 @@ local function RefreshDropdown()
 
     for _, p in ipairs(list) do
         local b = Instance.new("TextButton")
-        b.Size = UDim2.new(1, 0, 0, 32)
-        b.BackgroundTransparency = 1
-        b.TextColor3 = Color3.fromRGB(225, 225, 225)
+        b.Size = UDim2.new(1, -6, 0, 34)
+        b.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
+        b.BorderSizePixel = 0
+        b.TextColor3 = Color3.fromRGB(230, 230, 230)
         b.Font = Enum.Font.SourceSans
         b.TextSize = 13
         b.TextXAlignment = Enum.TextXAlignment.Left
+        b.TextTruncate = Enum.TextTruncate.AtEnd
         b.Text = "  " .. p.Name
-        b.ZIndex = 55
+        b.ZIndex = 105
         b.Parent = Dropdown
+
+        local hover = Instance.new("UICorner")
+        hover.CornerRadius = UDim.new(0, 4)
+        hover.Parent = b
+
+        b.MouseEnter:Connect(function()
+            b.BackgroundColor3 = Color3.fromRGB(53, 53, 57)
+        end)
+
+        b.MouseLeave:Connect(function()
+            b.BackgroundColor3 = Color3.fromRGB(42, 42, 45)
+        end)
 
         b.MouseButton1Click:Connect(function()
             OwnerPlayer = p
             DropButton.Text = "  " .. p.Name
-            dropdownOpen = false
-            Dropdown.Visible = false
-            DropArrow.Text = "⌄"
+            CloseDropdown()
             SetState("OWNER_SELECTED", p.Name)
         end)
     end
 
-    local height = math.min(#list * 34 + 8, 150)
-    Dropdown.Size = UDim2.new(0, 160, 0, height)
-    Dropdown.CanvasSize = UDim2.new(0, 0, 0, #list * 34 + 8)
+    local height = math.min(#list * 36 + 8, 180)
+    Dropdown.Size = UDim2.new(0, 190, 0, height)
+    Dropdown.CanvasSize = UDim2.new(0, 0, 0, #list * 36 + 8)
+    PositionDropdown()
 end
 
 DropButton.MouseButton1Click:Connect(function()
     RefreshDropdown()
+
     dropdownOpen = not dropdownOpen
     Dropdown.Visible = dropdownOpen
     DropArrow.Text = dropdownOpen and "⌃" or "⌄"
+
+    if dropdownOpen then
+        PositionDropdown()
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if dropdownOpen then
+        PositionDropdown()
+    end
 end)
 
 SimpleButton(HuntPage, "Refresh List Player", function()
@@ -474,17 +519,25 @@ ToggleRow(HuntPage, "Account Buy Boat", false, function(v)
     if v then
         OwnerPlayer = LocalPlayer
         DropButton.Text = "  " .. LocalPlayer.Name
+        CloseDropdown()
         SetState("MAIN_ACCOUNT", "Esta conta será a principal.")
     else
         OwnerPlayer = nil
         DropButton.Text = "  --"
+        CloseDropdown()
         SetState("FOLLOWER_ACCOUNT", "Selecione o dono do barco.")
     end
 end)
 
 -- =========================================================
--- FOLLOW OWNER - STRAIGHT / HEIGHT LOCK
+-- FOLLOW OWNER - ALTURA TRAVADA / SEM CAIR NA ÁGUA
+--
+-- O seguidor fica acima e atrás do owner usando BodyPosition.
+-- Assim não depende da gravidade nem vai descendo até a água.
 -- =========================================================
+
+local FollowBodyPosition = nil
+local FollowBodyGyro = nil
 
 local function RestoreFollowPhysics()
     if Character then
@@ -498,6 +551,20 @@ local function RestoreFollowPhysics()
     end
 
     savedCollisions = {}
+
+    if FollowBodyPosition then
+        pcall(function()
+            FollowBodyPosition:Destroy()
+        end)
+        FollowBodyPosition = nil
+    end
+
+    if FollowBodyGyro then
+        pcall(function()
+            FollowBodyGyro:Destroy()
+        end)
+        FollowBodyGyro = nil
+    end
 
     if Humanoid then
         pcall(function()
@@ -515,7 +582,7 @@ local function RestoreFollowPhysics()
 end
 
 local function ApplyFollowPhysics()
-    if not Character then
+    if not Character or not HRP then
         return
     end
 
@@ -524,13 +591,36 @@ local function ApplyFollowPhysics()
             if savedCollisions[obj] == nil then
                 savedCollisions[obj] = obj.CanCollide
             end
+
             obj.CanCollide = false
         end
     end
 
     if Humanoid then
-        Humanoid.PlatformStand = true
-        Humanoid.AutoRotate = false
+        pcall(function()
+            Humanoid.PlatformStand = true
+            Humanoid.AutoRotate = false
+        end)
+    end
+
+    if not FollowBodyPosition or not FollowBodyPosition.Parent then
+        FollowBodyPosition = Instance.new("BodyPosition")
+        FollowBodyPosition.Name = "IKAROFollowPosition"
+        FollowBodyPosition.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+        FollowBodyPosition.P = 35000
+        FollowBodyPosition.D = 2500
+        FollowBodyPosition.Position = HRP.Position
+        FollowBodyPosition.Parent = HRP
+    end
+
+    if not FollowBodyGyro or not FollowBodyGyro.Parent then
+        FollowBodyGyro = Instance.new("BodyGyro")
+        FollowBodyGyro.Name = "IKAROFollowGyro"
+        FollowBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+        FollowBodyGyro.P = 25000
+        FollowBodyGyro.D = 1200
+        FollowBodyGyro.CFrame = HRP.CFrame
+        FollowBodyGyro.Parent = HRP
     end
 end
 
@@ -552,7 +642,7 @@ local function StartFollowOwner()
 
     ApplyFollowPhysics()
 
-    FollowConnection = RunService.Heartbeat:Connect(function(dt)
+    FollowConnection = RunService.Heartbeat:Connect(function()
         if not Running then
             return
         end
@@ -570,6 +660,8 @@ local function StartFollowOwner()
 
         ApplyFollowPhysics()
 
+        -- Mantém o seguidor BEM acima do owner.
+        -- Isso evita tocar a água mesmo se o owner estiver sentado baixo no barco.
         local target =
             ownerHRP.Position
             - ownerHRP.CFrame.LookVector * FollowBack
@@ -578,20 +670,22 @@ local function StartFollowOwner()
         local delta = target - HRP.Position
         local distance = delta.Magnitude
 
-        if distance > 3 then
-            local step = math.min(FollowSpeed * dt, distance)
-            local nextPos = HRP.Position + delta.Unit * step
-
-            HRP.CFrame = CFrame.new(
-                nextPos,
-                nextPos + ownerHRP.CFrame.LookVector
-            )
-        else
+        -- Se ficou absurdamente longe (por respawn/teleporte do owner),
+        -- aproxima em um salto inicial e depois volta ao follow suave.
+        if distance > 900 then
             HRP.CFrame = CFrame.new(
                 target,
                 target + ownerHRP.CFrame.LookVector
             )
+            FollowBodyPosition.Position = target
+        else
+            FollowBodyPosition.Position = target
         end
+
+        FollowBodyGyro.CFrame = CFrame.new(
+            HRP.Position,
+            HRP.Position + ownerHRP.CFrame.LookVector
+        )
 
         HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
