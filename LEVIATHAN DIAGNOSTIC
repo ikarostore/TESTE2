@@ -1,0 +1,64 @@
+-- IKARO Leviathan - diagnostico secundario de combate
+-- Execute junto do LEVIATHAN TEST1 e consulte o console do executor.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+local function FindNearestPiranha(root)
+    local nearest
+    local nearestPart
+    local nearestDistance = math.huge
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") and string.find(string.lower(obj.Name), "piranha", 1, true) then
+            local part = obj:FindFirstChild("HumanoidRootPart", true)
+                or obj.PrimaryPart
+                or obj:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                local distance = (part.Position - root.Position).Magnitude
+                if distance < nearestDistance then
+                    nearest = obj
+                    nearestPart = part
+                    nearestDistance = distance
+                end
+            end
+        end
+    end
+
+    return nearest, nearestPart, nearestDistance
+end
+
+while task.wait(2) do
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local tool = character and character:FindFirstChildOfClass("Tool")
+    local hasBuso = character and character:FindFirstChild("HasBuso") ~= nil
+    local controllerFound = false
+
+    pcall(function()
+        local module = LocalPlayer.PlayerScripts:FindFirstChild("CombatFramework")
+        local framework = module and require(module)
+        controllerFound = type(framework) == "table" and framework.activeController ~= nil
+    end)
+
+    if root then
+        local mob, part, distance = FindNearestPiranha(root)
+        local humanoidMob = mob and mob:FindFirstChildOfClass("Humanoid")
+        print(
+            "[IKARO DIAG]",
+            "Character=" .. tostring(character ~= nil),
+            "HP=" .. tostring(humanoid and math.floor(humanoid.Health) or "nil"),
+            "Buso=" .. tostring(hasBuso),
+            "Tool=" .. tostring(tool and tool.Name or "none"),
+            "Controller=" .. tostring(controllerFound),
+            "Piranha=" .. tostring(mob and mob:GetFullName() or "none"),
+            "Distance=" .. tostring(part and math.floor(distance * 10) / 10 or "nil"),
+            "MobHP=" .. tostring(humanoidMob and math.floor(humanoidMob.Health) or "unknown")
+        )
+    else
+        print("[IKARO DIAG] aguardando personagem/HRP")
+    end
+end
+
