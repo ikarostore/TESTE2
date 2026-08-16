@@ -1952,6 +1952,15 @@ end
 
 local EnsureSeaCombatHaki
 
+local BMVirtualUser = nil
+local BMCameraShaker = nil
+pcall(function()
+    BMVirtualUser = game:GetService("VirtualUser")
+end)
+pcall(function()
+    BMCameraShaker = require(ReplicatedStorage.Util.CameraShaker)
+end)
+
 local function BMFastAttack(target)
     if not target then return false end
 
@@ -1961,32 +1970,37 @@ local function BMFastAttack(target)
     local tool = EquipSeaCombatType("Melee")
     if not tool then return false end
 
-    -- BM Fast Attack: usa somente o controlador interno de combate. Não há
-    -- mouse1click, VirtualInput, VirtualUser nem Tool:Activate nesta rotina.
+    -- BM Fast Attack do script de referência: prepara o controlador interno e
+    -- mantém VirtualUser Button1Down; não usa clique solto nem Tool:Activate.
     local controller = GetCombatFrameworkController()
-    if not controller or type(controller.attack) ~= "function" then
+    if not controller or not BMVirtualUser then
         return false
     end
 
     local attacked = false
     pcall(function()
-        controller.hitboxMagnitude = math.max(controller.hitboxMagnitude or 0, 200)
-        controller.timeToNextAttack = 0
-        controller.timeToNextBlock = 0
+        -- Mesmo método do script de referência: mantém o controller pronto e
+        -- segura Button1Down continuamente, sem chamar controller:attack().
         controller.attacking = false
         controller.blocking = false
+        controller.timeToNextAttack = tick() - 1
+        controller.timeToNextBlock = 0
         controller.increment = 3
+        controller.hitboxMagnitude = 120
         controller.equipped = true
 
-        local animator = controller.animator
-        local basicAnimations = animator and animator.anims and animator.anims.basic
-        if basicAnimations then
-            for _, animation in pairs(basicAnimations) do
-                pcall(function() animation:Play(0.01, 1, 1.5) end)
-            end
+        local stun = Character and Character:FindFirstChild("Stun")
+        if stun then
+            pcall(function() stun.Value = 0 end)
         end
+        Humanoid.Sit = false
 
-        controller:attack()
+        BMVirtualUser:CaptureController()
+        BMVirtualUser:Button1Down(Vector2.new(1280, 672))
+
+        if BMCameraShaker and type(BMCameraShaker.Stop) == "function" then
+            BMCameraShaker:Stop()
+        end
         attacked = true
     end)
 
@@ -2355,6 +2369,12 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         if connection then connection:Disconnect() end
         pcall(function() bodyVelocity:Destroy() end)
         pcall(function() bodyGyro:Destroy() end)
+
+        if useBasicClick and BMVirtualUser then
+            pcall(function()
+                BMVirtualUser:Button1Up(Vector2.new(1280, 672))
+            end)
+        end
 
         if Humanoid then
             Humanoid.PlatformStand = oldPlatformStand
