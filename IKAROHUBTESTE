@@ -503,149 +503,61 @@ local function carregarNPCs()
 end
 
 -- =========================================================
--- ILHAS
+-- ILHAS COM COORDENADAS FIXAS
 --
--- Em vez de TP instantâneo, agora voa em linha reta até o destino
--- com noclip temporário.
+-- Não escaneia Workspace.Map. Os destinos ficam salvos aqui.
+-- Ao clicar, o personagem VOA até o CFrame com noclip.
 -- =========================================================
 
-local nomesIlhasPreferidos = {
-    "Port Town",
-    "Port",
-    "Hydra Island",
-    "Hydra",
-    "Great Tree",
-    "Tree",
-    "Floating Turtle",
-    "Turtle",
-    "Haunted Castle",
-    "Castle on the Sea",
-    "Castle",
-    "Sea of Treats",
-    "Cake",
-    "Chocolate",
-    "Candy",
-    "Ice Cream",
-    "Tiki Outpost",
-    "Tiki"
+local LocaisIlhas = {
+    ["Castle on the Sea"] = CFrame.new(-5074.456, 314.579, -2991.054, 1.000, 0.000, 0.000, 0.000, 1.000, 0.000, 0.000, 0.000, 1.000),
+    ["Haunted Castle"] = CFrame.new(-9515.372, 164.043, 5786.061, 1.000, 0.000, 0.000, 0.000, 1.000, 0.000, 0.000, 0.000, 1.000),
 }
-
-local function pareceIlha(obj)
-    if not obj:IsA("Model") then
-        return false
-    end
-
-    local nome = string.lower(obj.Name)
-
-    local termos = {
-        "port",
-        "hydra",
-        "tree",
-        "turtle",
-        "castle",
-        "cake",
-        "chocolate",
-        "candy",
-        "ice cream",
-        "tiki",
-        "peanut",
-        "sea of treats"
-    }
-
-    for _, termo in ipairs(termos) do
-        if string.find(nome, termo, 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
 
 local function carregarIlhas()
     limparConteudo()
 
-    local map = workspace:FindFirstChild("Map")
+    local nomes = {}
 
-    if not map then
-        criarAviso("Workspace.Map não foi encontrado.")
-        setStatus("Mapa não encontrado.")
-        return
+    for nome in pairs(LocaisIlhas) do
+        table.insert(nomes, nome)
     end
 
-    local lista = {}
-    local vistos = {}
-
-    for _, obj in ipairs(map:GetChildren()) do
-        if obj:IsA("Model") and pareceIlha(obj) and not vistos[obj] then
-            vistos[obj] = true
-            table.insert(lista, obj)
-        end
-    end
-
-    -- Inclui alguns modelos aninhados relevantes, caso estejam dentro
-    -- de outro model principal.
-    for _, obj in ipairs(map:GetDescendants()) do
-        if obj:IsA("Model") and pareceIlha(obj) and not vistos[obj] then
-            vistos[obj] = true
-            table.insert(lista, obj)
-        end
-    end
-
-    table.sort(lista, function(a, b)
-        return string.lower(a.Name) < string.lower(b.Name)
+    table.sort(nomes, function(a, b)
+        return string.lower(a) < string.lower(b)
     end)
 
-    for _, ilha in ipairs(lista) do
-        criarBotaoLista(ilha.Name, function()
-            if ilha and ilha.Parent then
-                setStatus("Voando até: " .. ilha.Name)
+    for _, nome in ipairs(nomes) do
+        criarBotaoLista(nome, function()
+            local destino = LocaisIlhas[nome]
 
-                local destino = nil
+            if not destino then
+                setStatus("Destino não configurado: " .. nome)
+                return
+            end
 
-                local ok, pivot = pcall(function()
-                    return ilha:GetPivot()
+            setStatus("Voando até: " .. nome)
+
+            task.spawn(function()
+                local sucesso, erro = pcall(function()
+                    local chegou = voarAteCFrame(destino, setStatus)
+
+                    if chegou then
+                        setStatus("Chegou em: " .. nome)
+                    else
+                        setStatus("Voo cancelado.")
+                    end
                 end)
 
-                if ok and pivot then
-                    destino = pivot + Vector3.new(0, 30, 0)
-                else
-                    local parte = pegarPartePrincipal(ilha)
-
-                    if parte then
-                        destino = parte.CFrame + Vector3.new(0, 30, 0)
-                    end
+                if not sucesso then
+                    restaurarColisoes()
+                    setStatus("Erro ao voar até ilha: " .. tostring(erro))
                 end
-
-                if destino then
-                    task.spawn(function()
-                        local sucesso, erro = pcall(function()
-                            local chegou = voarAteCFrame(destino, setStatus)
-
-                            if chegou then
-                                setStatus("Chegou em: " .. ilha.Name)
-                            end
-                        end)
-
-                        if not sucesso then
-                            restaurarColisoes()
-                            setStatus("Erro ao voar até ilha: " .. tostring(erro))
-                        end
-                    end)
-                else
-                    setStatus("Não consegui obter a posição de " .. ilha.Name)
-                end
-            end
+            end)
         end)
     end
 
-    if #lista == 0 then
-        criarAviso(
-            "Nenhum modelo de ilha reconhecido foi encontrado. " ..
-            "Podemos mapear os nomes internos do Workspace.Map com outro diagnóstico."
-        )
-    end
-
-    setStatus("Locais/ilhas encontrados: " .. tostring(#lista))
+    setStatus("Ilhas fixas configuradas: " .. tostring(#nomes))
 end
 
 -- =========================================================
