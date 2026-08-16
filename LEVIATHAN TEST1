@@ -1756,6 +1756,153 @@ local function EquipSeaCombatType(category)
     return nil
 end
 
+local ClickSeaEvents = {
+    Shark = true,
+    Piranha = true,
+    Terrorshark = true
+}
+
+local SeaVirtualUser = nil
+pcall(function()
+    SeaVirtualUser = game:GetService("VirtualUser")
+end)
+
+local function GetCombatFrameworkController()
+    local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+    local module = playerScripts and playerScripts:FindFirstChild("CombatFramework")
+    if not module then return nil end
+
+    local ok, framework = pcall(require, module)
+    if not ok then return nil end
+
+    if type(framework) == "table" and framework.activeController then
+        return framework.activeController
+    end
+
+    -- Alguns executores expõem a tabela interna como upvalue do módulo.
+    local getUps = getupvalues or (debug and debug.getupvalues)
+    if getUps then
+        local okUps, ups = pcall(getUps, framework)
+        if okUps and type(ups) == "table" then
+            for _, value in pairs(ups) do
+                if type(value) == "table" and value.activeController then
+                    return value.activeController
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+local function AimAtSeaTarget(target)
+    if not target then return end
+
+    if HRP and HRP.Parent then
+        local flatTarget = Vector3.new(target.Position.X, HRP.Position.Y, target.Position.Z)
+        if (flatTarget - HRP.Position).Magnitude > 0.01 then
+            pcall(function()
+                HRP.CFrame = CFrame.lookAt(HRP.Position, flatTarget)
+            end)
+        end
+    end
+
+    local camera = workspace.CurrentCamera
+    if camera then
+        pcall(function()
+            camera.CFrame = CFrame.lookAt(camera.CFrame.Position, target.Position)
+        end)
+    end
+end
+
+local function FireRangedBasicAttack(target)
+    if not target then return false end
+
+    AimAtSeaTarget(target)
+
+    local tool = EquipSeaCombatType("Melee")
+    local attacked = false
+
+    -- Método inspirado nos sources analisados: reduz cooldown e aumenta a
+    -- magnitude do hitbox antes de solicitar o ataque do controller.
+    local controller = GetCombatFrameworkController()
+    if controller then
+        pcall(function()
+            controller.hitboxMagnitude = math.max(controller.hitboxMagnitude or 0, 120)
+            controller.timeToNextAttack = 0
+            controller.timeToNextBlock = 0
+            controller.attacking = false
+
+            if type(controller.attack) == "function" then
+                controller:attack()
+                attacked = true
+            end
+        end)
+    end
+
+    if tool then
+        pcall(function()
+            tool:Activate()
+            attacked = true
+        end)
+    end
+
+    if SeaVIM then
+        pcall(function()
+            local camera = workspace.CurrentCamera
+            local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
+            local x = math.floor(viewport.X / 2)
+            local y = math.floor(viewport.Y / 2)
+            SeaVIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
+            task.wait(0.03)
+            SeaVIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
+            attacked = true
+        end)
+    end
+
+    if SeaVirtualUser then
+        pcall(function()
+            SeaVirtualUser:CaptureController()
+            SeaVirtualUser:Button1Down(Vector2.new(0, 0), target.CFrame)
+            task.wait(0.03)
+            SeaVirtualUser:Button1Up(Vector2.new(0, 0), target.CFrame)
+            attacked = true
+        end)
+    end
+
+    return attacked
+end
+
+local function UseConfiguredSeaSkills()
+    EquipSeaCombatType(CombatConfig.Type)
+
+    local cfg = CombatConfig[CombatConfig.Type]
+    local order = CombatConfig.Type == "Fruit"
+        and {"Z","X","C","V","F"}
+        or CombatConfig.Type == "Melee"
+        and {"Z","X","C"}
+        or {"Z","X"}
+
+    if not SeaVIM or not cfg then return false end
+
+    local used = false
+    for _, keyName in ipairs(order) do
+        if cfg.Selected[keyName] then
+            local key = Enum.KeyCode[keyName]
+            if key then
+                pcall(function()
+                    SeaVIM:SendKeyEvent(true, key, false, game)
+                    task.wait(cfg.Hold[keyName] or 0.5)
+                    SeaVIM:SendKeyEvent(false, key, false, game)
+                    used = true
+                end)
+            end
+        end
+    end
+
+    return used
+end
+
 -- =========================================================
 -- SEA EVENT DETECTOR
 -- =========================================================
@@ -1907,6 +2054,18 @@ local function IsEventAlive(model)
         return hum.Health > 0
     end
 
+    for _, healthName in ipairs({"Health", "HP", "ShipHealth"}) do
+        local value = model:FindFirstChild(healthName, true)
+        if value and (value:IsA("NumberValue") or value:IsA("IntValue")) then
+            return value.Value > 0
+        end
+
+        local attribute = model:GetAttribute(healthName)
+        if type(attribute) == "number" then
+            return attribute > 0
+        end
+    end
+
     return model.Parent ~= nil
 end
 
@@ -1922,7 +2081,12 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         return
     end
 
-    SetState("SEA_EVENT_COMBAT", SeaEventDisplayName(eventKey))
+    local useBasicClick = ClickSeaEvents[eventKey] == true
+
+    SetState(
+        useBasicClick and "SEA_EVENT_AUTO_CLICK" or "SEA_EVENT_SKILLS",
+        SeaEventDisplayName(eventKey)
+    )
 
     -- sai do assento se necessário
     if Humanoid and Humanoid.Sit then
@@ -1939,40 +2103,28 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
     local started = os.clock()
 
-    while Running and IsEventAlive(eventModel) and os.clock() - started < 90 do
+    while Running and IsEventAlive(eventModel) and os.clock() - started < 180 do
         target = GetModelTargetPart(eventModel)
         if not target then break end
 
-        -- posição segura acima do evento
-        combatMarker.CFrame = target.CFrame * CFrame.new(0, 55, 0)
+        -- Sharks/Piranhas/Terrorshark usam clique com alcance ampliado.
+        -- Ships e demais eventos permanecem na posição aérea de skills.
+        local combatHeight = useBasicClick and 24 or 55
+        combatMarker.CFrame = CFrame.new(
+            target.Position + Vector3.new(0, combatHeight, 0),
+            target.Position
+        )
 
         FlyToPart(combatMarker, 18)
-        EquipSeaCombatType(CombatConfig.Type)
 
-        -- usa a rotação configurada
-        local cfg = CombatConfig[CombatConfig.Type]
-        local order = CombatConfig.Type == "Fruit"
-            and {"Z","X","C","V","F"}
-            or CombatConfig.Type == "Melee"
-            and {"Z","X","C"}
-            or {"Z","X"}
-
-        if SeaVIM and cfg then
-            for _, keyName in ipairs(order) do
-                if cfg.Selected[keyName] then
-                    local key = Enum.KeyCode[keyName]
-                    if key then
-                        pcall(function()
-                            SeaVIM:SendKeyEvent(true, key, false, game)
-                            task.wait(cfg.Hold[keyName] or 0.5)
-                            SeaVIM:SendKeyEvent(false, key, false, game)
-                        end)
-                    end
-                end
-            end
+        if useBasicClick then
+            FireRangedBasicAttack(target)
+        else
+            AimAtSeaTarget(target)
+            UseConfiguredSeaSkills()
         end
 
-        task.wait(0.15)
+        task.wait(useBasicClick and 0.08 or 0.15)
     end
 
     pcall(function() combatMarker:Destroy() end)
