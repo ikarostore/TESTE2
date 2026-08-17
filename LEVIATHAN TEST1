@@ -124,6 +124,12 @@ local SeaHuntState = {
     AtSea6 = false,
     CurrentEvent = nil,
     CombatBatchActive = false,
+    NextGlobalEventScan = os.clock() + 2,
+    CachedLeviathan = nil,
+    NextLeviathanScan = os.clock() + 2,
+    BMRegisterAttack = nil,
+    BMRegisterHit = nil,
+    BMModernRemotesChecked = false,
     EventKills = 0
 }
 
@@ -2071,9 +2077,6 @@ local EnsureSeaCombatHaki
 
 local BMVirtualUser = nil
 local BMCameraShaker = nil
-local BMRegisterAttack = nil
-local BMRegisterHit = nil
-local BMModernRemotesChecked = false
 pcall(function()
     BMVirtualUser = game:GetService("VirtualUser")
 end)
@@ -2082,14 +2085,16 @@ pcall(function()
 end)
 
 local function GetBMModernRemotes()
-    if BMModernRemotesChecked then return BMRegisterAttack, BMRegisterHit end
-    BMModernRemotesChecked = true
+    if SeaHuntState.BMModernRemotesChecked then
+        return SeaHuntState.BMRegisterAttack, SeaHuntState.BMRegisterHit
+    end
+    SeaHuntState.BMModernRemotesChecked = true
 
     local modules = ReplicatedStorage:FindFirstChild("Modules")
     local net = modules and modules:FindFirstChild("Net")
-    BMRegisterAttack = net and net:FindFirstChild("RE/RegisterAttack")
-    BMRegisterHit = net and net:FindFirstChild("RE/RegisterHit")
-    return BMRegisterAttack, BMRegisterHit
+    SeaHuntState.BMRegisterAttack = net and net:FindFirstChild("RE/RegisterAttack")
+    SeaHuntState.BMRegisterHit = net and net:FindFirstChild("RE/RegisterHit")
+    return SeaHuntState.BMRegisterAttack, SeaHuntState.BMRegisterHit
 end
 
 local function BMFastAttack(target, eventModel)
@@ -2282,7 +2287,6 @@ local function IsLikelyCombatModel(obj)
     return false
 end
 
-local NextGlobalSeaEventScan = os.clock() + 2
 local function FindSelectedSeaEvent()
     -- Sea Beast tem container próprio conhecido.
     local seaBeasts = workspace:FindFirstChild("SeaBeasts")
@@ -2319,10 +2323,10 @@ local function FindSelectedSeaEvent()
     -- O fallback global é caro em servidores com streaming. Containers
     -- conhecidos continuam sendo verificados sempre; a árvore inteira só é
     -- consultada em intervalo controlado.
-    if os.clock() < NextGlobalSeaEventScan then
+    if os.clock() < SeaHuntState.NextGlobalEventScan then
         return nil, nil
     end
-    NextGlobalSeaEventScan = os.clock() + 3
+    SeaHuntState.NextGlobalEventScan = os.clock() + 3
 
     -- Fallback global, mas só para modelos com sinais de combate.
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -2672,21 +2676,18 @@ end
 -- LEVIATHAN DETECTOR
 -- =========================================================
 
-local CachedLeviathan = nil
-local NextLeviathanGlobalScan = os.clock() + 2
-
 local function FindLeviathan()
-    if CachedLeviathan and CachedLeviathan.Parent then
-        return CachedLeviathan
+    if SeaHuntState.CachedLeviathan and SeaHuntState.CachedLeviathan.Parent then
+        return SeaHuntState.CachedLeviathan
     end
-    if os.clock() < NextLeviathanGlobalScan then return nil end
-    NextLeviathanGlobalScan = os.clock() + 3
+    if os.clock() < SeaHuntState.NextLeviathanScan then return nil end
+    SeaHuntState.NextLeviathanScan = os.clock() + 3
 
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") then
             local n = string.lower(obj.Name)
             if string.find(n, "leviathan", 1, true) then
-                CachedLeviathan = obj
+                SeaHuntState.CachedLeviathan = obj
                 return obj
             end
         end
@@ -3415,7 +3416,6 @@ end
 -- START HUNT
 -- =========================================================
 
-local HuntThread = nil
 local RecoveryState = nil
 
 local function StopHunt()
@@ -3464,7 +3464,7 @@ local function StartHunt()
         StartFollowBeastHunter()
     end
 
-    HuntThread = task.spawn(function()
+    task.spawn(function()
         while Running do
             if RecoveryState and RecoveryState.Resetting then
                 task.wait(0.25)
