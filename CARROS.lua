@@ -39,7 +39,7 @@ local function trackConnection(connection)
 end
 
 -- ===== VERSION =====
-local VERSION = "v5.2 STABLE"
+local VERSION = "v5.3 STABLE"
 
 --[[
     OPTIMIZATION NOTES (v5.1):
@@ -110,8 +110,9 @@ local maxVisitedHistory = 9  -- CHANGED: Only remember last 9 (was 5)
 
 -- Performance Mode
 local performanceModeEnabled = false
-local lastPerformanceCheck = 0
-local performanceCheckInterval = 10
+local lastSafeCheck = 0
+local lastPromptScan = 0
+local lastESPUpdate = 0
 
 -- Customizable Settings
 local atmOffsetX = 0
@@ -122,7 +123,7 @@ local promptBufferTime = 0.1
 -- HYBRID FARM SETTINGS (OPTIMIZED FOR RELIABILITY)
 local waitForSecondPrompt = 3.4  -- FASTER: 1 second faster (was 6.5, now 5.5)
 local inactivityTimeout = 12     -- Stay at ATM longer (up from 10)
-local quickSkipTime = 4.3        -- More patience before skipping (up from 3.8)
+local quickSkipTime = 12         -- Never abandon a legitimate long prompt too early
 
 -- BREAK MODE for map loading
 local consecutiveSkipsForBreak = 5  -- Happens less often (was 3)
@@ -235,46 +236,66 @@ local function teleportToCFrame(cframe)
 end
 
 local function teleportToDropOffPoint()
-    local dropOffPart = findPartByName(workspace, "CriminalDropOffSpawnerPermanent")
+    local dropOffObject = workspace:FindFirstChild("CriminalDropOffSpawnerPermanent", true)
+    local dropOffPart = dropOffObject
+    if dropOffPart and not dropOffPart:IsA("BasePart") then
+        dropOffPart = dropOffPart:FindFirstChildWhichIsA("BasePart", true)
+    end
+
     if dropOffPart and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = player.Character.HumanoidRootPart
         local basePos = dropOffPart.Position
-        
-        -- ULTRA AGGRESSIVE JIGGLE - GUARANTEED MULTIPLE TOUCHES!
+
+        hrp.CanTouch = true
+
+        -- Use a short physical pass through the drop-off instead of dozens of
+        -- teleports. This is cheaper and gives touch-based zones time to react.
         local movements = {
-            Vector3.new(0, 15, 0),    -- WAY above (approach from top)
-            Vector3.new(0, 10, 0),    -- High above
-            Vector3.new(0, 5, 0),     -- Above
-            Vector3.new(0, 2, 0),     -- Slightly above
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #1!)
-            Vector3.new(0, -1, 0),    -- Slightly below
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #2!)
-            Vector3.new(3, 0, 0),     -- Right side
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #3!)
-            Vector3.new(-3, 0, 0),    -- Left side
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #4!)
-            Vector3.new(0, 0, 3),     -- Forward
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #5!)
-            Vector3.new(0, 0, -3),    -- Back
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #6!)
-            Vector3.new(2, 1, 2),     -- Diagonal up
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #7!)
-            Vector3.new(-2, -1, -2),  -- Diagonal down
-            Vector3.new(0, 0, 0),     -- CENTER (TOUCH #8!)
-            Vector3.new(0, 2, 0),     -- Up again
-            Vector3.new(0, -2, 0),    -- Down through it
-            Vector3.new(0, 0, 0),     -- FINAL CENTER (TOUCH #9!)
+            Vector3.new(0, 6, 0),
+            Vector3.new(0, 2, 0),
+            Vector3.new(0, 0, 0),
+            Vector3.new(2, 0, 0),
+            Vector3.new(-2, 0, 0),
+            Vector3.new(0, 0, 0),
         }
-        
+
         for _, offset in ipairs(movements) do
-            if player.Character and hrp then
+            if HubState.Active and player.Character and hrp.Parent then
                 hrp.CFrame = CFrame.new(basePos + offset)
-                hrp.AssemblyLinearVelocity = Vector3.zero  -- Stop all movement
-                hrp.AssemblyAngularVelocity = Vector3.zero  -- Stop rotation
-                task.wait(0.35)  -- INCREASED: More time for touch to register (was 0.25)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.AssemblyAngularVelocity = Vector3.zero
+                RunService.Heartbeat:Wait()
+                task.wait(0.2)
             end
         end
+
+        -- Some versions of the map use a ProximityPrompt instead of touch.
+        -- Trigger only prompts physically close to the drop-off marker.
+        local promptTriggered = false
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            if descendant:IsA("ProximityPrompt") and descendant.Enabled then
+                local promptPart = descendant.Parent
+                if promptPart and promptPart:IsA("Attachment") then
+                    promptPart = promptPart.Parent
+                end
+                if promptPart and promptPart:IsA("BasePart") and (promptPart.Position - basePos).Magnitude <= 25 then
+                    local ok = pcall(function()
+                        descendant.RequiresLineOfSight = false
+                        hrp.CFrame = promptPart.CFrame * CFrame.new(0, 2, -2)
+                        task.wait(0.25)
+                        descendant:InputHoldBegin()
+                        task.wait(descendant.HoldDuration + 0.2)
+                        descendant:InputHoldEnd()
+                    end)
+                    promptTriggered = promptTriggered or ok
+                end
+            end
+        end
+
+        return true, promptTriggered
     end
+
+    return false, false
 end
 
 local function teleportToPresent(presentPart)
@@ -1026,7 +1047,15 @@ local function setupAutoFarm(scrollFrame)
                                 end
                                 
                                 -- Option 3: Quick Skip
-                                if promptsCompleted == 0 and (tick() - loopStart) > quickSkipTime then
+                                local promptInProgress = false
+                                for activePrompt in pairs(activePrompts) do
+                                    if activePrompt and activePrompt.Parent then
+                                        promptInProgress = true
+                                        break
+                                    end
+                                end
+
+                                if promptsCompleted == 0 and not promptInProgress and (tick() - loopStart) > quickSkipTime then
                                     notify("Quick Skip", "Empty | Skip: " .. (consecutiveSkips + 1))
                                     consecutiveSkips = consecutiveSkips + 1
                                     break
@@ -1094,7 +1123,7 @@ local function setupAutoFarm(scrollFrame)
                                 task.wait(0.3)  -- Extra safety wait for physics to settle
                                 
                                 -- 2. DO DROP OFF (Ultra Aggressive Jiggle = 9 GUARANTEED TOUCHES!)
-                                teleportToDropOffPoint()
+                                local dropOffFound, promptTriggered = teleportToDropOffPoint()
                                 
                                 task.wait(2.5)  -- INCREASED: Let server fully process all 9 touch events
                                 
@@ -1107,7 +1136,13 @@ local function setupAutoFarm(scrollFrame)
                                 end
                                 
                                 atmCounter = 0
-                                notify("Drop Off Complete", "Back to farming!")
+                                if not dropOffFound then
+                                    notify("Drop Off Failed", "Drop-off marker not found")
+                                elseif promptTriggered then
+                                    notify("Drop Off Attempted", "Interaction sent; check balance")
+                                else
+                                    notify("Drop Off Attempted", "Touched zone; no prompt found")
+                                end
                             end
                             
                             task.wait(0.5)
@@ -1375,13 +1410,10 @@ end))
 
 trackConnection(RunService.RenderStepped:Connect(function()
     if not HubState.Active then return end
-    if performanceModeEnabled and (tick() - lastPerformanceCheck) > performanceCheckInterval then
-        lastPerformanceCheck = tick()
-        applyPerformanceOptimizations()
-    end
 
     -- UPDATED: SAFE MODE NO LONGER STOPS AUTO FARM
-    if safeModeEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and (tick() - lastSafeTrigger > 2) then
+    if safeModeEnabled and (tick() - lastSafeCheck) >= 0.25 and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and (tick() - lastSafeTrigger > 2) then
+        lastSafeCheck = tick()
         local myPos = player.Character.HumanoidRootPart.Position
         for _, otherPlayer in ipairs(Players:GetPlayers()) do
             if otherPlayer ~= player and otherPlayer.Character and otherPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -1455,7 +1487,8 @@ trackConnection(RunService.RenderStepped:Connect(function()
     end
 
     -- AUTO PROMPT (with TEST MODE support & BREAK MODE awareness)
-    if autoPromptEnabled and not isInBreakMode and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+    if autoPromptEnabled and not isInBreakMode and (tick() - lastPromptScan) >= 0.1 and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        lastPromptScan = tick()
         local hrp = player.Character.HumanoidRootPart
         for _, item in ipairs(promptFastCache) do
             local prompt = item.Prompt
@@ -1510,14 +1543,17 @@ trackConnection(RunService.RenderStepped:Connect(function()
         end
     end
     
-    if espEnabled then updateESP() end
+    if espEnabled and (tick() - lastESPUpdate) >= 0.1 then
+        lastESPUpdate = tick()
+        updateESP()
+    end
 end))
 
 -- CACHE REFRESH LOOP
 task.spawn(function()
     while HubState.Active do
         refreshPromptCache()
-        task.wait(1) 
+        task.wait(3)
     end
 end)
 
