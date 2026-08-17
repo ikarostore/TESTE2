@@ -178,50 +178,54 @@ local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
     local sent = false
 
     if not tool then return false, direct, upvalue, method, 0, 0, "Melee ausente" end
-    if not controller then
-        VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(1280, 672))
-        return false, direct, upvalue, method, 0, 0, "Clique controle; sem controller"
+    if controller then
+        controller.attacking = false
+        controller.blocking = false
+        controller.timeToNextAttack = tick() - 1
+        controller.timeToNextBlock = 0
+        controller.increment = 3
+        controller.hitboxMagnitude = 120
+        controller.equipped = true
     end
 
-    local rigModule = ReplicatedStorage:FindFirstChild("CombatFramework")
-    rigModule = rigModule and rigModule:FindFirstChild("RigLib")
-    local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
-    local okRig, rigLib = pcall(require, rigModule)
-    if not okRig or not rigEvent or type(rigLib) ~= "table" then
-        return false, direct, upvalue, method, 0, 0, "RigLib/RigEvent ausente"
-    end
-
-    local weapon = controller.blades and controller.blades[1]
-    while weapon and weapon.Parent and weapon.Parent ~= character do weapon = weapon.Parent end
-    local rawHits = rigLib.getBladeHits(character, {root}, 60) or {}
-    local hits, seen = {}, {}
-    for _, hit in pairs(rawHits) do
-        rawCount = rawCount + 1
-        local model = hit and hit:FindFirstAncestorOfClass("Model")
-        local hitRoot = model and model:FindFirstChild("HumanoidRootPart")
-        if model == targetModel and hitRoot and not seen[model] then
-            seen[model] = true
-            table.insert(hits, hitRoot)
-        end
-    end
-    filteredCount = #hits
-
-    controller.attacking = false
-    controller.blocking = false
-    controller.timeToNextAttack = tick() - 1
-    controller.timeToNextBlock = 0
-    controller.increment = 3
-    controller.hitboxMagnitude = 120
+    local stun = character:FindFirstChild("Stun")
+    if stun then pcall(function() stun.Value = 0 end) end
+    humanoid.Sit = false
 
     VirtualUser:CaptureController()
     VirtualUser:Button1Down(Vector2.new(1280, 672))
-    if weapon and #hits > 0 then
-        rigEvent:FireServer("weaponChange", tostring(weapon))
-        rigEvent:FireServer("hit", hits, 1, "")
-        sent = true
+
+    -- RigLib e apenas um reforco/diagnostico. O BM original funciona pelo
+    -- activeController + Button1Down e nao pode ser cancelado se o Rig sumir.
+    local rigFramework = ReplicatedStorage:FindFirstChild("CombatFramework")
+    local rigModule = rigFramework and rigFramework:FindFirstChild("RigLib")
+    local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
+    local okRig, rigLib = pcall(require, rigModule)
+    if controller and okRig and rigEvent and type(rigLib) == "table" then
+        local weapon = controller.blades and controller.blades[1]
+        while weapon and weapon.Parent and weapon.Parent ~= character do weapon = weapon.Parent end
+        local rawHits = rigLib.getBladeHits(character, {root}, 120) or {}
+        local hits, seen = {}, {}
+        for _, hit in pairs(rawHits) do
+            rawCount = rawCount + 1
+            local model = hit and hit:FindFirstAncestorOfClass("Model")
+            local hitRoot = model and model:FindFirstChild("HumanoidRootPart")
+            if model == targetModel and hitRoot and not seen[model] then
+                seen[model] = true
+                table.insert(hits, hitRoot)
+            end
+        end
+        filteredCount = #hits
+        if weapon and #hits > 0 then
+            rigEvent:FireServer("weaponChange", tostring(weapon))
+            rigEvent:FireServer("hit", hits, 1, "")
+        end
     end
-    return sent, direct, upvalue, method, rawCount, filteredCount, tool.Name
+    sent = true
+    local detail = controller and (tool.Name .. " | BM controller + Button1Down")
+        or (tool.Name .. " | Button1Down sem controller")
+    if not okRig or not rigEvent then detail = detail .. " | Rig opcional ausente" end
+    return sent, direct, upvalue, method, rawCount, filteredCount, detail
 end
 
 toggle.MouseButton1Click:Connect(function()
@@ -250,10 +254,10 @@ while task.wait(0.18) do
         local target, targetRoot, initialDistance = FindNearestEnemy(root)
         if target and targetRoot then
             if bringTest then
-                targetRoot.CFrame = root.CFrame * CFrame.new(0, 0, -12)
+                targetRoot.CFrame = root.CFrame * CFrame.new(0, 0, -35)
                 targetRoot.CanCollide = false
             else
-                root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(0, 30, 0), targetRoot.Position)
+                root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(0, 35, 0), targetRoot.Position)
             end
             local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
             local hpBefore = targetHumanoid and targetHumanoid.Health or -1
@@ -271,7 +275,7 @@ while task.wait(0.18) do
                 "Rig hits bruto/filtrado: " .. tostring(rawHits) .. " / " .. tostring(filteredHits),
                 "Hit enviado: " .. tostring(sent),
                 "Detalhe/arma: " .. tostring(detail),
-                "Distancia de teste: " .. (bringTest and "12 (mob trazido)" or "30 (jogador acima)"),
+                "Distancia de teste: 35 " .. (bringTest and "(mob trazido)" or "(jogador acima)"),
                 "Bring Mob TESTE: " .. tostring(bringTest)
             }, "\n")
             output.Text = lastReport
