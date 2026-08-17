@@ -4,12 +4,17 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local running = false
 local bringTest = false
 local lastReport = "Teste carregado."
+local CameraShaker
+pcall(function()
+    CameraShaker = require(ReplicatedStorage.Util.CameraShaker)
+end)
 
 local old = PlayerGui:FindFirstChild("IKARO_BMFastAttackTest")
 if old then old:Destroy() end
@@ -118,7 +123,35 @@ end
 
 local cachedController
 local cachedMethod
+local cachedControllerInfo = ""
 local nextControllerScan = 0
+local function ControllerInfo(controller)
+    if type(controller) ~= "table" then return "controller invalido" end
+    local keys = {}
+    for key, value in pairs(controller) do
+        if #keys >= 12 then break end
+        table.insert(keys, tostring(key) .. ":" .. type(value))
+    end
+    return table.concat(keys, ", ")
+end
+
+local function CombatRemoteInfo()
+    local found = {}
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = string.lower(obj.Name)
+            if string.find(name, "attack", 1, true)
+            or string.find(name, "hit", 1, true)
+            or string.find(name, "rig", 1, true)
+            or string.find(name, "combat", 1, true) then
+                table.insert(found, obj:GetFullName())
+                if #found >= 6 then break end
+            end
+        end
+    end
+    return #found > 0 and table.concat(found, " | ") or "nenhum remote encontrado"
+end
+
 local function ControllerState()
     if cachedController then
         return cachedController, cachedMethod == "direto", cachedMethod == "upvalue[2]", cachedMethod
@@ -138,12 +171,26 @@ local function ControllerState()
     end
     if not module then
         if getgc then
+            local best, bestScore
+            bestScore = -1
             for _, value in pairs(getgc(true)) do
                 if type(value) == "table" and rawget(value, "activeController") then
-                    cachedController = value.activeController
-                    cachedMethod = "getgc activeController"
-                    return cachedController, false, false, cachedMethod
+                    local candidate = value.activeController
+                    local score = 0
+                    if type(candidate) == "table" then
+                        if type(candidate.attack) == "function" then score = score + 4 end
+                        if type(candidate.blades) == "table" then score = score + 3 end
+                        if candidate.humanoid then score = score + 2 end
+                        if candidate.equipped ~= nil then score = score + 1 end
+                    end
+                    if score > bestScore then best, bestScore = candidate, score end
                 end
+            end
+            if best then
+                cachedController = best
+                cachedControllerInfo = ControllerInfo(best)
+                cachedMethod = "getgc activeController score=" .. tostring(bestScore)
+                return cachedController, false, false, cachedMethod
             end
         end
         cachedMethod = "CombatFramework ausente; getgc sem controller"
@@ -181,19 +228,25 @@ local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
     if controller then
         controller.attacking = false
         controller.blocking = false
-        controller.timeToNextAttack = tick() - 1
+        controller.timeToNextAttack = math.huge ^ math.huge ^ math.huge
+        controller.timeToNextAttack = 0
         controller.timeToNextBlock = 0
-        controller.increment = 3
+        controller.increment = 1
         controller.hitboxMagnitude = 120
-        controller.equipped = true
+        controller.active = false
+        controller.focusStart = 1655503339.0980349
+        if controller.humanoid then controller.humanoid.AutoRotate = true end
     end
 
     local stun = character:FindFirstChild("Stun")
     if stun then pcall(function() stun.Value = 0 end) end
+    local busy = character:FindFirstChild("Busy")
+    if busy then pcall(function() busy.Value = false end) end
     humanoid.Sit = false
 
     VirtualUser:CaptureController()
     VirtualUser:Button1Down(Vector2.new(1280, 672))
+    if CameraShaker and type(CameraShaker.Stop) == "function" then CameraShaker:Stop() end
 
     -- RigLib e apenas um reforco/diagnostico. O BM original funciona pelo
     -- activeController + Button1Down e nao pode ser cancelado se o Rig sumir.
@@ -222,7 +275,7 @@ local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
         end
     end
     sent = true
-    local detail = controller and (tool.Name .. " | BM controller + Button1Down")
+    local detail = controller and (tool.Name .. " | BM completo da referencia")
         or (tool.Name .. " | Button1Down sem controller")
     if not okRig or not rigEvent then detail = detail .. " | Rig opcional ausente" end
     return sent, direct, upvalue, method, rawCount, filteredCount, detail
@@ -248,7 +301,7 @@ copy.MouseButton1Click:Connect(function()
     end
 end)
 
-while task.wait(0.18) do
+while RunService.Heartbeat:Wait() do
     local character, humanoid, root = CharacterParts()
     if running and character and humanoid and humanoid.Health > 0 and root then
         local target, targetRoot, initialDistance = FindNearestEnemy(root)
@@ -263,7 +316,7 @@ while task.wait(0.18) do
             local hpBefore = targetHumanoid and targetHumanoid.Health or -1
             local sent, direct, upvalue, method, rawHits, filteredHits, detail =
                 PerformAttack(target, targetRoot, character, humanoid, root)
-            task.wait(0.05)
+            task.wait(0.25)
             local hpAfter = targetHumanoid and targetHumanoid.Health or -1
             lastReport = table.concat({
                 "Alvo: " .. target.Name,
@@ -275,6 +328,8 @@ while task.wait(0.18) do
                 "Rig hits bruto/filtrado: " .. tostring(rawHits) .. " / " .. tostring(filteredHits),
                 "Hit enviado: " .. tostring(sent),
                 "Detalhe/arma: " .. tostring(detail),
+                "Controller campos: " .. tostring(cachedControllerInfo),
+                "Remotes: " .. CombatRemoteInfo(),
                 "Distancia de teste: 35 " .. (bringTest and "(mob trazido)" or "(jogador acima)"),
                 "Bring Mob TESTE: " .. tostring(bringTest)
             }, "\n")
