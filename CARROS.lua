@@ -39,7 +39,7 @@ local function trackConnection(connection)
 end
 
 -- ===== VERSION =====
-local VERSION = "v5.4 STABLE"
+local VERSION = "v5.5 STABLE"
 
 --[[
     OPTIMIZATION NOTES (v5.1):
@@ -47,7 +47,7 @@ local VERSION = "v5.4 STABLE"
     - Added 0.8s post-teleport delay for game loading
     - Break mode triggers less often (5 skips instead of 3)
     - Auto prompt pauses during break mode (prevents conflicts)
-    - Drop off happens less often (every 12 ATMs instead of 10)
+    - Drop off runs every 6 ATMs
     - Result: 95%+ reliability, truly AFK-able farming
 ]]
 
@@ -346,17 +346,7 @@ local function isOutlawShiftActive()
     if player.Team and containsAny(player.Team.Name, OUTLAW_WORDS) then
         return true
     end
-
-    -- The job marker shown by this game changes to "End Shift" while active.
-    for _, descendant in ipairs(workspace:GetDescendants()) do
-        if (descendant:IsA("TextLabel") or descendant:IsA("TextButton"))
-            and descendant.Visible
-            and containsAny(descendant.Text, {"end shift", "finish shift", "encerrar turno"}) then
-            return true
-        end
-    end
-
-    return false
+    return tostring(player:GetAttribute("JobId")) == "Criminal"
 end
 
 local function getPromptPart(prompt)
@@ -371,6 +361,19 @@ local function getPromptPart(prompt)
 end
 
 local function findOutlawShiftInteraction()
+    -- Exact path mapped in-game. CriminalPad is a touch job pad and changes
+    -- Team to Outlaw plus the player JobId attribute to Criminal.
+    local gameFolder = Workspace:FindFirstChild("Game")
+    local jobs = gameFolder and gameFolder:FindFirstChild("Jobs")
+    local container = jobs and jobs:FindFirstChild("JobPadContainer")
+    local criminalPad = container and container:FindFirstChild("CriminalPad")
+    if criminalPad then
+        local exactPrompt = criminalPad:FindFirstChildWhichIsA("ProximityPrompt", true)
+        local exactPart = criminalPad:IsA("BasePart") and criminalPad
+            or criminalPad:FindFirstChildWhichIsA("BasePart", true)
+        return exactPrompt, exactPart
+    end
+
     local bestPrompt
     local bestScore = -1
     local fallbackPart
@@ -1234,8 +1237,8 @@ local function setupAutoFarm(scrollFrame)
                                 notify("Break Done", "Back to ATMs!")
                             end
                             
-                            -- Drop off happens less often (every 12 ATMs instead of 10)
-                            if atmCounter >= 12 and farmModeEnabled then
+                            -- Deposit after every 6 visited ATMs.
+                            if atmCounter >= 6 and farmModeEnabled then
                                 notify("Drop Off", "Depositing money...")
                                 
                                 -- 1. CRITICAL: DISABLE FLY/NOCLIP *BEFORE* TELEPORTING!
