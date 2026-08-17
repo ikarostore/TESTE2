@@ -130,6 +130,7 @@ local SeaHuntState = {
     BMRegisterAttack = nil,
     BMRegisterHit = nil,
     BMModernRemotesChecked = false,
+    BMDirectHitCursor = 0,
     ResumeAfterEscape = false,
     EventKills = 0
 }
@@ -2130,14 +2131,11 @@ local function BMFastAttack(target, eventModel, eventKey)
     local tool = EquipSeaCombatType("Melee")
     if not tool then return false end
 
-    -- O rastreamento do Maru mostrou que Sea Events vivos usam um protocolo
-    -- diferente dos NPCs comuns: confirma a arma pelo EquipEvent e envia o
-    -- HumanoidRootPart diretamente, com a lista secundaria vazia. Repetir em
-    -- ~0.26 s acompanha a cadencia observada e evita spam/lag no servidor.
+    -- O rastreamento do Banana confirmou o mesmo protocolo eliminando Sharks
+    -- e grupos de Piranhas: Head diretamente, tabela secundaria vazia e uma
+    -- chamada a cada ~0.267 s. Nao usa RegisterAttack nem pacote agrupado.
     local registerAttack, registerHit = GetBMModernRemotes()
-    if registerHit and ClickSeaEvents[eventKey] then
-        local hitPart = eventModel and eventModel:FindFirstChild("HumanoidRootPart")
-            or target
+    if registerHit and (eventKey == "Shark" or eventKey == "Piranha") then
         local now = os.clock()
 
         -- O trace registra EquipEvent uma única vez e o primeiro hit somente
@@ -2162,27 +2160,43 @@ local function BMFastAttack(target, eventModel, eventKey)
             return true
         end
 
-        if hitPart and now >= (SeaHuntState.NextDirectSeaHit or 0) then
-            SeaHuntState.NextDirectSeaHit = now + 0.26
+        if now >= (SeaHuntState.NextDirectSeaHit or 0) then
+            SeaHuntState.NextDirectSeaHit = now + 0.267
 
-            -- Os dois formatos apareceram no rastreamento real. O direto com
-            -- tabela vazia é usado pelo Maru; o pacote com alvo explícito foi
-            -- o que comprovadamente reduziu HP no teste V2.4. Enviar ambos na
-            -- mesma cadência cobre a validação específica dos Sharks sem usar
-            -- clique físico nem mover o mob.
-            local attackOk = true
-            if registerAttack then
-                attackOk = pcall(function()
-                    registerAttack:FireServer(0.5, 1)
-                end)
+            local candidates = {}
+            local enemies = workspace:FindFirstChild("Enemies")
+            for _, model in ipairs(enemies and enemies:GetChildren() or {}) do
+                local lower = string.lower(model.Name)
+                local sameType = eventKey == "Piranha"
+                    and string.find(lower, "piranha", 1, true)
+                    or eventKey == "Shark"
+                    and string.find(lower, "shark", 1, true)
+                    and not string.find(lower, "terror", 1, true)
+                local humanoid = model:FindFirstChildOfClass("Humanoid")
+                local head = model:FindFirstChild("Head", true)
+                if sameType and head and head:IsA("BasePart")
+                and (not humanoid or humanoid.Health > 0) then
+                    table.insert(candidates, head)
+                end
             end
-            local directOk = pcall(function()
+
+            if #candidates == 0 then
+                local fallbackHead = eventModel and eventModel:FindFirstChild("Head", true)
+                if fallbackHead and fallbackHead:IsA("BasePart") then
+                    table.insert(candidates, fallbackHead)
+                end
+            end
+            if #candidates == 0 then return true end
+
+            -- Grupos sao atendidos em round-robin sem multiplicar remotes por
+            -- frame. Isso reproduz a alternancia vista nas tres Piranhas e
+            -- preserva a cadencia do Banana, evitando o lag dos pacotes duplos.
+            SeaHuntState.BMDirectHitCursor =
+                (SeaHuntState.BMDirectHitCursor % #candidates) + 1
+            local hitPart = candidates[SeaHuntState.BMDirectHitCursor]
+            return pcall(function()
                 registerHit:FireServer(hitPart, {})
             end)
-            local groupedOk = pcall(function()
-                registerHit:FireServer(hitPart, {{eventModel, hitPart}})
-            end)
-            return attackOk and directOk and groupedOk
         end
         return true
     end
