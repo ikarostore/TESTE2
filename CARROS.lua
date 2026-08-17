@@ -39,7 +39,7 @@ local function trackConnection(connection)
 end
 
 -- ===== VERSION =====
-local VERSION = "v5.5 STABLE"
+local VERSION = "v5.5.1 SAFE"
 
 --[[
     OPTIMIZATION NOTES (v5.1):
@@ -374,46 +374,9 @@ local function findOutlawShiftInteraction()
         return exactPrompt, exactPart
     end
 
-    local bestPrompt
-    local bestScore = -1
-    local fallbackPart
-
-    for _, descendant in ipairs(workspace:GetDescendants()) do
-        if descendant:IsA("ProximityPrompt") and descendant.Enabled then
-            local context = table.concat({
-                descendant.Name,
-                descendant.ActionText,
-                descendant.ObjectText,
-                descendant.Parent and descendant.Parent:GetFullName() or "",
-            }, " ")
-            local lower = string.lower(context)
-
-            -- Never click the profession toggle when it would end the shift.
-            if not containsAny(lower, {"end shift", "finish shift", "quit job", "encerrar turno"}) then
-                local score = 0
-                if containsAny(lower, OUTLAW_WORDS) then score = score + 3 end
-                if containsAny(lower, START_SHIFT_WORDS) then score = score + 5 end
-                if score > bestScore then
-                    bestScore = score
-                    bestPrompt = descendant
-                end
-            end
-        elseif descendant:IsA("TextLabel") and descendant.Visible then
-            local text = string.lower(descendant.Text or "")
-            if containsAny(text, START_SHIFT_WORDS) then
-                local gui = descendant:FindFirstAncestorWhichIsA("BillboardGui")
-                    or descendant:FindFirstAncestorWhichIsA("SurfaceGui")
-                local adornee = gui and gui.Adornee
-                fallbackPart = (adornee and adornee:IsA("BasePart") and adornee)
-                    or descendant:FindFirstAncestorWhichIsA("BasePart")
-            end
-        end
-    end
-
-    if bestScore <= 0 then
-        bestPrompt = nil
-    end
-    return bestPrompt, fallbackPart
+    -- Never fall back to another generic Start Shift pad. With StreamingEnabled
+    -- that previously selected the nearby Delivery Driver job.
+    return nil, nil
 end
 
 local function ensureOutlawShift()
