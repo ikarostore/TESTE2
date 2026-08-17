@@ -2126,9 +2126,31 @@ local function BMFastAttack(target, eventModel, eventKey)
     local tool = EquipSeaCombatType("Melee")
     if not tool then return false end
 
-    -- Protocolo moderno comprovado no teste V2.4. Ele substitui o antigo
-    -- CombatFramework/RigLib e funciona a distancia em Shark/Piranha/Terror.
+    -- O rastreamento do Maru mostrou que Sea Events vivos usam um protocolo
+    -- diferente dos NPCs comuns: confirma a arma pelo EquipEvent e envia o
+    -- HumanoidRootPart diretamente, com a lista secundaria vazia. Repetir em
+    -- ~0.26 s acompanha a cadencia observada e evita spam/lag no servidor.
     local registerAttack, registerHit = GetBMModernRemotes()
+    if registerHit and ClickSeaEvents[eventKey] then
+        local hitPart = eventModel and eventModel:FindFirstChild("HumanoidRootPart")
+            or target
+        local now = os.clock()
+        if hitPart and now >= (SeaHuntState.NextDirectSeaHit or 0) then
+            SeaHuntState.NextDirectSeaHit = now + 0.26
+
+            pcall(function()
+                local equipEvent = tool:FindFirstChild("EquipEvent")
+                if equipEvent then equipEvent:FireServer(true) end
+            end)
+
+            return pcall(function()
+                registerHit:FireServer(hitPart, {})
+            end)
+        end
+        return true
+    end
+
+    -- Pacote moderno comprovado no teste V2.4 para NPCs comuns.
     if registerAttack and registerHit then
         local targets = {}
         local firstHitPart = nil
