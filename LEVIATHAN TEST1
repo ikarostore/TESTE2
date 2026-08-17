@@ -2675,13 +2675,6 @@ end
 local CachedLeviathan = nil
 local NextLeviathanGlobalScan = os.clock() + 2
 
-workspace.DescendantAdded:Connect(function(obj)
-    if obj:IsA("Model")
-    and string.find(string.lower(obj.Name), "leviathan", 1, true) then
-        CachedLeviathan = obj
-    end
-end)
-
 local function FindLeviathan()
     if CachedLeviathan and CachedLeviathan.Parent then
         return CachedLeviathan
