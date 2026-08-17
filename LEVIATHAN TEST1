@@ -130,6 +130,7 @@ local SeaHuntState = {
     BMRegisterAttack = nil,
     BMRegisterHit = nil,
     BMModernRemotesChecked = false,
+    ResumeAfterEscape = false,
     EventKills = 0
 }
 
@@ -1614,6 +1615,10 @@ local function StopFollow()
     end
 
     RestoreFollowPhysics()
+
+    if Running and AccountBuyBoat and not SeaHuntState.CombatBatchActive then
+        SeaHuntState.ResumeAfterEscape = true
+    end
 end
 
 local function GetBoatReferencePart(boat)
@@ -2005,6 +2010,21 @@ local function EquipSeaCombatType(category)
 
     local wanted = category == "Fruit" and "Blox Fruit" or category
 
+    -- O método comprovado pelo Maru equipa Sharkman Karate antes dos hits.
+    if category == "Melee" then
+        for _, container in ipairs({Character, LocalPlayer.Backpack}) do
+            if container then
+                for _, tool in ipairs(container:GetChildren()) do
+                    if tool:IsA("Tool")
+                    and string.find(string.lower(tool.Name), "sharkman karate", 1, true) then
+                        pcall(function() Humanoid:EquipTool(tool) end)
+                        return tool
+                    end
+                end
+            end
+        end
+    end
+
     for _, container in ipairs({LocalPlayer.Backpack, Character}) do
         if container then
             for _, tool in ipairs(container:GetChildren()) do
@@ -2097,7 +2117,7 @@ local function GetBMModernRemotes()
     return SeaHuntState.BMRegisterAttack, SeaHuntState.BMRegisterHit
 end
 
-local function BMFastAttack(target, eventModel)
+local function BMFastAttack(target, eventModel, eventKey)
     if not target then return false end
 
     EnsureSeaCombatHaki()
@@ -2110,14 +2130,44 @@ local function BMFastAttack(target, eventModel)
     -- CombatFramework/RigLib e funciona a distancia em Shark/Piranha/Terror.
     local registerAttack, registerHit = GetBMModernRemotes()
     if registerAttack and registerHit then
-        local targetModel = eventModel or target:FindFirstAncestorOfClass("Model")
-        local hitPart = targetModel and targetModel:FindFirstChild("Head") or target
-        if targetModel and hitPart then
+        local targets = {}
+        local firstHitPart = nil
+        local enemies = workspace:FindFirstChild("Enemies")
+
+        local function addTarget(model)
+            if not model or not model.Parent then return end
+            local hum = model:FindFirstChildOfClass("Humanoid")
+            local part = model:FindFirstChild("Head")
+                or model:FindFirstChild("HumanoidRootPart")
+                or model.PrimaryPart
+                or model:FindFirstChildWhichIsA("BasePart", true)
+            if hum and hum.Health > 0 and part and HRP
+            and (part.Position - HRP.Position).Magnitude <= 120 then
+                table.insert(targets, {model, part})
+                firstHitPart = firstHitPart or part
+            end
+        end
+
+        if eventKey == "Shark" or eventKey == "Piranha" then
+            for _, model in ipairs(enemies and enemies:GetChildren() or {}) do
+                local lower = string.lower(model.Name)
+                local sameType = eventKey == "Piranha"
+                    and string.find(lower, "piranha", 1, true)
+                    or eventKey == "Shark"
+                    and string.find(lower, "shark", 1, true)
+                    and not string.find(lower, "terror", 1, true)
+                if sameType then addTarget(model) end
+            end
+        else
+            addTarget(eventModel or target:FindFirstAncestorOfClass("Model"))
+        end
+
+        if firstHitPart and #targets > 0 then
             local attackOk = pcall(function()
                 registerAttack:FireServer(0)
             end)
             local hitOk = pcall(function()
-                registerHit:FireServer(hitPart, {{targetModel, hitPart}})
+                registerHit:FireServer(firstHitPart, targets)
             end)
             return attackOk and hitOk
         end
@@ -2625,10 +2675,14 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     local started = os.clock()
     local okCombat, combatError = pcall(function()
         while Running
-        and not EscapeActive
         and SeaHuntState.CurrentEvent == eventModel
         and IsEventAlive(eventModel)
         and os.clock() - started < 180 do
+            if EscapeActive then
+                task.wait(0.25)
+                continue
+            end
+
             target = GetModelTargetPart(eventModel)
             if not target then break end
 
@@ -2645,7 +2699,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if useBasicClick then
-                    BMFastAttack(target, eventModel)
+                    BMFastAttack(target, eventModel, eventKey)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
@@ -3470,6 +3524,10 @@ local function StartHunt()
                 task.wait(0.25)
                 continue
             end
+            if EscapeActive then
+                task.wait(0.25)
+                continue
+            end
             if SeaHuntState.CombatBatchActive then
                 task.wait(0.25)
                 continue
@@ -3559,6 +3617,21 @@ local function StartHunt()
                     end)
                 end
             else
+                if SeaHuntState.ResumeAfterEscape then
+                    SeaHuntState.ResumeAfterEscape = false
+                    SetState("ESCAPE_RESUME", "Retomando automaticamente a caça após recuperar HP.")
+                    if AccountBuyBoat then
+                        task.spawn(function()
+                            local okSeat = GoToBeastHunterSeat()
+                            if okSeat and Running and not EscapeActive then StartBoatDrive() end
+                        end)
+                    elseif OwnerPlayer then
+                        StartFollowBeastHunter()
+                    end
+                    task.wait(0.25)
+                    continue
+                end
+
                 local levi = FindLeviathan()
 
                 if levi then
