@@ -2866,7 +2866,35 @@ end)
 
 local function GetBeastHunter()
     local boats = workspace:FindFirstChild("Boats")
-    return boats and boats:FindFirstChild("Beast Hunter")
+    if not boats then return nil end
+
+    local fallback = nil
+    local ownerlessCount = 0
+
+    for _, boat in ipairs(boats:GetChildren()) do
+        if boat.Name == "Beast Hunter" then
+            local owner = boat:FindFirstChild("BoatOwner")
+            local ownerValue = owner and owner.Value
+            if ownerValue == LocalPlayer
+            or tostring(ownerValue) == LocalPlayer.Name then
+                return boat
+            end
+
+            local seat = boat:FindFirstChild("VehicleSeat")
+            if seat and seat.Occupant and seat.Occupant.Parent == Character then
+                return boat
+            end
+
+            if not owner then
+                ownerlessCount = ownerlessCount + 1
+                fallback = boat
+            end
+        end
+    end
+
+    -- Compatibilidade com servidores antigos que não replicam BoatOwner:
+    -- só aceita o fallback quando existe um único Beast Hunter no mapa.
+    return ownerlessCount == 1 and fallback or nil
 end
 
 local function GetBeastHunterMainSeat()
@@ -2891,14 +2919,21 @@ local function BuyBeastHunter(forcePurchase)
 
     SetState("BUYING_BEAST_HUNTER", "Tentando comprar Beast Hunter...")
 
-    local ok, result = pcall(function()
-        return comm:InvokeServer("BuyBoat", "Beast Hunter")
-    end)
-
-    if not ok then return false, tostring(result) end
-
     local deadline = os.clock() + 10
+    local nextPurchase = 0
+    local lastError = nil
     repeat
+        local now = os.clock()
+        if now >= nextPurchase then
+            nextPurchase = now + 1.25
+            local ok, result = pcall(function()
+                -- CommF_ não depende da posição do personagem; portanto a
+                -- conta responsável pode comprar de qualquer ilha.
+                return comm:InvokeServer("BuyBoat", "Beast Hunter")
+            end)
+            if not ok then lastError = tostring(result) end
+        end
+
         task.wait(0.2)
         local current = GetBeastHunter()
         if current and (not forcePurchase or current ~= existing) then
@@ -2908,7 +2943,7 @@ local function BuyBeastHunter(forcePurchase)
     until os.clock() >= deadline
 
     if existing then return true, existing end
-    return false, "A chamada ocorreu, mas o barco não apareceu."
+    return false, lastError or "A compra remota ocorreu, mas o barco desta conta não apareceu."
 end
 
 FlyToPart = function(part, stopDistance, ignoreRunning)
