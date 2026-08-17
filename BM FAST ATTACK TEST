@@ -186,12 +186,15 @@ local function ControllerState()
                     if score > bestScore then best, bestScore = candidate, score end
                 end
             end
-            if best then
+            if best and bestScore >= 3 then
                 cachedController = best
                 cachedControllerInfo = ControllerInfo(best)
                 cachedMethod = "getgc activeController score=" .. tostring(bestScore)
                 return cachedController, false, false, cachedMethod
             end
+            cachedControllerInfo = best and ControllerInfo(best) or "nenhum candidato"
+            cachedMethod = "controller legado rejeitado score=" .. tostring(bestScore)
+            return nil, false, false, cachedMethod
         end
         cachedMethod = "CombatFramework ausente; getgc sem controller"
         return nil, false, false, cachedMethod
@@ -225,6 +228,21 @@ local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
     local sent = false
 
     if not tool then return false, direct, upvalue, method, 0, 0, "Melee ausente" end
+
+    -- Protocolo de combate atual: substituiu CombatFramework/RigLib.
+    local modules = ReplicatedStorage:FindFirstChild("Modules")
+    local net = modules and modules:FindFirstChild("Net")
+    local registerAttack = net and net:FindFirstChild("RE/RegisterAttack")
+    local registerHit = net and net:FindFirstChild("RE/RegisterHit")
+    if registerAttack and registerHit then
+        local hitPart = targetModel:FindFirstChild("Head") or targetRoot
+        local targets = {{targetModel, hitPart}}
+        local attackOk = pcall(function() registerAttack:FireServer(0) end)
+        local hitOk = pcall(function() registerHit:FireServer(hitPart, targets) end)
+        return attackOk and hitOk, false, false, "Modules.Net moderno", 1, 1,
+            tool.Name .. " | RegisterAttack + RegisterHit"
+    end
+
     if controller then
         controller.attacking = false
         controller.blocking = false
