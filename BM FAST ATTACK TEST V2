@@ -10,7 +10,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local running = false
 local bringTest = false
-local lastReport = "V2 MODERN NET carregado."
+local lastReport = "V2.1 MODERN NET carregado."
 local hoverTarget
 local hoverY
 local CameraShaker
@@ -43,7 +43,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -16, 0, 34)
 title.Position = UDim2.new(0, 8, 0, 4)
 title.BackgroundTransparency = 1
-title.Text = "IKARO - BM Fast Attack Test V2 MODERN NET"
+title.Text = "IKARO - BM Fast Attack Test V2.1 MODERN NET"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
@@ -345,45 +345,66 @@ RunService.Heartbeat:Connect(function()
     root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end)
 
+local cachedRemoteText = CombatRemoteInfo()
+local nextAttack = 0
+local nextReport = 0
+local previousReportHP = {}
+local ATTACK_INTERVAL = 0.05
+local REPORT_INTERVAL = 0.5
+
 while RunService.Heartbeat:Wait() do
     local character, humanoid, root = CharacterParts()
     if running and character and humanoid and humanoid.Health > 0 and root then
-        local target, targetRoot, initialDistance = FindNearestEnemy(root)
+        local now = os.clock()
+        if now < nextAttack then continue end
+        nextAttack = now + ATTACK_INTERVAL
+
+        local target = hoverTarget
+        local targetRoot = target and target.Parent and target:FindFirstChild("HumanoidRootPart")
+        local targetHumanoid = target and target.Parent and target:FindFirstChildOfClass("Humanoid")
+        if not targetRoot or not targetHumanoid or targetHumanoid.Health <= 0 then
+            target, targetRoot = FindNearestEnemy(root)
+            targetHumanoid = target and target:FindFirstChildOfClass("Humanoid")
+        end
         if target and targetRoot then
+            local initialDistance = (targetRoot.Position - root.Position).Magnitude
             if hoverTarget ~= target then
                 hoverTarget = target
-                hoverY = targetRoot.Position.Y + 18
+                hoverY = targetRoot.Position.Y + 30
             end
             if bringTest then
-                targetRoot.CFrame = root.CFrame * CFrame.new(0, -18, 0)
+                targetRoot.CFrame = root.CFrame * CFrame.new(0, -30, 0)
                 targetRoot.CanCollide = false
             else
                 local hoverPosition = Vector3.new(targetRoot.Position.X, hoverY, targetRoot.Position.Z)
                 root.CFrame = CFrame.lookAt(hoverPosition, targetRoot.Position)
             end
-            local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
-            local hpBefore = targetHumanoid and targetHumanoid.Health or -1
             local sent, direct, upvalue, method, rawHits, filteredHits, detail =
                 PerformAttack(target, targetRoot, character, humanoid, root)
-            task.wait(0.25)
-            local hpAfter = targetHumanoid and targetHumanoid.Health or -1
-            lastReport = table.concat({
-                "VERSAO: V2 MODERN NET",
-                "Alvo: " .. target.Name,
-                "Distancia inicial: " .. tostring(math.floor(initialDistance * 10) / 10),
-                "HP antes/depois: " .. tostring(math.floor(hpBefore)) .. " / " .. tostring(math.floor(hpAfter)),
-                "Controller direto: " .. tostring(direct),
-                "Controller upvalue[2]: " .. tostring(upvalue),
-                "Metodo: " .. tostring(method),
-                "Rig hits bruto/filtrado: " .. tostring(rawHits) .. " / " .. tostring(filteredHits),
-                "Hit enviado: " .. tostring(sent),
-                "Detalhe/arma: " .. tostring(detail),
-                "Controller campos: " .. tostring(cachedControllerInfo),
-                "Remotes: " .. CombatRemoteInfo(),
-                "Distancia de teste: 18 " .. (bringTest and "(mob abaixo)" or "(jogador acima)"),
-                "Bring Mob TESTE: " .. tostring(bringTest)
-            }, "\n")
-            output.Text = lastReport
+            if now >= nextReport then
+                nextReport = now + REPORT_INTERVAL
+                local hpAfter = targetHumanoid and targetHumanoid.Health or -1
+                local hpBefore = previousReportHP[target] or hpAfter
+                previousReportHP[target] = hpAfter
+                lastReport = table.concat({
+                    "VERSAO: V2.1 MODERN NET",
+                    "Alvo: " .. target.Name,
+                    "Distancia atual: " .. tostring(math.floor(initialDistance * 10) / 10),
+                    "HP leitura anterior/atual: " .. tostring(math.floor(hpBefore)) .. " / " .. tostring(math.floor(hpAfter)),
+                    "Controller direto: " .. tostring(direct),
+                    "Controller upvalue[2]: " .. tostring(upvalue),
+                    "Metodo: " .. tostring(method),
+                    "Rig hits bruto/filtrado: " .. tostring(rawHits) .. " / " .. tostring(filteredHits),
+                    "Hit enviado: " .. tostring(sent),
+                    "Detalhe/arma: " .. tostring(detail),
+                    "Controller campos: " .. tostring(cachedControllerInfo),
+                    "Remotes: " .. cachedRemoteText,
+                    "Intervalo de ataque: " .. tostring(ATTACK_INTERVAL),
+                    "Distancia de teste: 30 " .. (bringTest and "(mob abaixo)" or "(jogador acima)"),
+                    "Bring Mob TESTE: " .. tostring(bringTest)
+                }, "\n")
+                output.Text = lastReport
+            end
         else
             hoverTarget = nil
             hoverY = nil
