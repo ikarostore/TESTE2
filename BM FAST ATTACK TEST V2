@@ -10,7 +10,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local running = false
 local bringTest = false
-local lastReport = "V2.1 MODERN NET carregado."
+local lastReport = "V2.2 MODERN NET carregado sem varreduras."
 local hoverTarget
 local hoverY
 local CameraShaker
@@ -43,7 +43,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -16, 0, 34)
 title.Position = UDim2.new(0, 8, 0, 4)
 title.BackgroundTransparency = 1
-title.Text = "IKARO - BM Fast Attack Test V2.1 MODERN NET"
+title.Text = "IKARO - BM Fast Attack Test V2.2 MODERN NET"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
@@ -302,6 +302,13 @@ local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
 end
 
 toggle.MouseButton1Click:Connect(function()
+    if not running then
+        local character, humanoid, root = CharacterParts()
+        if not character or not humanoid or humanoid.Health <= 0 or not root then
+            output.Text = "Aguardando o personagem terminar de carregar."
+            return
+        end
+    end
     running = not running
     if not running then
         hoverTarget = nil
@@ -345,7 +352,8 @@ RunService.Heartbeat:Connect(function()
     root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 end)
 
-local cachedRemoteText = CombatRemoteInfo()
+local cachedRemoteText = "varredura adiada"
+local remoteInfoReady = false
 local nextAttack = 0
 local nextReport = 0
 local previousReportHP = {}
@@ -358,6 +366,13 @@ while RunService.Heartbeat:Wait() do
         local now = os.clock()
         if now < nextAttack then continue end
         nextAttack = now + ATTACK_INTERVAL
+
+        if not remoteInfoReady then
+            remoteInfoReady = true
+            task.spawn(function()
+                cachedRemoteText = CombatRemoteInfo()
+            end)
+        end
 
         local target = hoverTarget
         local targetRoot = target and target.Parent and target:FindFirstChild("HumanoidRootPart")
@@ -387,7 +402,7 @@ while RunService.Heartbeat:Wait() do
                 local hpBefore = previousReportHP[target] or hpAfter
                 previousReportHP[target] = hpAfter
                 lastReport = table.concat({
-                    "VERSAO: V2.1 MODERN NET",
+                    "VERSAO: V2.2 MODERN NET",
                     "Alvo: " .. target.Name,
                     "Distancia atual: " .. tostring(math.floor(initialDistance * 10) / 10),
                     "HP leitura anterior/atual: " .. tostring(math.floor(hpBefore)) .. " / " .. tostring(math.floor(hpAfter)),
