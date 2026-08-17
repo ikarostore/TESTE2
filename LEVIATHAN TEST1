@@ -2165,9 +2165,24 @@ local function BMFastAttack(target, eventModel, eventKey)
         if hitPart and now >= (SeaHuntState.NextDirectSeaHit or 0) then
             SeaHuntState.NextDirectSeaHit = now + 0.26
 
-            return pcall(function()
+            -- Os dois formatos apareceram no rastreamento real. O direto com
+            -- tabela vazia é usado pelo Maru; o pacote com alvo explícito foi
+            -- o que comprovadamente reduziu HP no teste V2.4. Enviar ambos na
+            -- mesma cadência cobre a validação específica dos Sharks sem usar
+            -- clique físico nem mover o mob.
+            local attackOk = true
+            if registerAttack then
+                attackOk = pcall(function()
+                    registerAttack:FireServer(0.5, 1)
+                end)
+            end
+            local directOk = pcall(function()
                 registerHit:FireServer(hitPart, {})
             end)
+            local groupedOk = pcall(function()
+                registerHit:FireServer(hitPart, {{eventModel, hitPart}})
+            end)
+            return attackOk and directOk and groupedOk
         end
         return true
     end
