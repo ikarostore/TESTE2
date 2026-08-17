@@ -1,5 +1,5 @@
 -- IKARO - teste isolado de BM Fast Attack em NPCs normais
--- Nao usa Bring Mob e nao altera nenhuma propriedade do inimigo.
+-- Bring Mob e opcional, limitado ao NPC normal escolhido durante este teste.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,6 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local running = false
+local bringTest = false
 local lastReport = "Teste carregado."
 
 local old = PlayerGui:FindFirstChild("IKARO_BMFastAttackTest")
@@ -57,7 +58,7 @@ output.TextYAlignment = Enum.TextYAlignment.Top
 output.Parent = frame
 
 local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0, 195, 0, 38)
+toggle.Size = UDim2.new(0, 130, 0, 38)
 toggle.Position = UDim2.new(0, 10, 1, -50)
 toggle.BackgroundColor3 = Color3.fromRGB(65, 100, 82)
 toggle.BorderSizePixel = 0
@@ -68,9 +69,14 @@ toggle.TextSize = 15
 toggle.Parent = frame
 
 local copy = toggle:Clone()
-copy.Position = UDim2.new(1, -205, 1, -50)
+copy.Position = UDim2.new(1, -140, 1, -50)
 copy.Text = "Copiar resultado"
 copy.Parent = frame
+
+local bring = toggle:Clone()
+bring.Position = UDim2.new(0, 150, 1, -50)
+bring.Text = "Bring TESTE: OFF"
+bring.Parent = frame
 
 local function CharacterParts()
     local character = LocalPlayer.Character
@@ -110,22 +116,59 @@ local function EquipMelee(character, humanoid)
     end
 end
 
+local cachedController
+local cachedMethod
+local nextControllerScan = 0
 local function ControllerState()
-    local module = LocalPlayer.PlayerScripts:FindFirstChild("CombatFramework")
-    if not module then return nil, false, false, "CombatFramework ausente" end
+    if cachedController then
+        return cachedController, cachedMethod == "direto", cachedMethod == "upvalue[2]", cachedMethod
+    end
+    if os.clock() < nextControllerScan then return nil, false, false, cachedMethod or "aguardando scan" end
+    nextControllerScan = os.clock() + 3
+
+    local module = LocalPlayer.PlayerScripts:FindFirstChild("CombatFramework", true)
+    if not module then
+        for _, obj in ipairs(LocalPlayer.PlayerScripts:GetDescendants()) do
+            if obj:IsA("ModuleScript")
+            and string.find(string.lower(obj.Name), "combat", 1, true) then
+                module = obj
+                break
+            end
+        end
+    end
+    if not module then
+        if getgc then
+            for _, value in pairs(getgc(true)) do
+                if type(value) == "table" and rawget(value, "activeController") then
+                    cachedController = value.activeController
+                    cachedMethod = "getgc activeController"
+                    return cachedController, false, false, cachedMethod
+                end
+            end
+        end
+        cachedMethod = "CombatFramework ausente; getgc sem controller"
+        return nil, false, false, cachedMethod
+    end
     local ok, framework = pcall(require, module)
-    if not ok then return nil, false, false, "require falhou" end
+    if not ok then return nil, false, false, "require falhou: " .. module:GetFullName() end
 
     local direct = type(framework) == "table" and framework.activeController ~= nil
-    if direct then return framework.activeController, true, false, "direto" end
+    if direct then
+        cachedController, cachedMethod = framework.activeController, "direto"
+        return cachedController, true, false, cachedMethod .. " | " .. module:GetFullName()
+    end
 
     local getUps = getupvalues or (debug and debug.getupvalues)
     if not getUps then return nil, false, false, "getupvalues ausente" end
     local okUps, ups = pcall(getUps, framework)
     local internal = okUps and type(ups) == "table" and ups[2]
     local upvalue = type(internal) == "table" and internal.activeController ~= nil
-    return upvalue and internal.activeController or nil, false, upvalue,
-        upvalue and "upvalue[2]" or "controller nao encontrado"
+    if upvalue then
+        cachedController, cachedMethod = internal.activeController, "upvalue[2]"
+        return cachedController, false, true, cachedMethod .. " | " .. module:GetFullName()
+    end
+    cachedMethod = "controller nao encontrado | " .. module:GetFullName()
+    return nil, false, false, cachedMethod
 end
 
 local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
@@ -135,7 +178,11 @@ local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
     local sent = false
 
     if not tool then return false, direct, upvalue, method, 0, 0, "Melee ausente" end
-    if not controller then return false, direct, upvalue, method, 0, 0, "Sem controller" end
+    if not controller then
+        VirtualUser:CaptureController()
+        VirtualUser:Button1Down(Vector2.new(1280, 672))
+        return false, direct, upvalue, method, 0, 0, "Clique controle; sem controller"
+    end
 
     local rigModule = ReplicatedStorage:FindFirstChild("CombatFramework")
     rigModule = rigModule and rigModule:FindFirstChild("RigLib")
@@ -183,6 +230,12 @@ toggle.MouseButton1Click:Connect(function()
     toggle.BackgroundColor3 = running and Color3.fromRGB(55, 135, 82) or Color3.fromRGB(65, 100, 82)
 end)
 
+bring.MouseButton1Click:Connect(function()
+    bringTest = not bringTest
+    bring.Text = bringTest and "Bring TESTE: ON" or "Bring TESTE: OFF"
+    bring.BackgroundColor3 = bringTest and Color3.fromRGB(135, 85, 55) or Color3.fromRGB(65, 100, 82)
+end)
+
 copy.MouseButton1Click:Connect(function()
     if setclipboard then
         setclipboard(lastReport)
@@ -196,7 +249,12 @@ while task.wait(0.18) do
     if running and character and humanoid and humanoid.Health > 0 and root then
         local target, targetRoot, initialDistance = FindNearestEnemy(root)
         if target and targetRoot then
-            root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(0, 8, 0), targetRoot.Position)
+            if bringTest then
+                targetRoot.CFrame = root.CFrame * CFrame.new(0, 0, -12)
+                targetRoot.CanCollide = false
+            else
+                root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(0, 30, 0), targetRoot.Position)
+            end
             local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
             local hpBefore = targetHumanoid and targetHumanoid.Health or -1
             local sent, direct, upvalue, method, rawHits, filteredHits, detail =
@@ -213,7 +271,8 @@ while task.wait(0.18) do
                 "Rig hits bruto/filtrado: " .. tostring(rawHits) .. " / " .. tostring(filteredHits),
                 "Hit enviado: " .. tostring(sent),
                 "Detalhe/arma: " .. tostring(detail),
-                "Bring Mob: NAO"
+                "Distancia de teste: " .. (bringTest and "12 (mob trazido)" or "30 (jogador acima)"),
+                "Bring Mob TESTE: " .. tostring(bringTest)
             }, "\n")
             output.Text = lastReport
         else
