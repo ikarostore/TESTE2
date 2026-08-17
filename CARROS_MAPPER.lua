@@ -60,9 +60,35 @@ local function scanNow()
     addLog("PLAYER=" .. player.Name)
     addLog("TEAM=" .. (player.Team and player.Team.Name or "nil"))
     addLog("NEUTRAL=" .. tostring(player.Neutral))
+    local scanHRP = getHRP()
+    if scanHRP then
+        local p = scanHRP.Position
+        addLog(string.format("PLAYER_POSITION=Vector3.new(%.6f, %.6f, %.6f)", p.X, p.Y, p.Z))
+    end
 
     for name, value in pairs(player:GetAttributes()) do
         addLog("PLAYER_ATTRIBUTE | " .. name .. "=" .. tostring(value))
+    end
+
+    local gameFolder = Workspace:FindFirstChild("Game")
+    local jobs = gameFolder and gameFolder:FindFirstChild("Jobs")
+    local container = jobs and jobs:FindFirstChild("JobPadContainer")
+    if container then
+        for _, jobPad in ipairs(container:GetChildren()) do
+            local part = jobPad:IsA("BasePart") and jobPad
+                or jobPad:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                local p = part.Position
+                addLog(string.format(
+                    "JOB_PAD | Name=%s | Position=Vector3.new(%.6f, %.6f, %.6f) | Path=%s",
+                    jobPad.Name, p.X, p.Y, p.Z, fullName(jobPad)
+                ))
+            else
+                addLog("JOB_PAD_NO_PART | Name=" .. jobPad.Name .. " | Path=" .. fullName(jobPad))
+            end
+        end
+    else
+        addLog("JOB_PAD_CONTAINER_NOT_LOADED")
     end
 
     local values = 0
