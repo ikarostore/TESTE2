@@ -2137,9 +2137,8 @@ local function BMFastAttack(target, eventModel, eventKey)
     local tool = EquipSeaCombatType("Melee")
     if not tool then return false end
 
-    -- O rastreamento do Banana confirmou o mesmo protocolo eliminando Sharks
-    -- e grupos de Piranhas: Head diretamente, tabela secundaria vazia e uma
-    -- chamada a cada ~0.267 s. Nao usa RegisterAttack nem pacote agrupado.
+    -- Sharks/Piranhas exigem o protocolo moderno completo. O formato apenas
+    -- Head + tabela vazia executava sem erro, mas nao reduzia HP no servidor.
     local registerAttack, registerHit = GetBMModernRemotes()
     if registerHit and (eventKey == "Shark" or eventKey == "Piranha") then
         local now = os.clock()
@@ -2179,17 +2178,24 @@ local function BMFastAttack(target, eventModel, eventKey)
                     and string.find(lower, "shark", 1, true)
                     and not string.find(lower, "terror", 1, true)
                 local humanoid = model:FindFirstChildOfClass("Humanoid")
-                local head = model:FindFirstChild("Head", true)
-                if sameType and head and head:IsA("BasePart")
+                local hitPart = model:FindFirstChild("HumanoidRootPart", true)
+                    or model:FindFirstChild("Head", true)
+                    or model:FindFirstChild("Piranha Body", true)
+                    or model.PrimaryPart
+                if sameType and hitPart and hitPart:IsA("BasePart")
                 and (not humanoid or humanoid.Health > 0) then
-                    table.insert(candidates, head)
+                    table.insert(candidates, {model, hitPart})
                 end
             end
 
             if #candidates == 0 then
-                local fallbackHead = eventModel and eventModel:FindFirstChild("Head", true)
-                if fallbackHead and fallbackHead:IsA("BasePart") then
-                    table.insert(candidates, fallbackHead)
+                local fallbackPart = eventModel and (
+                    eventModel:FindFirstChild("HumanoidRootPart", true)
+                    or eventModel:FindFirstChild("Head", true)
+                    or eventModel:FindFirstChildWhichIsA("BasePart", true)
+                )
+                if fallbackPart and fallbackPart:IsA("BasePart") then
+                    table.insert(candidates, {eventModel, fallbackPart})
                 end
             end
             if #candidates == 0 then return true end
@@ -2199,9 +2205,10 @@ local function BMFastAttack(target, eventModel, eventKey)
             -- preserva a cadencia do Banana, evitando o lag dos pacotes duplos.
             SeaHuntState.BMDirectHitCursor =
                 (SeaHuntState.BMDirectHitCursor % #candidates) + 1
-            local hitPart = candidates[SeaHuntState.BMDirectHitCursor]
+            local selected = candidates[SeaHuntState.BMDirectHitCursor]
             return pcall(function()
-                registerHit:FireServer(hitPart, {})
+                if registerAttack then registerAttack:FireServer(0.5, 1) end
+                registerHit:FireServer(selected[2], {{selected[1], selected[2]}})
             end)
         end
         return true
@@ -2417,6 +2424,18 @@ local function IsLikelyCombatModel(obj)
 end
 
 local function FindSelectedSeaEvent()
+    -- Pode replicar antes do Humanoid/Health. A busca direta impede que o
+    -- evento marcado seja ignorado enquanto IsLikelyCombatModel ainda falha.
+    local priorityEnemies = workspace:FindFirstChild("Enemies")
+    if priorityEnemies and SeaEventsSelected.Terrorshark then
+        for _, obj in ipairs(priorityEnemies:GetChildren()) do
+            if obj:IsA("Model")
+            and NameMatchesAny(obj.Name, SeaEventNames.Terrorshark, "Terrorshark") then
+                return "Terrorshark", obj
+            end
+        end
+    end
+
     -- Sea Beast tem container próprio conhecido.
     local seaBeasts = workspace:FindFirstChild("SeaBeasts")
 
@@ -2659,7 +2678,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             -- O trace de morte do Terror Shark nao registrou RegisterHit nem
             -- RegisterAttack. Ele foi eliminado por skills com a conta acima
             -- do alvo; mantemos altura segura sem copiar o sobe/desce do Maru.
-            or stableSkillHover and 170
+            or stableSkillHover and 220
             or 60
         -- Todos os Sea Events sao atacados diretamente por cima. Somente o
         -- personagem se move; nenhuma propriedade do mob/barco e alterada.
@@ -2771,6 +2790,12 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         and SeaHuntState.CurrentEvent == eventModel
         and IsEventAlive(eventModel)
         and os.clock() - started < 180 do
+            if eventKey == "Terrorshark" and Humanoid
+            and Humanoid.Health / math.max(Humanoid.MaxHealth, 1) <= 0.65
+            and not EscapeActive then
+                -- O burst do Terror Shark exige sobrevivencia antes do ataque.
+                StartEscape()
+            end
             if EscapeActive then
                 task.wait(0.25)
                 continue
@@ -2784,7 +2809,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 or eventKey == "PirateGrandBrigade"
                 or eventKey == "FishBoat"
             local attackRange = eventKey == "SeaBeast" and 340
-                or eventKey == "Terrorshark" and 240
+                or eventKey == "Terrorshark" and 300
                 or useBasicClick and 120
                 or isShipEvent and 155
                 or 140
@@ -2852,8 +2877,9 @@ task.spawn(function()
         and Running and HRP and Humanoid and Humanoid.Health > 0 then
             local threat = SeaHuntState.CurrentEvent
             local threatName = threat and string.lower(threat.Name) or ""
-            local dangerous = string.find(threatName, "terror", 1, true)
-                or string.find(threatName, "sea beast", 1, true)
+            -- Dash Q conflita com o hover do Terror Shark. Para ele usamos
+            -- altura fixa e Panic HP; a esquiva permanece nos outros bosses.
+            local dangerous = string.find(threatName, "sea beast", 1, true)
                 or string.find(threatName, "seabeast", 1, true)
 
             if not dangerous then
