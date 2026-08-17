@@ -1,0 +1,4 @@
+getgenv().IKARO_MARU_TRACE_ROLE = "FOLLOWER"
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/MARU%20LEVIATHAN%20TRACE%20CORE"))()
+
+
