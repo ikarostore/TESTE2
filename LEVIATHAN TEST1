@@ -131,9 +131,15 @@ local SeaHuntState = {
     BMRegisterHit = nil,
     BMModernRemotesChecked = false,
     BMDirectHitCursor = 0,
-    NextShipDirectHit = 0,
     ResumeAfterEscape = false,
-    EventKills = 0
+    EventKills = 0,
+    HeartModel = nil,
+    HeartSample = nil,
+    HeartCaptured = false,
+    ReturningHeart = false,
+    HeartDelivered = false,
+    NextHeartScan = 0,
+    NextHarpoonAttempt = 0
 }
 
 local BoatFlightConfig = {
@@ -2047,8 +2053,7 @@ end
 
 local ClickSeaEvents = {
     Shark = true,
-    Piranha = true,
-    Terrorshark = true
+    Piranha = true
 }
 
 local function GetCombatFrameworkController()
@@ -2299,27 +2304,6 @@ local function BMFastAttack(target, eventModel, eventKey)
     end)
 
     return attacked
-end
-
-local function ShipDirectHit(eventModel)
-    if not eventModel or not eventModel.Parent then return false end
-
-    local _, registerHit = GetBMModernRemotes()
-    if not registerHit then return false end
-
-    -- Nos traces do Banana, o dano dos ships acompanha as skills, mas mira
-    -- sempre o VehicleSeat. ShipServiceEvent pertence ao barco do jogador e
-    -- fica deliberadamente fora daqui para nunca empurrar o barco inimigo.
-    local seat = eventModel:FindFirstChild("VehicleSeat", true)
-    if not seat or not seat:IsA("BasePart") then return false end
-
-    local now = os.clock()
-    if now < (SeaHuntState.NextShipDirectHit or 0) then return true end
-    SeaHuntState.NextShipDirectHit = now + 0.267
-
-    return pcall(function()
-        registerHit:FireServer(seat, {})
-    end)
 end
 
 local function UseConfiguredSeaSkills()
@@ -2668,33 +2652,37 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local isShipEvent = eventKey == "PirateBrigade"
             or eventKey == "PirateGrandBrigade"
             or eventKey == "FishBoat"
+        local stableSkillHover = eventKey == "Terrorshark"
         local height = eventKey == "SeaBeast" and 260
             or isShipEvent and 130
             or useBasicClick and 30
-            or eventKey == "Terrorshark" and 36
+            -- O trace de morte do Terror Shark nao registrou RegisterHit nem
+            -- RegisterAttack. Ele foi eliminado por skills com a conta acima
+            -- do alvo; mantemos altura segura sem copiar o sobe/desce do Maru.
+            or stableSkillHover and 170
             or 60
         -- Todos os Sea Events sao atacados diretamente por cima. Somente o
         -- personagem se move; nenhuma propriedade do mob/barco e alterada.
-        if (useBasicClick or isShipEvent) and not stableHoverY then
+        if (useBasicClick or isShipEvent or stableSkillHover) and not stableHoverY then
             stableHoverY = target.Position.Y + height
         end
         -- Sharks mergulham depois que o hover é criado. A altura totalmente
         -- congelada deixava o personagem visualmente alinhado, porém a
         -- distância 3D ultrapassava o limite e o loop parava de atacar. Só
         -- corrigimos desvios grandes e de forma suave para não voltar a quicar.
-        if useBasicClick and stableHoverY then
+        if (useBasicClick or stableSkillHover) and stableHoverY then
             local targetHoverY = target.Position.Y + height
             if math.abs(targetHoverY - stableHoverY) > 12 then
                 stableHoverY = stableHoverY + (targetHoverY - stableHoverY) * 0.12
             end
         end
-        local desired = (useBasicClick or isShipEvent)
+        local desired = (useBasicClick or isShipEvent or stableSkillHover)
             and Vector3.new(target.Position.X, stableHoverY, target.Position.Z)
             or target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
-        if useBasicClick or isShipEvent then
+        if useBasicClick or isShipEvent or stableSkillHover then
             HRP.CFrame = CFrame.lookAt(desired, target.Position)
             HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
             HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -2761,9 +2749,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     end
 
     local useBasicClick = ClickSeaEvents[eventKey] == true
-    local isShipEvent = eventKey == "PirateBrigade"
-        or eventKey == "PirateGrandBrigade"
-        or eventKey == "FishBoat"
 
     local combatState = useBasicClick and "SEA_EVENT_BM_FAST_ATTACK" or "SEA_EVENT_SKILLS"
 
@@ -2778,23 +2763,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     if not stopFocus then
         SeaHuntState.CurrentEvent = nil
         error("Não foi possível iniciar o foco físico no Sea Event")
-    end
-
-    -- As skills possuem hold e troca de ferramenta, portanto são bloqueantes.
-    -- Mantém o protocolo direto do VehicleSeat numa task independente para
-    -- reproduzir a cadência simultânea observada no Banana.
-    local shipHitActive = isShipEvent
-    if isShipEvent then
-        SeaHuntState.NextShipDirectHit = 0
-        task.spawn(function()
-            while shipHitActive
-            and Running
-            and SeaHuntState.CurrentEvent == eventModel
-            and IsEventAlive(eventModel) do
-                ShipDirectHit(eventModel)
-                task.wait(0.05)
-            end
-        end)
     end
 
     local started = os.clock()
@@ -2812,7 +2780,11 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
             if not target then break end
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
+            local isShipEvent = eventKey == "PirateBrigade"
+                or eventKey == "PirateGrandBrigade"
+                or eventKey == "FishBoat"
             local attackRange = eventKey == "SeaBeast" and 340
+                or eventKey == "Terrorshark" and 240
                 or useBasicClick and 120
                 or isShipEvent and 155
                 or 140
@@ -2833,7 +2805,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         end
     end)
 
-    shipHitActive = false
     stopFocus()
 
     if not okCombat then
@@ -2961,6 +2932,88 @@ local function GetBeastHunterHarpoonSeat()
     if not boat then return nil end
     local harpoon = boat:FindFirstChild("Harpoon")
     return harpoon and harpoon:FindFirstChild("Seat")
+end
+
+-- FrozenHeart pode existir mesmo quando o arpao falhou. Presenca ou
+-- desaparecimento nao contam como captura: ele precisa estar ligado ao barco
+-- ou acompanhar seu deslocamento por amostras consecutivas.
+SeaHuntState.FindHeart = function()
+    if SeaHuntState.HeartModel and SeaHuntState.HeartModel.Parent then
+        return SeaHuntState.HeartModel
+    end
+    local boat = GetBeastHunter()
+    for _, root in ipairs({boat, workspace:FindFirstChild("Map"), workspace}) do
+        if root then
+            for _, obj in ipairs(root:GetDescendants()) do
+                local lower = string.lower(obj.Name)
+                if (lower == "frozenheart" or lower == "leviathanheart" or lower == "leviathan heart")
+                and (obj:IsA("Model") or obj:IsA("BasePart")) then
+                    SeaHuntState.HeartModel = obj
+                    return obj
+                end
+            end
+        end
+    end
+    return nil
+end
+
+SeaHuntState.HeartPosition = function(heart)
+    if not heart or not heart.Parent then return nil end
+    if heart:IsA("BasePart") then return heart.Position end
+    local ok, pivot = pcall(function() return heart:GetPivot() end)
+    return ok and pivot.Position or nil
+end
+
+SeaHuntState.SampleHeartCapture = function(heart)
+    local boat = GetBeastHunter()
+    local mainSeat = boat and boat:FindFirstChild("VehicleSeat")
+    local drivePart = mainSeat and (mainSeat.AssemblyRootPart or mainSeat)
+    local heartPos = SeaHuntState.HeartPosition(heart)
+    if not boat or not drivePart or not heartPos then return false end
+    if heart:IsDescendantOf(boat) then
+        SeaHuntState.HeartCaptured = true
+        return true
+    end
+    local now = os.clock()
+    local relative = heartPos - drivePart.Position
+    local previous = SeaHuntState.HeartSample
+    SeaHuntState.HeartSample = {Time=now, Boat=drivePart.Position, Heart=heartPos, Relative=relative, Matches=previous and previous.Matches or 0}
+    if previous and now - previous.Time <= 1.5 then
+        local boatMove = (drivePart.Position - previous.Boat).Magnitude
+        local heartMove = (heartPos - previous.Heart).Magnitude
+        local relativeDrift = (relative - previous.Relative).Magnitude
+        if boatMove >= 12 and heartMove >= 12 and relativeDrift <= 18 then
+            SeaHuntState.HeartSample.Matches = (previous.Matches or 0) + 1
+        else
+            SeaHuntState.HeartSample.Matches = 0
+        end
+    end
+    if SeaHuntState.HeartSample.Matches >= 3 then SeaHuntState.HeartCaptured = true end
+    return SeaHuntState.HeartCaptured
+end
+
+SeaHuntState.TryHarpoonHeart = function(heart)
+    if os.clock() < (SeaHuntState.NextHarpoonAttempt or 0) then return end
+    SeaHuntState.NextHarpoonAttempt = os.clock() + 1.2
+    local seat = GetBeastHunterHarpoonSeat()
+    local heartPos = SeaHuntState.HeartPosition(heart)
+    local boat = GetBeastHunter()
+    local mainSeat = boat and boat:FindFirstChild("VehicleSeat")
+    local drivePart = mainSeat and (mainSeat.AssemblyRootPart or mainSeat)
+    if not seat or not heartPos or not drivePart or (heartPos - drivePart.Position).Magnitude > 450 then return end
+    SeaHuntState.Driving = false
+    if Humanoid.SeatPart ~= seat then
+        FlyToPart(seat, 4)
+        pcall(function() seat:Sit(Humanoid) end)
+        task.wait(0.2)
+    end
+    if SeaVIM then
+        pcall(function()
+            SeaVIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            task.wait(0.08)
+            SeaVIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        end)
+    end
 end
 
 local function BuyBeastHunter(forcePurchase)
@@ -3544,7 +3597,9 @@ local function StartBoatDrive(forceStart)
                 nextNoclipRefresh = now + 0.10
             end
 
-            local targetPos = GetSea6VirtualTarget()
+            local targetPos = SeaHuntState.ReturningHeart
+                and Vector3.new(SEA6_MAPPED_TIKI.X, BoatFlightConfig.HeightY, SEA6_MAPPED_TIKI.Z)
+                or GetSea6VirtualTarget()
 
             local flatDelta = Vector3.new(
                 targetPos.X - drivePart.Position.X,
@@ -3556,7 +3611,16 @@ local function StartBoatDrive(forceStart)
 
             -- Depois de entrar na região do Sea 6, segue eternamente na rota
             -- mapeada. Não tenta voltar para o ponto de entrada ao ultrapassá-lo.
-            if SeaHuntState.AtSea6 or flatDelta.Magnitude <= 1000 then
+            if SeaHuntState.ReturningHeart then
+                if flatDelta.Magnitude <= 350 then
+                    SeaHuntState.HeartDelivered = true
+                    SeaHuntState.ReturningHeart = false
+                    SetState("HEART_AT_TIKI", "Coracao levado ate a area segura de Tiki.")
+                    break
+                end
+                seaDirection = flatDelta.Unit
+                FixedSeaDirection = seaDirection
+            elseif SeaHuntState.AtSea6 or flatDelta.Magnitude <= 1000 then
                 SeaHuntState.AtSea6 = true
                 seaDirection = SEA6_MAPPED_DIRECTION
                 FixedSeaDirection = seaDirection
@@ -3571,7 +3635,10 @@ local function StartBoatDrive(forceStart)
             local heightError = BoatFlightConfig.HeightY - drivePart.Position.Y
             local verticalVelocity = math.clamp(heightError * 7, -140, 140)
 
-            local horizontalSpeed = SeaConfig.BoatSpeed
+            -- Limite separado para evitar os rollbacks vistos no trace.
+            local horizontalSpeed = SeaHuntState.ReturningHeart
+                and math.min(SeaConfig.BoatSpeed, 180)
+                or SeaConfig.BoatSpeed
 
             -- desacelera um pouco quando chega perto do ponto mapeado
             if not SeaHuntState.AtSea6 and flatDelta.Magnitude < 1500 then
@@ -3687,6 +3754,42 @@ local function StartHunt()
                 continue
             end
             if SeaHuntState.CombatBatchActive then
+                task.wait(0.25)
+                continue
+            end
+
+            if AccountBuyBoat and os.clock() >= (SeaHuntState.NextHeartScan or 0) then
+                SeaHuntState.NextHeartScan = os.clock() + 0.5
+                local heart = SeaHuntState.FindHeart()
+                if heart then
+                    if SeaHuntState.SampleHeartCapture(heart) then
+                        if not SeaHuntState.ReturningHeart and not SeaHuntState.HeartDelivered then
+                            SeaHuntState.ReturningHeart = true
+                            SeaHuntState.AtSea6 = false
+                            SetState("HEART_CAPTURED", "Coracao acompanhando o Beast Hunter. Retornando a Tiki.")
+                            task.spawn(function()
+                                local okSeat = GoToBeastHunterSeat()
+                                if okSeat and Running then StartBoatDrive() end
+                            end)
+                        end
+                    elseif not SeaHuntState.ReturningHeart then
+                        SetState("HEART_NOT_ATTACHED", "FrozenHeart detectado; aguardando confirmacao do arpao.")
+                        task.spawn(function() SeaHuntState.TryHarpoonHeart(heart) end)
+                    end
+                elseif SeaHuntState.HeartModel and not SeaHuntState.HeartCaptured then
+                    SeaHuntState.HeartModel = nil
+                    SeaHuntState.HeartSample = nil
+                    SetState("HEART_CAPTURE_FAILED", "Frozen sumiu sem confirmar captura; retomando a caca.")
+                    if not SeaHuntState.Driving then
+                        task.spawn(function()
+                            local okSeat = GoToBeastHunterSeat()
+                            if okSeat and Running then StartBoatDrive() end
+                        end)
+                    end
+                end
+            end
+
+            if SeaHuntState.ReturningHeart then
                 task.wait(0.25)
                 continue
             end
