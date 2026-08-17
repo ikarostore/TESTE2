@@ -406,7 +406,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v3.9 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.0 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -480,6 +480,9 @@ task.spawn(function()
     local teamVIM = nil
     pcall(function() teamVIM = game:GetService("VirtualInputManager") end)
     local deadline = os.clock() + 90
+    local marineVisibleSince = nil
+    local nextRemoteAttempt = 0
+    local invokePending = false
 
     while Gui and Gui.Parent and os.clock() < deadline do
         local spawnedCharacter = LocalPlayer.Character
@@ -495,6 +498,13 @@ task.spawn(function()
         local mainGui = PlayerGui:FindFirstChild("Main")
         local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam", true)
         local marineOption = chooseTeam and chooseTeam:FindFirstChild("Marines", true)
+        local currentTeam = LocalPlayer.Team and string.lower(LocalPlayer.Team.Name) or ""
+
+        if string.find(currentTeam, "marine", 1, true) then
+            -- O servidor já aceitou. Não repete chamadas enquanto aguarda o spawn.
+            task.wait(0.25)
+            continue
+        end
 
         if marineOption and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible) then
             local marineButton = marineOption:IsA("GuiButton") and marineOption
@@ -502,6 +512,7 @@ task.spawn(function()
 
             if marineButton and marineButton.Visible
             and marineButton.AbsoluteSize.X > 5 and marineButton.AbsoluteSize.Y > 5 then
+                marineVisibleSince = marineVisibleSince or os.clock()
                 local activated = false
                 if type(firesignal) == "function" then
                     activated = pcall(function() firesignal(marineButton.Activated) end)
@@ -514,11 +525,31 @@ task.spawn(function()
                         teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
                     end)
                 end
+
+                -- Confirmado nos dumps públicos. Só chama depois de a opção
+                -- Marines permanecer renderizada por pelo menos um segundo.
+                -- InvokeServer fica isolado: se o servidor demorar, o loader e
+                -- o HUD continuam funcionando normalmente.
+                if os.clock() - marineVisibleSince >= 1
+                and os.clock() >= nextRemoteAttempt
+                and not invokePending then
+                    invokePending = true
+                    nextRemoteAttempt = os.clock() + 3
+                    task.spawn(function()
+                        pcall(function()
+                            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                            local comm = remotes and remotes:FindFirstChild("CommF_")
+                            if comm then comm:InvokeServer("SetTeam", "Marines") end
+                        end)
+                        invokePending = false
+                    end)
+                end
                 task.wait(1.5)
             else
                 task.wait(0.5)
             end
         else
+            marineVisibleSince = nil
             task.wait(0.5)
         end
     end
@@ -4457,5 +4488,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v3.9 carregado.")
+print("IKARO Leviathan v4.0 carregado.")
 
