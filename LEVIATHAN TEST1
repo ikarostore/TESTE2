@@ -2017,7 +2017,9 @@ local function EquipSeaCombatType(category)
                 for _, tool in ipairs(container:GetChildren()) do
                     if tool:IsA("Tool")
                     and string.find(string.lower(tool.Name), "sharkman karate", 1, true) then
-                        pcall(function() Humanoid:EquipTool(tool) end)
+                        if tool.Parent ~= Character then
+                            pcall(function() Humanoid:EquipTool(tool) end)
+                        end
                         return tool
                     end
                 end
@@ -2029,7 +2031,9 @@ local function EquipSeaCombatType(category)
         if container then
             for _, tool in ipairs(container:GetChildren()) do
                 if tool:IsA("Tool") and tostring(tool.ToolTip) == wanted then
-                    pcall(function() Humanoid:EquipTool(tool) end)
+                    if tool.Parent ~= Character then
+                        pcall(function() Humanoid:EquipTool(tool) end)
+                    end
                     return tool
                 end
             end
@@ -2135,13 +2139,31 @@ local function BMFastAttack(target, eventModel, eventKey)
         local hitPart = eventModel and eventModel:FindFirstChild("HumanoidRootPart")
             or target
         local now = os.clock()
-        if hitPart and now >= (SeaHuntState.NextDirectSeaHit or 0) then
-            SeaHuntState.NextDirectSeaHit = now + 0.26
+
+        -- O trace registra EquipEvent uma única vez e o primeiro hit somente
+        -- cerca de 1.8 s depois. Reequipar em todo frame reiniciava esse estado
+        -- no servidor e deixava o personagem perfeitamente posicionado, mas
+        -- incapaz de causar dano.
+        if SeaHuntState.BMPreparedEvent ~= eventModel
+        or SeaHuntState.BMPreparedTool ~= tool then
+            SeaHuntState.BMPreparedEvent = eventModel
+            SeaHuntState.BMPreparedTool = tool
+            SeaHuntState.BMEquipReadyAt = now + 1.75
+            SeaHuntState.NextDirectSeaHit = SeaHuntState.BMEquipReadyAt
 
             pcall(function()
                 local equipEvent = tool:FindFirstChild("EquipEvent")
                 if equipEvent then equipEvent:FireServer(true) end
             end)
+            return true
+        end
+
+        if now < (SeaHuntState.BMEquipReadyAt or 0) then
+            return true
+        end
+
+        if hitPart and now >= (SeaHuntState.NextDirectSeaHit or 0) then
+            SeaHuntState.NextDirectSeaHit = now + 0.26
 
             return pcall(function()
                 registerHit:FireServer(hitPart, {})
