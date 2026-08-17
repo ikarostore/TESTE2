@@ -1,3 +1,32 @@
 getgenv().IKARO_MARU_TRACE_ROLE = "CAPTAIN_HEART"
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/MARU%20LEVIATHAN%20TRACE%20CORE?v=617d7c6"))()
+local ok, source = pcall(function()
+    return game:HttpGet("https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/MARU%20LEVIATHAN%20TRACE%20CORE?v=maru-safe-2")
+end)
+if not ok then
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "IKARO TRACE ERRO",
+        Text = "Falha ao baixar o núcleo: " .. tostring(source),
+        Duration = 15
+    })
+    return
+end
+
+local compiled, compileError = loadstring(source)
+if not compiled then
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "IKARO TRACE ERRO",
+        Text = "Falha ao compilar: " .. tostring(compileError),
+        Duration = 15
+    })
+    return
+end
+
+local ran, runtimeError = pcall(compiled)
+if not ran then
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "IKARO TRACE ERRO",
+        Text = "Falha ao iniciar: " .. tostring(runtimeError),
+        Duration = 15
+    })
+end
 
