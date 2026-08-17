@@ -1,0 +1,158 @@
+-- IKARO - rastreador de combate do Banana Hub
+-- Execute ANTES do Banana Hub. Nao armazena nem transmite a chave do usuario.
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local enabled = true
+local records = {}
+local MAX_RECORDS = 40
+
+local function describe(value, depth)
+    depth = depth or 0
+    local kind = typeof(value)
+    if kind == "Instance" then
+        return value:GetFullName() .. "<" .. value.ClassName .. ">"
+    elseif kind == "CFrame" then
+        return "CFrame(" .. tostring(value.Position) .. ")"
+    elseif kind == "Vector3" then
+        return "Vector3(" .. tostring(value) .. ")"
+    elseif kind ~= "table" then
+        local text = tostring(value)
+        return #text > 100 and string.sub(text, 1, 100) .. "..." or text
+    end
+    if depth >= 2 then return "{...}" end
+    local parts, count = {}, 0
+    for key, item in pairs(value) do
+        count = count + 1
+        if count > 8 then
+            table.insert(parts, "...")
+            break
+        end
+        table.insert(parts, "[" .. describe(key, depth + 1) .. "]=" .. describe(item, depth + 1))
+    end
+    return "{" .. table.concat(parts, ", ") .. "}"
+end
+
+local old = PlayerGui:FindFirstChild("IKARO_BananaCombatTrace")
+if old then old:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "IKARO_BananaCombatTrace"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 600, 0, 350)
+frame.Position = UDim2.new(0.5, -300, 0.08, 0)
+frame.BackgroundColor3 = Color3.fromRGB(24, 25, 28)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 34)
+title.Position = UDim2.new(0, 10, 0, 5)
+title.BackgroundTransparency = 1
+title.Text = "IKARO - Banana Combat Trace (execute o Banana agora)"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 17
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
+
+local output = Instance.new("TextLabel")
+output.Size = UDim2.new(1, -20, 1, -95)
+output.Position = UDim2.new(0, 10, 0, 42)
+output.BackgroundColor3 = Color3.fromRGB(35, 36, 40)
+output.BorderSizePixel = 0
+output.Text = "Aguardando RegisterAttack/RegisterHit..."
+output.TextColor3 = Color3.fromRGB(225, 230, 235)
+output.Font = Enum.Font.Code
+output.TextSize = 13
+output.TextWrapped = true
+output.TextXAlignment = Enum.TextXAlignment.Left
+output.TextYAlignment = Enum.TextYAlignment.Top
+output.Parent = frame
+
+local copy = Instance.new("TextButton")
+copy.Size = UDim2.new(0, 180, 0, 38)
+copy.Position = UDim2.new(0, 10, 1, -46)
+copy.BackgroundColor3 = Color3.fromRGB(62, 105, 84)
+copy.BorderSizePixel = 0
+copy.Text = "Copiar rastreamento"
+copy.TextColor3 = Color3.new(1, 1, 1)
+copy.Font = Enum.Font.SourceSansBold
+copy.TextSize = 14
+copy.Parent = frame
+
+local toggle = copy:Clone()
+toggle.Position = UDim2.new(0, 200, 1, -46)
+toggle.Text = "Rastreamento: ON"
+toggle.Parent = frame
+
+local clear = copy:Clone()
+clear.Position = UDim2.new(0, 390, 1, -46)
+clear.Text = "Limpar"
+clear.Parent = frame
+
+local function refresh()
+    output.Text = #records > 0 and table.concat(records, "\n\n")
+        or "Aguardando RegisterAttack/RegisterHit..."
+end
+
+local function addRecord(remote, args)
+    local character = LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local lines = {
+        os.date("!%H:%M:%S") .. " | " .. remote:GetFullName(),
+        "PlayerPos=" .. (root and tostring(root.Position) or "sem HRP"),
+        "ArgCount=" .. tostring(args.n)
+    }
+    for index = 1, args.n do
+        table.insert(lines, "arg" .. index .. "=" .. describe(args[index]))
+    end
+    table.insert(records, table.concat(lines, "\n"))
+    while #records > MAX_RECORDS do table.remove(records, 1) end
+    refresh()
+end
+
+copy.MouseButton1Click:Connect(function()
+    if setclipboard then
+        setclipboard(table.concat(records, "\n\n"))
+        copy.Text = "Copiado!"
+        task.delay(1, function() copy.Text = "Copiar rastreamento" end)
+    end
+end)
+
+toggle.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggle.Text = enabled and "Rastreamento: ON" or "Rastreamento: OFF"
+end)
+
+clear.MouseButton1Click:Connect(function()
+    table.clear(records)
+    refresh()
+end)
+
+if not hookmetamethod or not getnamecallmethod or not newcclosure then
+    output.Text = "Executor sem hookmetamethod/getnamecallmethod/newcclosure."
+    return
+end
+
+local originalNamecall
+originalNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if enabled and method == "FireServer" and typeof(self) == "Instance" then
+        local name = self.Name
+        if name == "RE/RegisterAttack" or name == "RE/RegisterHit" then
+            local args = table.pack(...)
+            task.defer(addRecord, self, args)
+        end
+    end
+    return originalNamecall(self, ...)
+end))
+
+
