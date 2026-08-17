@@ -1,0 +1,361 @@
+-- IKARO - teste isolado de BM Fast Attack em NPCs normais
+-- Bring Mob e opcional, limitado ao NPC normal escolhido durante este teste.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local running = false
+local bringTest = false
+local lastReport = "V2 MODERN NET carregado."
+local CameraShaker
+pcall(function()
+    CameraShaker = require(ReplicatedStorage.Util.CameraShaker)
+end)
+
+local old = PlayerGui:FindFirstChild("IKARO_BMFastAttackTest")
+if old then old:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "IKARO_BMFastAttackTest"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 430, 0, 310)
+frame.Position = UDim2.new(0.5, -215, 0.08, 0)
+frame.BackgroundColor3 = Color3.fromRGB(25, 26, 29)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 8)
+corner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -16, 0, 34)
+title.Position = UDim2.new(0, 8, 0, 4)
+title.BackgroundTransparency = 1
+title.Text = "IKARO - BM Fast Attack Test V2 MODERN NET"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
+
+local output = Instance.new("TextLabel")
+output.Size = UDim2.new(1, -20, 0, 205)
+output.Position = UDim2.new(0, 10, 0, 42)
+output.BackgroundColor3 = Color3.fromRGB(35, 36, 40)
+output.BorderSizePixel = 0
+output.Text = lastReport
+output.TextColor3 = Color3.fromRGB(225, 230, 235)
+output.Font = Enum.Font.Code
+output.TextSize = 14
+output.TextWrapped = true
+output.TextXAlignment = Enum.TextXAlignment.Left
+output.TextYAlignment = Enum.TextYAlignment.Top
+output.Parent = frame
+
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(0, 130, 0, 38)
+toggle.Position = UDim2.new(0, 10, 1, -50)
+toggle.BackgroundColor3 = Color3.fromRGB(65, 100, 82)
+toggle.BorderSizePixel = 0
+toggle.Text = "Iniciar teste"
+toggle.TextColor3 = Color3.new(1, 1, 1)
+toggle.Font = Enum.Font.SourceSansBold
+toggle.TextSize = 15
+toggle.Parent = frame
+
+local copy = toggle:Clone()
+copy.Position = UDim2.new(1, -140, 1, -50)
+copy.Text = "Copiar resultado"
+copy.Parent = frame
+
+local bring = toggle:Clone()
+bring.Position = UDim2.new(0, 150, 1, -50)
+bring.Text = "Bring TESTE: OFF"
+bring.Parent = frame
+
+local function CharacterParts()
+    local character = LocalPlayer.Character
+    return character,
+        character and character:FindFirstChildOfClass("Humanoid"),
+        character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function FindNearestEnemy(root)
+    local enemies = workspace:FindFirstChild("Enemies")
+    local best, bestRoot, bestDistance
+    bestDistance = math.huge
+    if not enemies then return nil end
+
+    for _, model in ipairs(enemies:GetChildren()) do
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        local enemyRoot = model:FindFirstChild("HumanoidRootPart")
+        if humanoid and humanoid.Health > 0 and enemyRoot
+        and not string.find(string.lower(model.Name), "boss", 1, true) then
+            local distance = (enemyRoot.Position - root.Position).Magnitude
+            if distance < bestDistance then
+                best, bestRoot, bestDistance = model, enemyRoot, distance
+            end
+        end
+    end
+    return best, bestRoot, bestDistance
+end
+
+local function EquipMelee(character, humanoid)
+    for _, container in ipairs({LocalPlayer.Backpack, character}) do
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and tostring(tool.ToolTip) == "Melee" then
+                humanoid:EquipTool(tool)
+                return tool
+            end
+        end
+    end
+end
+
+local cachedController
+local cachedMethod
+local cachedControllerInfo = ""
+local nextControllerScan = 0
+local function ControllerInfo(controller)
+    if type(controller) ~= "table" then return "controller invalido" end
+    local keys = {}
+    for key, value in pairs(controller) do
+        if #keys >= 12 then break end
+        table.insert(keys, tostring(key) .. ":" .. type(value))
+    end
+    return table.concat(keys, ", ")
+end
+
+local function CombatRemoteInfo()
+    local found = {}
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = string.lower(obj.Name)
+            if string.find(name, "attack", 1, true)
+            or string.find(name, "hit", 1, true)
+            or string.find(name, "rig", 1, true)
+            or string.find(name, "combat", 1, true) then
+                table.insert(found, obj:GetFullName())
+                if #found >= 6 then break end
+            end
+        end
+    end
+    return #found > 0 and table.concat(found, " | ") or "nenhum remote encontrado"
+end
+
+local function ControllerState()
+    if cachedController then
+        return cachedController, cachedMethod == "direto", cachedMethod == "upvalue[2]", cachedMethod
+    end
+    if os.clock() < nextControllerScan then return nil, false, false, cachedMethod or "aguardando scan" end
+    nextControllerScan = os.clock() + 3
+
+    local module = LocalPlayer.PlayerScripts:FindFirstChild("CombatFramework", true)
+    if not module then
+        for _, obj in ipairs(LocalPlayer.PlayerScripts:GetDescendants()) do
+            if obj:IsA("ModuleScript")
+            and string.find(string.lower(obj.Name), "combat", 1, true) then
+                module = obj
+                break
+            end
+        end
+    end
+    if not module then
+        if getgc then
+            local best, bestScore
+            bestScore = -1
+            for _, value in pairs(getgc(true)) do
+                if type(value) == "table" and rawget(value, "activeController") then
+                    local candidate = value.activeController
+                    local score = 0
+                    if type(candidate) == "table" then
+                        if type(candidate.attack) == "function" then score = score + 4 end
+                        if type(candidate.blades) == "table" then score = score + 3 end
+                        if candidate.humanoid then score = score + 2 end
+                        if candidate.equipped ~= nil then score = score + 1 end
+                    end
+                    if score > bestScore then best, bestScore = candidate, score end
+                end
+            end
+            if best and bestScore >= 3 then
+                cachedController = best
+                cachedControllerInfo = ControllerInfo(best)
+                cachedMethod = "getgc activeController score=" .. tostring(bestScore)
+                return cachedController, false, false, cachedMethod
+            end
+            cachedControllerInfo = best and ControllerInfo(best) or "nenhum candidato"
+            cachedMethod = "controller legado rejeitado score=" .. tostring(bestScore)
+            return nil, false, false, cachedMethod
+        end
+        cachedMethod = "CombatFramework ausente; getgc sem controller"
+        return nil, false, false, cachedMethod
+    end
+    local ok, framework = pcall(require, module)
+    if not ok then return nil, false, false, "require falhou: " .. module:GetFullName() end
+
+    local direct = type(framework) == "table" and framework.activeController ~= nil
+    if direct then
+        cachedController, cachedMethod = framework.activeController, "direto"
+        return cachedController, true, false, cachedMethod .. " | " .. module:GetFullName()
+    end
+
+    local getUps = getupvalues or (debug and debug.getupvalues)
+    if not getUps then return nil, false, false, "getupvalues ausente" end
+    local okUps, ups = pcall(getUps, framework)
+    local internal = okUps and type(ups) == "table" and ups[2]
+    local upvalue = type(internal) == "table" and internal.activeController ~= nil
+    if upvalue then
+        cachedController, cachedMethod = internal.activeController, "upvalue[2]"
+        return cachedController, false, true, cachedMethod .. " | " .. module:GetFullName()
+    end
+    cachedMethod = "controller nao encontrado | " .. module:GetFullName()
+    return nil, false, false, cachedMethod
+end
+
+local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
+    local tool = EquipMelee(character, humanoid)
+    local controller, direct, upvalue, method = ControllerState()
+    local rawCount, filteredCount = 0, 0
+    local sent = false
+
+    if not tool then return false, direct, upvalue, method, 0, 0, "Melee ausente" end
+
+    -- Protocolo de combate atual: substituiu CombatFramework/RigLib.
+    local modules = ReplicatedStorage:FindFirstChild("Modules")
+    local net = modules and modules:FindFirstChild("Net")
+    local registerAttack = net and net:FindFirstChild("RE/RegisterAttack")
+    local registerHit = net and net:FindFirstChild("RE/RegisterHit")
+    if registerAttack and registerHit then
+        local hitPart = targetModel:FindFirstChild("Head") or targetRoot
+        local targets = {{targetModel, hitPart}}
+        local attackOk = pcall(function() registerAttack:FireServer(0) end)
+        local hitOk = pcall(function() registerHit:FireServer(hitPart, targets) end)
+        return attackOk and hitOk, false, false, "Modules.Net moderno", 1, 1,
+            tool.Name .. " | RegisterAttack + RegisterHit"
+    end
+
+    if controller then
+        controller.attacking = false
+        controller.blocking = false
+        controller.timeToNextAttack = math.huge ^ math.huge ^ math.huge
+        controller.timeToNextAttack = 0
+        controller.timeToNextBlock = 0
+        controller.increment = 1
+        controller.hitboxMagnitude = 120
+        controller.active = false
+        controller.focusStart = 1655503339.0980349
+        if controller.humanoid then controller.humanoid.AutoRotate = true end
+    end
+
+    local stun = character:FindFirstChild("Stun")
+    if stun then pcall(function() stun.Value = 0 end) end
+    local busy = character:FindFirstChild("Busy")
+    if busy then pcall(function() busy.Value = false end) end
+    humanoid.Sit = false
+
+    VirtualUser:CaptureController()
+    VirtualUser:Button1Down(Vector2.new(1280, 672))
+    if CameraShaker and type(CameraShaker.Stop) == "function" then CameraShaker:Stop() end
+
+    -- RigLib e apenas um reforco/diagnostico. O BM original funciona pelo
+    -- activeController + Button1Down e nao pode ser cancelado se o Rig sumir.
+    local rigFramework = ReplicatedStorage:FindFirstChild("CombatFramework")
+    local rigModule = rigFramework and rigFramework:FindFirstChild("RigLib")
+    local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
+    local okRig, rigLib = pcall(require, rigModule)
+    if controller and okRig and rigEvent and type(rigLib) == "table" then
+        local weapon = controller.blades and controller.blades[1]
+        while weapon and weapon.Parent and weapon.Parent ~= character do weapon = weapon.Parent end
+        local rawHits = rigLib.getBladeHits(character, {root}, 120) or {}
+        local hits, seen = {}, {}
+        for _, hit in pairs(rawHits) do
+            rawCount = rawCount + 1
+            local model = hit and hit:FindFirstAncestorOfClass("Model")
+            local hitRoot = model and model:FindFirstChild("HumanoidRootPart")
+            if model == targetModel and hitRoot and not seen[model] then
+                seen[model] = true
+                table.insert(hits, hitRoot)
+            end
+        end
+        filteredCount = #hits
+        if weapon and #hits > 0 then
+            rigEvent:FireServer("weaponChange", tostring(weapon))
+            rigEvent:FireServer("hit", hits, 1, "")
+        end
+    end
+    sent = true
+    local detail = controller and (tool.Name .. " | BM completo da referencia")
+        or (tool.Name .. " | Button1Down sem controller")
+    if not okRig or not rigEvent then detail = detail .. " | Rig opcional ausente" end
+    return sent, direct, upvalue, method, rawCount, filteredCount, detail
+end
+
+toggle.MouseButton1Click:Connect(function()
+    running = not running
+    toggle.Text = running and "Parar teste" or "Iniciar teste"
+    toggle.BackgroundColor3 = running and Color3.fromRGB(55, 135, 82) or Color3.fromRGB(65, 100, 82)
+end)
+
+bring.MouseButton1Click:Connect(function()
+    bringTest = not bringTest
+    bring.Text = bringTest and "Bring TESTE: ON" or "Bring TESTE: OFF"
+    bring.BackgroundColor3 = bringTest and Color3.fromRGB(135, 85, 55) or Color3.fromRGB(65, 100, 82)
+end)
+
+copy.MouseButton1Click:Connect(function()
+    if setclipboard then
+        setclipboard(lastReport)
+        copy.Text = "Copiado!"
+        task.delay(1.2, function() copy.Text = "Copiar resultado" end)
+    end
+end)
+
+while RunService.Heartbeat:Wait() do
+    local character, humanoid, root = CharacterParts()
+    if running and character and humanoid and humanoid.Health > 0 and root then
+        local target, targetRoot, initialDistance = FindNearestEnemy(root)
+        if target and targetRoot then
+            if bringTest then
+                targetRoot.CFrame = root.CFrame * CFrame.new(0, -18, 0)
+                targetRoot.CanCollide = false
+            else
+                root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(0, 18, 0), targetRoot.Position)
+            end
+            local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
+            local hpBefore = targetHumanoid and targetHumanoid.Health or -1
+            local sent, direct, upvalue, method, rawHits, filteredHits, detail =
+                PerformAttack(target, targetRoot, character, humanoid, root)
+            task.wait(0.25)
+            local hpAfter = targetHumanoid and targetHumanoid.Health or -1
+            lastReport = table.concat({
+                "VERSAO: V2 MODERN NET",
+                "Alvo: " .. target.Name,
+                "Distancia inicial: " .. tostring(math.floor(initialDistance * 10) / 10),
+                "HP antes/depois: " .. tostring(math.floor(hpBefore)) .. " / " .. tostring(math.floor(hpAfter)),
+                "Controller direto: " .. tostring(direct),
+                "Controller upvalue[2]: " .. tostring(upvalue),
+                "Metodo: " .. tostring(method),
+                "Rig hits bruto/filtrado: " .. tostring(rawHits) .. " / " .. tostring(filteredHits),
+                "Hit enviado: " .. tostring(sent),
+                "Detalhe/arma: " .. tostring(detail),
+                "Controller campos: " .. tostring(cachedControllerInfo),
+                "Remotes: " .. CombatRemoteInfo(),
+                "Distancia de teste: 18 " .. (bringTest and "(mob abaixo)" or "(jogador acima)"),
+                "Bring Mob TESTE: " .. tostring(bringTest)
+            }, "\n")
+            output.Text = lastReport
+        else
+            output.Text = "Nenhum NPC normal vivo em Workspace.Enemies.\nChegue perto de uma ilha com inimigos."
+        end
+    end
+end
+
