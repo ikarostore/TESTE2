@@ -406,7 +406,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v3.8 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v3.9 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2703,11 +2703,12 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local stableSkillHover = eventKey == "Terrorshark"
         local height = eventKey == "SeaBeast" and 260
             or isShipEvent and 80
+            or eventKey == "Piranha" and 18
             or useBasicClick and 30
             -- O trace de morte do Terror Shark nao registrou RegisterHit nem
             -- RegisterAttack. Ele foi eliminado por skills com a conta acima
             -- do alvo; mantemos altura segura sem copiar o sobe/desce do Maru.
-            or stableSkillHover and 220
+            or stableSkillHover and 90
             or 60
         -- Todos os Sea Events sao atacados diretamente por cima. Somente o
         -- personagem se move; nenhuma propriedade do mob/barco e alterada.
@@ -2727,16 +2728,19 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         -- Skills lançadas no eixo vertical empurravam o ship para baixo. O
         -- deslocamento lateral mantém a conta acima da água, fora da estrutura,
         -- e transforma o knockback em diagonal/horizontal.
-        local shipOffset = Vector3.new(0, 0, 0)
-        if isShipEvent then
+        local combatOffset = Vector3.new(0, 0, 0)
+        if isShipEvent or stableSkillHover or eventKey == "Piranha" then
             local right = Vector3.new(target.CFrame.RightVector.X, 0, target.CFrame.RightVector.Z)
-            shipOffset = (right.Magnitude > 0.01 and right.Unit or Vector3.new(1, 0, 0)) * 95
+            local offsetDistance = isShipEvent and 95
+                or stableSkillHover and 110
+                or 45
+            combatOffset = (right.Magnitude > 0.01 and right.Unit or Vector3.new(1, 0, 0)) * offsetDistance
         end
         local desired = (useBasicClick or isShipEvent or stableSkillHover)
             and Vector3.new(
-                target.Position.X + shipOffset.X,
+                target.Position.X + combatOffset.X,
                 stableHoverY,
-                target.Position.Z + shipOffset.Z
+                target.Position.Z + combatOffset.Z
             )
             or target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
@@ -4453,5 +4457,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v3.8 carregado.")
+print("IKARO Leviathan v3.9 carregado.")
 
