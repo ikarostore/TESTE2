@@ -39,7 +39,7 @@ local function trackConnection(connection)
 end
 
 -- ===== VERSION =====
-local VERSION = "v5.3 STABLE"
+local VERSION = "v5.4 STABLE"
 
 --[[
     OPTIMIZATION NOTES (v5.1):
@@ -326,6 +326,144 @@ local function teleportToSpawn()
     if spawnLocation and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         player.Character.HumanoidRootPart.CFrame = CFrame.new(spawnLocation.Position + Vector3.new(0, 3, 0))
     end
+end
+
+-- ===== OUTLAW JOB / SHIFT =====
+local OUTLAW_WORDS = {"outlaw", "criminal", "thief", "robber", "ladrao", "ladrão"}
+local START_SHIFT_WORDS = {"start shift", "begin shift", "start job", "become outlaw", "iniciar turno"}
+
+local function containsAny(text, words)
+    text = string.lower(tostring(text or ""))
+    for _, word in ipairs(words) do
+        if string.find(text, word, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isOutlawShiftActive()
+    if player.Team and containsAny(player.Team.Name, OUTLAW_WORDS) then
+        return true
+    end
+
+    -- The job marker shown by this game changes to "End Shift" while active.
+    for _, descendant in ipairs(workspace:GetDescendants()) do
+        if (descendant:IsA("TextLabel") or descendant:IsA("TextButton"))
+            and descendant.Visible
+            and containsAny(descendant.Text, {"end shift", "finish shift", "encerrar turno"}) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getPromptPart(prompt)
+    local parent = prompt and prompt.Parent
+    if parent and parent:IsA("Attachment") then
+        parent = parent.Parent
+    end
+    if parent and parent:IsA("BasePart") then
+        return parent
+    end
+    return parent and parent:FindFirstAncestorWhichIsA("BasePart") or nil
+end
+
+local function findOutlawShiftInteraction()
+    local bestPrompt
+    local bestScore = -1
+    local fallbackPart
+
+    for _, descendant in ipairs(workspace:GetDescendants()) do
+        if descendant:IsA("ProximityPrompt") and descendant.Enabled then
+            local context = table.concat({
+                descendant.Name,
+                descendant.ActionText,
+                descendant.ObjectText,
+                descendant.Parent and descendant.Parent:GetFullName() or "",
+            }, " ")
+            local lower = string.lower(context)
+
+            -- Never click the profession toggle when it would end the shift.
+            if not containsAny(lower, {"end shift", "finish shift", "quit job", "encerrar turno"}) then
+                local score = 0
+                if containsAny(lower, OUTLAW_WORDS) then score = score + 3 end
+                if containsAny(lower, START_SHIFT_WORDS) then score = score + 5 end
+                if score > bestScore then
+                    bestScore = score
+                    bestPrompt = descendant
+                end
+            end
+        elseif descendant:IsA("TextLabel") and descendant.Visible then
+            local text = string.lower(descendant.Text or "")
+            if containsAny(text, START_SHIFT_WORDS) then
+                local gui = descendant:FindFirstAncestorWhichIsA("BillboardGui")
+                    or descendant:FindFirstAncestorWhichIsA("SurfaceGui")
+                local adornee = gui and gui.Adornee
+                fallbackPart = (adornee and adornee:IsA("BasePart") and adornee)
+                    or descendant:FindFirstAncestorWhichIsA("BasePart")
+            end
+        end
+    end
+
+    if bestScore <= 0 then
+        bestPrompt = nil
+    end
+    return bestPrompt, fallbackPart
+end
+
+local function ensureOutlawShift()
+    if isOutlawShiftActive() then
+        return true, "already_active"
+    end
+
+    local interactionSent = false
+    for _ = 1, 3 do
+        if not HubState.Active or not farmModeEnabled then
+            return false, "cancelled"
+        end
+
+        local prompt, fallbackPart = findOutlawShiftInteraction()
+        local targetPart = getPromptPart(prompt) or fallbackPart
+        local character = player.Character
+        local hrp = character and character:FindFirstChild("HumanoidRootPart")
+
+        if not targetPart or not hrp then
+            return false, "interaction_not_found"
+        end
+
+        hrp.CFrame = targetPart.CFrame * CFrame.new(0, 2, -3)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        task.wait(0.8)
+
+        if prompt and prompt.Parent then
+            local ok = pcall(function()
+                prompt.RequiresLineOfSight = false
+                prompt:InputHoldBegin()
+                task.wait(prompt.HoldDuration + 0.2)
+                prompt:InputHoldEnd()
+            end)
+            interactionSent = interactionSent or ok
+        else
+            -- Touch-zone fallback for the circular Start Shift marker.
+            for _, offset in ipairs({Vector3.new(0, 2, 0), Vector3.zero, Vector3.new(0, -1, 0)}) do
+                hrp.CFrame = CFrame.new(targetPart.Position + offset)
+                RunService.Heartbeat:Wait()
+                task.wait(0.25)
+            end
+            interactionSent = true
+        end
+
+        task.wait(1.5)
+        if isOutlawShiftActive() then
+            return true, "confirmed"
+        end
+    end
+
+    -- Some games do not replicate the job state to Team/UI immediately. If the
+    -- interaction was sent, allow the first ATM to provide the final validation.
+    return interactionSent, interactionSent and "sent_unconfirmed" or "failed"
 end
 
 -- ===== ATM MEMORY SYSTEM =====
@@ -965,6 +1103,21 @@ local function setupAutoFarm(scrollFrame)
             notify("Farm Started", "3 Options Active!")
             
             task.spawn(function()
+                notify("Outlaw Job", "Checking thief profession...")
+                local shiftReady, shiftStatus = ensureOutlawShift()
+                if not shiftReady then
+                    farmModeEnabled = false
+                    farmButton.Text = "Smart ATM Farm: OFF"
+                    farmButton.BackgroundColor3 = THEME.Off
+                    notify("Outlaw Job Failed", "Start Shift interaction not found")
+                    warn("IKAROHUB Outlaw shift: " .. tostring(shiftStatus))
+                    return
+                elseif shiftStatus == "sent_unconfirmed" then
+                    notify("Outlaw Job", "Start Shift sent; validating at ATM")
+                else
+                    notify("Outlaw Job", "Shift active")
+                end
+
                 local atmCounter = 0
                 local consecutiveSkips = 0
                 
