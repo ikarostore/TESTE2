@@ -1,0 +1,228 @@
+-- IKARO - Maru Leviathan runtime tracer
+-- ROLE deve ser "CAPTAIN_HEART" ou "FOLLOWER".
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local env = getgenv and getgenv() or _G
+local ROLE = env.IKARO_MARU_TRACE_ROLE or "UNKNOWN"
+
+local enabled = true
+local records = {}
+local lastRecord = nil
+local MAX_RECORDS = 220
+
+local function shortInstance(obj)
+    if typeof(obj) ~= "Instance" then return tostring(obj) end
+    local ok, full = pcall(function() return obj:GetFullName() end)
+    return (ok and full or obj.Name) .. "<" .. obj.ClassName .. ">"
+end
+
+local function describe(value, depth)
+    depth = depth or 0
+    local kind = typeof(value)
+    if kind == "Instance" then return shortInstance(value) end
+    if kind == "Vector3" then
+        return string.format("V3(%.1f,%.1f,%.1f)", value.X, value.Y, value.Z)
+    end
+    if kind == "CFrame" then return describe(value.Position, depth) end
+    if kind ~= "table" then
+        local text = tostring(value)
+        return #text > 120 and string.sub(text, 1, 120) .. "..." or text
+    end
+    if depth >= 2 then return "{...}" end
+    local result, count = {}, 0
+    for key, item in pairs(value) do
+        count = count + 1
+        if count > 8 then table.insert(result, "...") break end
+        table.insert(result, "[" .. describe(key, depth + 1) .. "]=" .. describe(item, depth + 1))
+    end
+    return "{" .. table.concat(result, ",") .. "}"
+end
+
+local oldGui = PlayerGui:FindFirstChild("IKARO_MaruLeviathanTrace")
+if oldGui then oldGui:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "IKARO_MaruLeviathanTrace"
+gui.ResetOnSpawn = false
+gui.Parent = PlayerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 650, 0, 410)
+frame.Position = UDim2.new(0.5, -325, 0.04, 0)
+frame.BackgroundColor3 = Color3.fromRGB(23, 24, 28)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 34)
+title.Position = UDim2.new(0, 10, 0, 5)
+title.BackgroundTransparency = 1
+title.Text = "IKARO - MARU TRACE | " .. ROLE
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 17
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
+
+local output = Instance.new("TextLabel")
+output.Size = UDim2.new(1, -20, 1, -100)
+output.Position = UDim2.new(0, 10, 0, 42)
+output.BackgroundColor3 = Color3.fromRGB(34, 35, 40)
+output.BorderSizePixel = 0
+output.Text = "Rastreador pronto. Execute o Maru e ative Auto Leviathan."
+output.TextColor3 = Color3.fromRGB(225, 230, 235)
+output.Font = Enum.Font.Code
+output.TextSize = 12
+output.TextWrapped = true
+output.TextXAlignment = Enum.TextXAlignment.Left
+output.TextYAlignment = Enum.TextYAlignment.Top
+output.Parent = frame
+
+local function button(text, x)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(0, 195, 0, 38)
+    b.Position = UDim2.new(0, x, 1, -48)
+    b.BackgroundColor3 = Color3.fromRGB(60, 104, 82)
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Font = Enum.Font.SourceSansBold
+    b.TextSize = 14
+    b.Parent = frame
+    return b
+end
+
+local copyButton = button("Copiar rastreamento", 10)
+local toggleButton = button("Rastreamento: ON", 225)
+local clearButton = button("Limpar", 440)
+
+local function refresh()
+    local first = math.max(1, #records - 16)
+    local visible = {}
+    for index = first, #records do table.insert(visible, records[index]) end
+    output.Text = #visible > 0 and table.concat(visible, "\n")
+        or "Rastreador pronto. Execute o Maru e ative Auto Leviathan."
+end
+
+local function add(kind, detail, allowDuplicate)
+    if not enabled then return end
+    local body = kind .. " | " .. detail
+    if not allowDuplicate and body == lastRecord then return end
+    lastRecord = body
+    table.insert(records, string.format("%.3f | %s", os.clock(), body))
+    while #records > MAX_RECORDS do table.remove(records, 1) end
+    refresh()
+end
+
+copyButton.MouseButton1Click:Connect(function()
+    if setclipboard then
+        setclipboard("ROLE=" .. ROLE .. "\n" .. table.concat(records, "\n"))
+        copyButton.Text = "Copiado!"
+        task.delay(1, function() copyButton.Text = "Copiar rastreamento" end)
+    end
+end)
+
+toggleButton.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    toggleButton.Text = enabled and "Rastreamento: ON" or "Rastreamento: OFF"
+end)
+
+clearButton.MouseButton1Click:Connect(function()
+    table.clear(records)
+    lastRecord = nil
+    refresh()
+end)
+
+local function isInterestingName(name)
+    name = string.lower(name)
+    return string.find(name, "levi", 1, true)
+        or string.find(name, "frozen", 1, true)
+        or string.find(name, "heart", 1, true)
+        or string.find(name, "beast hunter", 1, true)
+        or string.find(name, "terror", 1, true)
+        or string.find(name, "sea beast", 1, true)
+        or string.find(name, "piranha", 1, true)
+        or string.find(name, "shark", 1, true)
+        or string.find(name, "brigade", 1, true)
+        or string.find(name, "fishboat", 1, true)
+        or string.find(name, "harpoon", 1, true)
+end
+
+workspace.DescendantAdded:Connect(function(obj)
+    if isInterestingName(obj.Name) then add("SPAWN", shortInstance(obj), false) end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    if isInterestingName(obj.Name) then add("REMOVE", shortInstance(obj), false) end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    add("RESPAWN", shortInstance(character), true)
+end)
+
+local lastSnapshot = ""
+task.spawn(function()
+    while gui.Parent do
+        if enabled then
+            local character = LocalPlayer.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            local seat = humanoid and humanoid.SeatPart
+            local snapshot = "pos=" .. (root and describe(root.Position) or "nil")
+                .. " hp=" .. tostring(humanoid and math.floor(humanoid.Health) or "nil")
+                .. " seat=" .. (seat and shortInstance(seat) or "nil")
+
+            if ROLE == "FOLLOWER" and root then
+                local closestName, closestDistance = "none", math.huge
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer then
+                        local otherRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        if otherRoot then
+                            local distance = (otherRoot.Position - root.Position).Magnitude
+                            if distance < closestDistance then
+                                closestName, closestDistance = player.Name, distance
+                            end
+                        end
+                    end
+                end
+                snapshot = snapshot .. " nearest=" .. closestName .. ":" .. math.floor(closestDistance)
+            end
+
+            if snapshot ~= lastSnapshot then
+                lastSnapshot = snapshot
+                add("STATE", snapshot, true)
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+if not hookmetamethod or not getnamecallmethod or not newcclosure then
+    add("ERROR", "Executor sem hookmetamethod/getnamecallmethod/newcclosure", true)
+    return
+end
+
+local originalNamecall
+originalNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if enabled and typeof(self) == "Instance"
+    and (method == "FireServer" or method == "InvokeServer") then
+        local args = table.pack(...)
+        local parts = {}
+        for index = 1, math.min(args.n, 8) do
+            table.insert(parts, "a" .. index .. "=" .. describe(args[index]))
+        end
+        add("REMOTE", method .. " " .. shortInstance(self) .. " | " .. table.concat(parts, " | "), true)
+    end
+    return originalNamecall(self, ...)
+end))
+
+add("START", "ROLE=" .. ROLE .. " player=" .. LocalPlayer.Name, true)
+
+
