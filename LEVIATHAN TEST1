@@ -2642,6 +2642,16 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         if (useBasicClick or isShipEvent) and not stableHoverY then
             stableHoverY = target.Position.Y + height
         end
+        -- Sharks mergulham depois que o hover é criado. A altura totalmente
+        -- congelada deixava o personagem visualmente alinhado, porém a
+        -- distância 3D ultrapassava o limite e o loop parava de atacar. Só
+        -- corrigimos desvios grandes e de forma suave para não voltar a quicar.
+        if useBasicClick and stableHoverY then
+            local targetHoverY = target.Position.Y + height
+            if math.abs(targetHoverY - stableHoverY) > 12 then
+                stableHoverY = stableHoverY + (targetHoverY - stableHoverY) * 0.12
+            end
+        end
         local desired = (useBasicClick or isShipEvent)
             and Vector3.new(target.Position.X, stableHoverY, target.Position.Z)
             or target.Position + Vector3.new(0, height, 0)
@@ -2750,7 +2760,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 or eventKey == "PirateGrandBrigade"
                 or eventKey == "FishBoat"
             local attackRange = eventKey == "SeaBeast" and 340
-                or useBasicClick and 40
+                or useBasicClick and 120
                 or isShipEvent and 155
                 or 140
 
