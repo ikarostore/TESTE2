@@ -406,7 +406,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.0 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.1 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -506,13 +506,44 @@ task.spawn(function()
             continue
         end
 
-        if marineOption and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible) then
-            local marineButton = marineOption:IsA("GuiButton") and marineOption
+        local chooseVisible = chooseTeam
+            and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible)
+
+        -- Em clientes PT-BR o texto é MARINHEIROS e o nome interno pode não
+        -- ser Marines. Procura tanto Name quanto Text e sobe até o GuiButton.
+        if chooseVisible and not marineOption then
+            for _, obj in ipairs(chooseTeam:GetDescendants()) do
+                local name = string.lower(obj.Name)
+                local text = ""
+                pcall(function() text = string.lower(obj.Text) end)
+                if string.find(name, "marin", 1, true)
+                or string.find(text, "marin", 1, true) then
+                    marineOption = obj
+                    break
+                end
+            end
+        end
+
+        if chooseVisible then
+            marineVisibleSince = marineVisibleSince or os.clock()
+            local marineButton = marineOption and (
+                marineOption:IsA("GuiButton") and marineOption
                 or marineOption:FindFirstChildWhichIsA("GuiButton", true)
+            )
+
+            if marineOption and not marineButton then
+                local ancestor = marineOption.Parent
+                while ancestor and ancestor ~= chooseTeam do
+                    if ancestor:IsA("GuiButton") then
+                        marineButton = ancestor
+                        break
+                    end
+                    ancestor = ancestor.Parent
+                end
+            end
 
             if marineButton and marineButton.Visible
             and marineButton.AbsoluteSize.X > 5 and marineButton.AbsoluteSize.Y > 5 then
-                marineVisibleSince = marineVisibleSince or os.clock()
                 local activated = false
                 if type(firesignal) == "function" then
                     activated = pcall(function() firesignal(marineButton.Activated) end)
@@ -526,27 +557,25 @@ task.spawn(function()
                     end)
                 end
 
-                -- Confirmado nos dumps públicos. Só chama depois de a opção
-                -- Marines permanecer renderizada por pelo menos um segundo.
-                -- InvokeServer fica isolado: se o servidor demorar, o loader e
-                -- o HUD continuam funcionando normalmente.
-                if os.clock() - marineVisibleSince >= 1
-                and os.clock() >= nextRemoteAttempt
-                and not invokePending then
-                    invokePending = true
-                    nextRemoteAttempt = os.clock() + 3
-                    task.spawn(function()
-                        pcall(function()
-                            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                            local comm = remotes and remotes:FindFirstChild("CommF_")
-                            if comm then comm:InvokeServer("SetTeam", "Marines") end
-                        end)
-                        invokePending = false
-                    end)
-                end
                 task.wait(1.5)
             else
-                task.wait(0.5)
+                task.wait(0.25)
+            end
+
+            -- O remote depende da tela pronta, não do nome localizado do botão.
+            if os.clock() - marineVisibleSince >= 1
+            and os.clock() >= nextRemoteAttempt
+            and not invokePending then
+                invokePending = true
+                nextRemoteAttempt = os.clock() + 3
+                task.spawn(function()
+                    pcall(function()
+                        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                        local comm = remotes and remotes:FindFirstChild("CommF_")
+                        if comm then comm:InvokeServer("SetTeam", "Marines") end
+                    end)
+                    invokePending = false
+                end)
             end
         else
             marineVisibleSince = nil
@@ -4488,5 +4517,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.0 carregado.")
+print("IKARO Leviathan v4.1 carregado.")
 
