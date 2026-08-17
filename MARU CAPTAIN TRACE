@@ -1,6 +1,6 @@
 getgenv().IKARO_MARU_TRACE_ROLE = "CAPTAIN_HEART"
 local ok, source = pcall(function()
-    return game:HttpGet("https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/MARU%20LEVIATHAN%20TRACE%20CORE?v=maru-safe-2")
+    return game:HttpGet("https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/MARU%20LEVIATHAN%20TRACE%20CORE?v=maru-safe-3")
 end)
 if not ok then
     game:GetService("StarterGui"):SetCore("SendNotification", {
