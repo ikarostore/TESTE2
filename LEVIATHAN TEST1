@@ -123,6 +123,7 @@ local SeaHuntState = {
     Driving = false,
     AtSea6 = false,
     CurrentEvent = nil,
+    CombatBatchActive = false,
     EventKills = 0
 }
 
@@ -2281,6 +2282,7 @@ local function IsLikelyCombatModel(obj)
     return false
 end
 
+local NextGlobalSeaEventScan = os.clock() + 2
 local function FindSelectedSeaEvent()
     -- Sea Beast tem container próprio conhecido.
     local seaBeasts = workspace:FindFirstChild("SeaBeasts")
@@ -2313,6 +2315,14 @@ local function FindSelectedSeaEvent()
             end
         end
     end
+
+    -- O fallback global é caro em servidores com streaming. Containers
+    -- conhecidos continuam sendo verificados sempre; a árvore inteira só é
+    -- consultada em intervalo controlado.
+    if os.clock() < NextGlobalSeaEventScan then
+        return nil, nil
+    end
+    NextGlobalSeaEventScan = os.clock() + 3
 
     -- Fallback global, mas só para modelos com sinais de combate.
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -2459,7 +2469,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     local oldPlatformStand = Humanoid.PlatformStand
     local oldAutoRotate = Humanoid.AutoRotate
     local collisionCache = {}
-    local basicHoverY = nil
+    local stableHoverY = nil
 
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
@@ -2510,22 +2520,22 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or eventKey == "PirateGrandBrigade"
             or eventKey == "FishBoat"
         local height = eventKey == "SeaBeast" and 260
-            or isShipEvent and 110
+            or isShipEvent and 130
             or useBasicClick and 30
             or eventKey == "Terrorshark" and 36
             or 60
         -- Todos os Sea Events sao atacados diretamente por cima. Somente o
         -- personagem se move; nenhuma propriedade do mob/barco e alterada.
-        if useBasicClick and not basicHoverY then
-            basicHoverY = target.Position.Y + height
+        if (useBasicClick or isShipEvent) and not stableHoverY then
+            stableHoverY = target.Position.Y + height
         end
-        local desired = useBasicClick
-            and Vector3.new(target.Position.X, basicHoverY, target.Position.Z)
+        local desired = (useBasicClick or isShipEvent)
+            and Vector3.new(target.Position.X, stableHoverY, target.Position.Z)
             or target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
-        if useBasicClick then
+        if useBasicClick or isShipEvent then
             HRP.CFrame = CFrame.lookAt(desired, target.Position)
             HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
             HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -2619,8 +2629,12 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
             if not target then break end
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
+            local isShipEvent = eventKey == "PirateBrigade"
+                or eventKey == "PirateGrandBrigade"
+                or eventKey == "FishBoat"
             local attackRange = eventKey == "SeaBeast" and 340
                 or useBasicClick and 40
+                or isShipEvent and 155
                 or 140
 
             if distance <= attackRange then
@@ -2658,11 +2672,28 @@ end
 -- LEVIATHAN DETECTOR
 -- =========================================================
 
+local CachedLeviathan = nil
+local NextLeviathanGlobalScan = os.clock() + 2
+
+workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("Model")
+    and string.find(string.lower(obj.Name), "leviathan", 1, true) then
+        CachedLeviathan = obj
+    end
+end)
+
 local function FindLeviathan()
+    if CachedLeviathan and CachedLeviathan.Parent then
+        return CachedLeviathan
+    end
+    if os.clock() < NextLeviathanGlobalScan then return nil end
+    NextLeviathanGlobalScan = os.clock() + 3
+
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("Model") then
             local n = string.lower(obj.Name)
             if string.find(n, "leviathan", 1, true) then
+                CachedLeviathan = obj
                 return obj
             end
         end
@@ -3396,6 +3427,7 @@ local RecoveryState = nil
 
 local function StopHunt()
     Running = false
+    SeaHuntState.CombatBatchActive = false
     StopFollow()
     SetState("STOPPED", "Automação parada.")
 end
@@ -3445,15 +3477,20 @@ local function StartHunt()
                 task.wait(0.25)
                 continue
             end
+            if SeaHuntState.CombatBatchActive then
+                task.wait(0.25)
+                continue
+            end
 
             -- Só eventos marcados entram aqui. Eventos desmarcados são
             -- ignorados e não interrompem barco/follow.
             local eventKey, eventModel = FindSelectedSeaEvent()
 
             if eventModel then
-                if not SeaHuntState.CurrentEvent then
+                if not SeaHuntState.CurrentEvent and not SeaHuntState.CombatBatchActive then
                     -- Reserva imediatamente o estado para impedir duas tasks
-                    -- de combate contra o mesmo evento.
+                    -- de combate e mantém barco/follow pausados durante todo o lote.
+                    SeaHuntState.CombatBatchActive = true
                     SeaHuntState.CurrentEvent = eventModel
                     RecoveryState.IgnoreBoatMissingUntil = math.huge
                     StopBoatDrive()
@@ -3466,8 +3503,39 @@ local function StartHunt()
 
                     task.spawn(function()
                         local okCombat, combatError = pcall(function()
-                            CombatSelectedSeaEvent(eventKey, eventModel)
+                            local nextKey, nextModel = eventKey, eventModel
+
+                            while Running and nextModel do
+                                SeaHuntState.CurrentEvent = nextModel
+                                SetState(
+                                    "SEA_EVENT_PRIORITY",
+                                    SeaEventDisplayName(nextKey) .. " • " .. nextModel:GetFullName()
+                                )
+                                CombatSelectedSeaEvent(nextKey, nextModel)
+
+                                if not Running or (RecoveryState and RecoveryState.Resetting) then
+                                    break
+                                end
+
+                                -- Só libera o barco depois de cinco segundos
+                                -- completos sem nenhum Sea Event selecionado.
+                                nextKey, nextModel = nil, nil
+                                local clearDeadline = os.clock() + 5
+                                SetState("SEA_EVENT_CLEAR_WAIT", "Confirmando área limpa por 5 segundos.")
+
+                                while Running and os.clock() < clearDeadline do
+                                    task.wait(0.25)
+                                    local foundKey, foundModel = FindSelectedSeaEvent()
+                                    if foundModel then
+                                        nextKey, nextModel = foundKey, foundModel
+                                        break
+                                    end
+                                end
+                            end
                         end)
+
+                        SeaHuntState.CurrentEvent = nil
+                        SeaHuntState.CombatBatchActive = false
 
                         -- Sair e voltar ao barco após um evento é normal. Dá
                         -- tempo para streaming/assento reencontrarem a instância
@@ -3476,7 +3544,6 @@ local function StartHunt()
                         RecoveryState.IgnoreBoatMissingUntil = os.clock() + 20
 
                         if not okCombat then
-                            SeaHuntState.CurrentEvent = nil
                             SetState("SEA_EVENT_COMBAT_ERROR", tostring(combatError))
                         end
 
@@ -3551,6 +3618,7 @@ local function BindRecoveryDeath(humanoid)
             RecoveryState.KnownBoat = nil
             RecoveryState.MissingSince = nil
             SeaHuntState.CurrentEvent = nil
+            SeaHuntState.CombatBatchActive = false
             StopBoatDrive(true)
             StopFollow()
             SetState("MAIN_CHARACTER_DIED", "Aguardando respawn para reconstruir o grupo.")
@@ -3566,6 +3634,7 @@ local function ResetLocalForBoatRecovery(reason)
     RecoveryState.KnownBoat = nil
     RecoveryState.MissingSince = nil
     SeaHuntState.CurrentEvent = nil
+    SeaHuntState.CombatBatchActive = false
 
     StopBoatDrive(true)
     StopFollow()
@@ -3661,7 +3730,7 @@ task.spawn(function()
 
             -- Durante Sea Event, sair do barco é esperado; só monitoramos
             -- destruição/desaparecimento fora do combate.
-            if not SeaHuntState.CurrentEvent then
+            if not SeaHuntState.CurrentEvent and not SeaHuntState.CombatBatchActive then
                 local visibleBoat
 
                 if AccountBuyBoat then
