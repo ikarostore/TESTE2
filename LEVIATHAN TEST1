@@ -2035,10 +2035,6 @@ local function GetCombatFrameworkController()
     if getUps then
         local okUps, ups = pcall(getUps, framework)
         if okUps and type(ups) == "table" then
-            local internal = ups[2]
-            if type(internal) == "table" and internal.activeController then
-                return internal.activeController
-            end
             for _, value in pairs(ups) do
                 if type(value) == "table" and value.activeController then
                     return value.activeController
@@ -2122,43 +2118,16 @@ local function BMFastAttack(target)
         BMVirtualUser:CaptureController()
         BMVirtualUser:Button1Down(Vector2.new(1280, 672))
 
-        -- Fluxo completo do script de referencia: arma real + hits gerados
-        -- pelo RigLib. Nao fabrica uma lista {target}, rejeitada pelo servidor.
-        local env = getgenv and getgenv() or _G
-        local now = os.clock()
-        if controller and now >= (env.IKARO_NEXT_RIG_ATTACK or 0) then
-            env.IKARO_NEXT_RIG_ATTACK = now + 0.18
-            local rigFolder = ReplicatedStorage:FindFirstChild("CombatFramework")
-            local rigModule = rigFolder and rigFolder:FindFirstChild("RigLib")
-            local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
-            local okRig, rigLib = pcall(require, rigModule)
-            local weapon = controller.blades and controller.blades[1]
-            while weapon and weapon.Parent and weapon.Parent ~= Character do
-                weapon = weapon.Parent
-            end
-
-            if rigModule and rigEvent and okRig and type(rigLib) == "table"
-            and type(rigLib.getBladeHits) == "function" and weapon then
-                local rawHits = rigLib.getBladeHits(Character, {HRP}, 60)
-                local hits = {}
-                local seen = {}
-                local targetModel = target:FindFirstAncestorOfClass("Model")
-                for _, hit in pairs(rawHits or {}) do
-                    local model = hit and hit.Parent
-                    local root = model and model:FindFirstChild("HumanoidRootPart")
-                    local selectedTarget = targetModel and model
-                        and (model == targetModel
-                            or model:IsDescendantOf(targetModel)
-                            or targetModel:IsDescendantOf(model))
-                    if root and selectedTarget and not seen[model] then
-                        seen[model] = true
-                        table.insert(hits, root)
-                    end
-                end
-                if #hits > 0 then
-                    rigEvent:FireServer("weaponChange", tostring(weapon))
-                    rigEvent:FireServer("hit", hits, 1, "")
-                    attacked = true
+        -- Fallback estável usado antes da regressão dos ships.
+        if not controller then
+            local env = getgenv and getgenv() or _G
+            local now = os.clock()
+            if now >= (env.IKARO_NEXT_RIG_ATTACK or 0) then
+                env.IKARO_NEXT_RIG_ATTACK = now + 0.18
+                local rigEvent = ReplicatedStorage:FindFirstChild("RigControllerEvent")
+                if rigEvent then
+                    rigEvent:FireServer("weaponChange", tool.Name)
+                    rigEvent:FireServer("hit", {target}, 1, "")
                 end
             end
         end
@@ -2166,6 +2135,7 @@ local function BMFastAttack(target)
         if BMCameraShaker and type(BMCameraShaker.Stop) == "function" then
             BMCameraShaker:Stop()
         end
+        attacked = true
     end)
 
     return attacked
@@ -2616,12 +2586,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if useBasicClick then
-                    local rigAttackWorked = BMFastAttack(target)
-                    if not rigAttackWorked then
-                        -- Se o executor nao fornece controller/hits validos,
-                        -- usa skills para nao deixar o Sea Event invencivel.
-                        UseConfiguredSeaSkills()
-                    end
+                    BMFastAttack(target)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
