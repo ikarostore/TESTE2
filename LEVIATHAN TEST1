@@ -131,6 +131,7 @@ local SeaHuntState = {
     BMRegisterHit = nil,
     BMModernRemotesChecked = false,
     BMDirectHitCursor = 0,
+    NextShipDirectHit = 0,
     ResumeAfterEscape = false,
     EventKills = 0
 }
@@ -2300,6 +2301,27 @@ local function BMFastAttack(target, eventModel, eventKey)
     return attacked
 end
 
+local function ShipDirectHit(eventModel)
+    if not eventModel or not eventModel.Parent then return false end
+
+    local _, registerHit = GetBMModernRemotes()
+    if not registerHit then return false end
+
+    -- Nos traces do Banana, o dano dos ships acompanha as skills, mas mira
+    -- sempre o VehicleSeat. ShipServiceEvent pertence ao barco do jogador e
+    -- fica deliberadamente fora daqui para nunca empurrar o barco inimigo.
+    local seat = eventModel:FindFirstChild("VehicleSeat", true)
+    if not seat or not seat:IsA("BasePart") then return false end
+
+    local now = os.clock()
+    if now < (SeaHuntState.NextShipDirectHit or 0) then return true end
+    SeaHuntState.NextShipDirectHit = now + 0.267
+
+    return pcall(function()
+        registerHit:FireServer(seat, {})
+    end)
+end
+
 local function UseConfiguredSeaSkills()
     if not SeaVIM then return false end
 
@@ -2739,6 +2761,9 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     end
 
     local useBasicClick = ClickSeaEvents[eventKey] == true
+    local isShipEvent = eventKey == "PirateBrigade"
+        or eventKey == "PirateGrandBrigade"
+        or eventKey == "FishBoat"
 
     local combatState = useBasicClick and "SEA_EVENT_BM_FAST_ATTACK" or "SEA_EVENT_SKILLS"
 
@@ -2753,6 +2778,23 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     if not stopFocus then
         SeaHuntState.CurrentEvent = nil
         error("Não foi possível iniciar o foco físico no Sea Event")
+    end
+
+    -- As skills possuem hold e troca de ferramenta, portanto são bloqueantes.
+    -- Mantém o protocolo direto do VehicleSeat numa task independente para
+    -- reproduzir a cadência simultânea observada no Banana.
+    local shipHitActive = isShipEvent
+    if isShipEvent then
+        SeaHuntState.NextShipDirectHit = 0
+        task.spawn(function()
+            while shipHitActive
+            and Running
+            and SeaHuntState.CurrentEvent == eventModel
+            and IsEventAlive(eventModel) do
+                ShipDirectHit(eventModel)
+                task.wait(0.05)
+            end
+        end)
     end
 
     local started = os.clock()
@@ -2770,9 +2812,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
             if not target then break end
 
             local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
-            local isShipEvent = eventKey == "PirateBrigade"
-                or eventKey == "PirateGrandBrigade"
-                or eventKey == "FishBoat"
             local attackRange = eventKey == "SeaBeast" and 340
                 or useBasicClick and 120
                 or isShipEvent and 155
@@ -2794,6 +2833,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         end
     end)
 
+    shipHitActive = false
     stopFocus()
 
     if not okCombat then
