@@ -2070,6 +2070,9 @@ local EnsureSeaCombatHaki
 
 local BMVirtualUser = nil
 local BMCameraShaker = nil
+local BMRegisterAttack = nil
+local BMRegisterHit = nil
+local BMModernRemotesChecked = false
 pcall(function()
     BMVirtualUser = game:GetService("VirtualUser")
 end)
@@ -2077,7 +2080,18 @@ pcall(function()
     BMCameraShaker = require(ReplicatedStorage.Util.CameraShaker)
 end)
 
-local function BMFastAttack(target)
+local function GetBMModernRemotes()
+    if BMModernRemotesChecked then return BMRegisterAttack, BMRegisterHit end
+    BMModernRemotesChecked = true
+
+    local modules = ReplicatedStorage:FindFirstChild("Modules")
+    local net = modules and modules:FindFirstChild("Net")
+    BMRegisterAttack = net and net:FindFirstChild("RE/RegisterAttack")
+    BMRegisterHit = net and net:FindFirstChild("RE/RegisterHit")
+    return BMRegisterAttack, BMRegisterHit
+end
+
+local function BMFastAttack(target, eventModel)
     if not target then return false end
 
     EnsureSeaCombatHaki()
@@ -2086,8 +2100,24 @@ local function BMFastAttack(target)
     local tool = EquipSeaCombatType("Melee")
     if not tool then return false end
 
-    -- BM Fast Attack do script de referência: prepara o controlador interno e
-    -- mantém VirtualUser Button1Down; não usa clique solto nem Tool:Activate.
+    -- Protocolo moderno comprovado no teste V2.4. Ele substitui o antigo
+    -- CombatFramework/RigLib e funciona a distancia em Shark/Piranha/Terror.
+    local registerAttack, registerHit = GetBMModernRemotes()
+    if registerAttack and registerHit then
+        local targetModel = eventModel or target:FindFirstAncestorOfClass("Model")
+        local hitPart = targetModel and targetModel:FindFirstChild("Head") or target
+        if targetModel and hitPart then
+            local attackOk = pcall(function()
+                registerAttack:FireServer(0)
+            end)
+            local hitOk = pcall(function()
+                registerHit:FireServer(hitPart, {{targetModel, hitPart}})
+            end)
+            return attackOk and hitOk
+        end
+    end
+
+    -- Fallback legado para versões antigas do jogo.
     local controller = GetCombatFrameworkController()
     if not BMVirtualUser then
         return false
@@ -2429,6 +2459,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     local oldPlatformStand = Humanoid.PlatformStand
     local oldAutoRotate = Humanoid.AutoRotate
     local collisionCache = {}
+    local basicHoverY = nil
 
     local bodyVelocity = Instance.new("BodyVelocity")
     bodyVelocity.Name = "IKARO_SeaEventFocusVelocity"
@@ -2480,16 +2511,26 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or eventKey == "FishBoat"
         local height = eventKey == "SeaBeast" and 260
             or isShipEvent and 110
+            or useBasicClick and 30
             or eventKey == "Terrorshark" and 36
-            or useBasicClick and 18
             or 60
         -- Todos os Sea Events sao atacados diretamente por cima. Somente o
         -- personagem se move; nenhuma propriedade do mob/barco e alterada.
-        local desired = target.Position + Vector3.new(0, height, 0)
+        if useBasicClick and not basicHoverY then
+            basicHoverY = target.Position.Y + height
+        end
+        local desired = useBasicClick
+            and Vector3.new(target.Position.X, basicHoverY, target.Position.Z)
+            or target.Position + Vector3.new(0, height, 0)
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
-        if distance > 7 then
+        if useBasicClick then
+            HRP.CFrame = CFrame.lookAt(desired, target.Position)
+            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        elseif distance > 7 then
             local speed = distance > 800 and 340
                 or distance > 250 and 280
                 or distance > 70 and 210
@@ -2586,7 +2627,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if useBasicClick then
-                    BMFastAttack(target)
+                    BMFastAttack(target, eventModel)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
@@ -2594,7 +2635,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 end
             end
 
-            task.wait(useBasicClick and 0.06 or 0.12)
+            task.wait(useBasicClick and 0.05 or 0.12)
         end
     end)
 
