@@ -325,6 +325,26 @@ copy.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Sustentacao visual separada do ataque: roda em todos os frames para impedir
+-- que a gravidade derrube o personagem entre um RegisterHit e outro.
+RunService.Heartbeat:Connect(function()
+    if not running or bringTest or not hoverTarget or not hoverY then return end
+    local _, humanoid, root = CharacterParts()
+    local targetRoot = hoverTarget.Parent and hoverTarget:FindFirstChild("HumanoidRootPart")
+    local targetHumanoid = hoverTarget.Parent and hoverTarget:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 or not root
+    or not targetRoot or not targetHumanoid or targetHumanoid.Health <= 0 then
+        hoverTarget = nil
+        hoverY = nil
+        return
+    end
+
+    local hoverPosition = Vector3.new(targetRoot.Position.X, hoverY, targetRoot.Position.Z)
+    root.CFrame = CFrame.lookAt(hoverPosition, targetRoot.Position)
+    root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+end)
+
 while RunService.Heartbeat:Wait() do
     local character, humanoid, root = CharacterParts()
     if running and character and humanoid and humanoid.Health > 0 and root then
@@ -340,8 +360,6 @@ while RunService.Heartbeat:Wait() do
             else
                 local hoverPosition = Vector3.new(targetRoot.Position.X, hoverY, targetRoot.Position.Z)
                 root.CFrame = CFrame.lookAt(hoverPosition, targetRoot.Position)
-                root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
             end
             local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
             local hpBefore = targetHumanoid and targetHumanoid.Health or -1
