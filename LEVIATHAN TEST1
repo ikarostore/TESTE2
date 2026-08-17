@@ -2381,18 +2381,32 @@ local function IsExcludedSeaEventModel(obj)
     local full = string.lower(obj:GetFullName())
     local name = string.lower(obj.Name)
 
-    -- Nunca tratar NPCs utilitários / mapa / nosso próprio barco como inimigos.
+    -- Workspace.Boats contém barcos de jogadores e barcos comprados. Os ships
+    -- hostis observados nos traces ficam em Workspace.Enemies.
     if string.find(name, "hunter", 1, true)
     or string.find(name, "dealer", 1, true)
     or string.find(name, "spy", 1, true)
     or string.find(full, "workspace.map", 1, true)
     or string.find(full, "workspace.npcs", 1, true)
-    or string.find(full, "workspace.boats.beast hunter", 1, true)
+    or string.find(full, "workspace.boats", 1, true)
     or string.find(full, "players.", 1, true) then
         return true
     end
 
     return false
+end
+
+SeaHuntState.IsNearbyEvent = function(obj)
+    if not obj or not obj.Parent then return false end
+    local ok, pivot = pcall(function() return obj:GetPivot() end)
+    if not ok then return false end
+
+    local reference = HRP and HRP.Position
+    if not reference then return false end
+
+    -- Eventos marítimos válidos surgem ao redor do grupo. Isso impede que um
+    -- ship antigo em outra região roube a prioridade e teleporte a conta.
+    return (pivot.Position - reference).Magnitude <= 2500
 end
 
 local function IsLikelyCombatModel(obj)
@@ -2430,6 +2444,8 @@ local function FindSelectedSeaEvent()
     if priorityEnemies and SeaEventsSelected.Terrorshark then
         for _, obj in ipairs(priorityEnemies:GetChildren()) do
             if obj:IsA("Model")
+            and not IsExcludedSeaEventModel(obj)
+            and SeaHuntState.IsNearbyEvent(obj)
             and NameMatchesAny(obj.Name, SeaEventNames.Terrorshark, "Terrorshark") then
                 return "Terrorshark", obj
             end
@@ -2443,6 +2459,7 @@ local function FindSelectedSeaEvent()
         for _, obj in ipairs(seaBeasts:GetChildren()) do
             if obj:IsA("Model")
             and not IsExcludedSeaEventModel(obj)
+            and SeaHuntState.IsNearbyEvent(obj)
             and NameMatchesAny(obj.Name, SeaEventNames.SeaBeast, "SeaBeast") then
                 return "SeaBeast", obj
             end
@@ -2454,7 +2471,8 @@ local function FindSelectedSeaEvent()
 
     if enemies then
         for _, obj in ipairs(enemies:GetChildren()) do
-            if obj:IsA("Model") and IsLikelyCombatModel(obj) then
+            if obj:IsA("Model") and IsLikelyCombatModel(obj)
+            and SeaHuntState.IsNearbyEvent(obj) then
                 for _, key in ipairs(SeaEventOrder) do
                     if key ~= "SeaBeast" and SeaEventsSelected[key] then
                         local variants = SeaEventNames[key]
@@ -2478,7 +2496,8 @@ local function FindSelectedSeaEvent()
 
     -- Fallback global, mas só para modelos com sinais de combate.
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") and IsLikelyCombatModel(obj) then
+        if obj:IsA("Model") and IsLikelyCombatModel(obj)
+        and SeaHuntState.IsNearbyEvent(obj) then
             for _, key in ipairs(SeaEventOrder) do
                 if key ~= "SeaBeast" and SeaEventsSelected[key] then
                     local variants = SeaEventNames[key]
