@@ -406,7 +406,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v3.6 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v3.7 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2313,7 +2313,7 @@ local function BMFastAttack(target, eventModel, eventKey)
     return attacked
 end
 
-local function UseConfiguredSeaSkills()
+local function UseConfiguredSeaSkills(liveTarget)
     if not SeaVIM then return false end
 
     local used = false
@@ -2333,6 +2333,12 @@ local function UseConfiguredSeaSkills()
                     local key = Enum.KeyCode[keyName]
                     if key then
                         pcall(function()
+                            -- Ships continuam se deslocando durante troca de
+                            -- arma/hold. Recalcula a mira para cada habilidade.
+                            if liveTarget and liveTarget.Parent then
+                                AimAtSeaTarget(liveTarget)
+                                task.wait(0.04)
+                            end
                             SeaVIM:SendKeyEvent(true, key, false, game)
                             task.wait(cfg.Hold[keyName] or 0.5)
                             SeaVIM:SendKeyEvent(false, key, false, game)
@@ -2692,7 +2698,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or eventKey == "FishBoat"
         local stableSkillHover = eventKey == "Terrorshark"
         local height = eventKey == "SeaBeast" and 260
-            or isShipEvent and 150
+            or isShipEvent and 80
             or useBasicClick and 30
             -- O trace de morte do Terror Shark nao registrou RegisterHit nem
             -- RegisterAttack. Ele foi eliminado por skills com a conta acima
@@ -2720,7 +2726,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local shipOffset = Vector3.new(0, 0, 0)
         if isShipEvent then
             local right = Vector3.new(target.CFrame.RightVector.X, 0, target.CFrame.RightVector.Z)
-            shipOffset = (right.Magnitude > 0.01 and right.Unit or Vector3.new(1, 0, 0)) * 85
+            shipOffset = (right.Magnitude > 0.01 and right.Unit or Vector3.new(1, 0, 0)) * 95
         end
         local desired = (useBasicClick or isShipEvent or stableSkillHover)
             and Vector3.new(
@@ -2842,7 +2848,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
             local attackRange = eventKey == "SeaBeast" and 340
                 or eventKey == "Terrorshark" and 300
                 or useBasicClick and 120
-                or isShipEvent and 260
+                or isShipEvent and 180
                 or 140
 
             if distance <= attackRange then
@@ -2853,7 +2859,7 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
-                    UseConfiguredSeaSkills()
+                    UseConfiguredSeaSkills(target)
                 end
             end
 
@@ -4443,5 +4449,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v2 carregado.")
+print("IKARO Leviathan v3.7 carregado.")
 
