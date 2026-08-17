@@ -12,7 +12,8 @@ local ROLE = env.IKARO_MARU_TRACE_ROLE or "UNKNOWN"
 local enabled = true
 local records = {}
 local lastRecord = nil
-local MAX_RECORDS = 220
+local MAX_RECORDS = 800
+local remoteLastAt = {}
 
 local function shortInstance(obj)
     if typeof(obj) ~= "Instance" then return tostring(obj) end
@@ -218,11 +219,16 @@ originalNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self,
         for index = 1, math.min(args.n, 8) do
             table.insert(parts, "a" .. index .. "=" .. describe(args[index]))
         end
-        add("REMOTE", method .. " " .. shortInstance(self) .. " | " .. table.concat(parts, " | "), true)
+        local detail = method .. " " .. shortInstance(self) .. " | " .. table.concat(parts, " | ")
+        local throttleKey = method .. ":" .. self:GetFullName() .. ":" .. tostring(args[1])
+        local now = os.clock()
+        if now - (remoteLastAt[throttleKey] or 0) >= 0.25 then
+            remoteLastAt[throttleKey] = now
+            add("REMOTE", detail, true)
+        end
     end
     return originalNamecall(self, ...)
 end))
 
 add("START", "ROLE=" .. ROLE .. " player=" .. LocalPlayer.Name, true)
-
 
