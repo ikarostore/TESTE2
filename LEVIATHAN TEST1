@@ -406,7 +406,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v3.7 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v3.8 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -473,12 +473,15 @@ do
     end)
 end
 
--- Detecta Marines na tela Pick a Side e continua selecionando em intervalo
--- controlado. So encerra depois que o personagem realmente spawnar.
+-- Aguarda a tela Pick a Side existir de verdade. Não chama SetTeam durante
+-- Loading Data e não altera o tamanho do botão, pois ambos bloqueavam a
+-- inicialização do perfil em alguns servidores.
 task.spawn(function()
-    local teamVirtualUser = game:GetService("VirtualUser")
+    local teamVIM = nil
+    pcall(function() teamVIM = game:GetService("VirtualInputManager") end)
+    local deadline = os.clock() + 90
 
-    while true do
+    while Gui and Gui.Parent and os.clock() < deadline do
         local spawnedCharacter = LocalPlayer.Character
         local spawnedHumanoid = spawnedCharacter
             and spawnedCharacter:FindFirstChildOfClass("Humanoid")
@@ -490,33 +493,34 @@ task.spawn(function()
         end
 
         local mainGui = PlayerGui:FindFirstChild("Main")
-        local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam")
-        local container = chooseTeam and chooseTeam:FindFirstChild("Container")
-        local marineOption = container and container:FindFirstChild("Marines")
+        local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam", true)
+        local marineOption = chooseTeam and chooseTeam:FindFirstChild("Marines", true)
 
         if marineOption and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible) then
-            local marineButton = marineOption:FindFirstChild("TextButton", true)
+            local marineButton = marineOption:IsA("GuiButton") and marineOption
+                or marineOption:FindFirstChildWhichIsA("GuiButton", true)
 
-            -- Metodo do script de referencia: torna o botao Marines clicavel
-            -- em toda a tela e usa input real ate o personagem spawnar.
-            if marineButton then
-                pcall(function()
-                    marineButton.Size = UDim2.new(0, 10000, 0, 10000)
-                    marineButton.Position = UDim2.new(-4, 0, -5, 0)
-                    marineButton.BackgroundTransparency = 1
-                    teamVirtualUser:CaptureController()
-                    teamVirtualUser:Button1Down(Vector2.new(99, 99))
-                    task.wait(0.08)
-                    teamVirtualUser:Button1Up(Vector2.new(99, 99))
-                end)
+            if marineButton and marineButton.Visible
+            and marineButton.AbsoluteSize.X > 5 and marineButton.AbsoluteSize.Y > 5 then
+                local activated = false
+                if type(firesignal) == "function" then
+                    activated = pcall(function() firesignal(marineButton.Activated) end)
+                end
+                if not activated and teamVIM then
+                    pcall(function()
+                        local center = marineButton.AbsolutePosition + marineButton.AbsoluteSize / 2
+                        teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
+                        task.wait(0.08)
+                        teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
+                    end)
+                end
+                task.wait(1.5)
+            else
+                task.wait(0.5)
             end
-
-            pcall(function()
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
-            end)
+        else
+            task.wait(0.5)
         end
-
-        task.wait(2)
     end
 end)
 
@@ -4449,5 +4453,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v3.7 carregado.")
+print("IKARO Leviathan v3.8 carregado.")
 
