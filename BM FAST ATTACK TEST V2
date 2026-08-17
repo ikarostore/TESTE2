@@ -10,7 +10,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local running = false
 local bringTest = false
-local lastReport = "V2.2 MODERN NET carregado sem varreduras."
+local lastReport = "V2.3 BANANA HIT carregado sem varreduras."
 local hoverTarget
 local hoverY
 local CameraShaker
@@ -43,7 +43,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -16, 0, 34)
 title.Position = UDim2.new(0, 8, 0, 4)
 title.BackgroundTransparency = 1
-title.Text = "IKARO - BM Fast Attack Test V2.2 MODERN NET"
+title.Text = "IKARO - BM Fast Attack Test V2.3 BANANA HIT"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 18
@@ -223,27 +223,38 @@ local function ControllerState()
     return nil, false, false, cachedMethod
 end
 
+local modernRegisterHit
+local modernRemoteChecked = false
+local function GetModernRegisterHit()
+    if modernRemoteChecked then return modernRegisterHit end
+    modernRemoteChecked = true
+    local modules = ReplicatedStorage:FindFirstChild("Modules")
+    local net = modules and modules:FindFirstChild("Net")
+    modernRegisterHit = net and net:FindFirstChild("RE/RegisterHit")
+    return modernRegisterHit
+end
+
 local function PerformAttack(targetModel, targetRoot, character, humanoid, root)
     local tool = EquipMelee(character, humanoid)
-    local controller, direct, upvalue, method = ControllerState()
     local rawCount, filteredCount = 0, 0
     local sent = false
 
-    if not tool then return false, direct, upvalue, method, 0, 0, "Melee ausente" end
+    if not tool then return false, false, false, "sem arma", 0, 0, "Melee ausente" end
 
-    -- Protocolo de combate atual: substituiu CombatFramework/RigLib.
-    local modules = ReplicatedStorage:FindFirstChild("Modules")
-    local net = modules and modules:FindFirstChild("Net")
-    local registerAttack = net and net:FindFirstChild("RE/RegisterAttack")
-    local registerHit = net and net:FindFirstChild("RE/RegisterHit")
-    if registerAttack and registerHit then
-        local hitPart = targetModel:FindFirstChild("Head") or targetRoot
-        local targets = {{targetModel, hitPart}}
-        local attackOk = pcall(function() registerAttack:FireServer(0) end)
-        local hitOk = pcall(function() registerHit:FireServer(hitPart, targets) end)
-        return attackOk and hitOk, false, false, "Modules.Net moderno", 1, 1,
-            tool.Name .. " | RegisterAttack + RegisterHit"
+    -- Formato capturado diretamente do Banana antigo em execucao:
+    -- RegisterHit(LeftHand, {}). Nao procura CombatFramework/getgc neste caminho.
+    local registerHit = GetModernRegisterHit()
+    if registerHit then
+        local hitPart = targetModel:FindFirstChild("LeftHand")
+            or targetModel:FindFirstChild("RightHand")
+            or targetModel:FindFirstChild("Head")
+            or targetRoot
+        local hitOk = pcall(function() registerHit:FireServer(hitPart, {}) end)
+        return hitOk, false, false, "Banana RegisterHit capturado", 1, 1,
+            tool.Name .. " | RegisterHit(" .. hitPart.Name .. ", {})"
     end
+
+    local controller, direct, upvalue, method = ControllerState()
 
     if controller then
         controller.attacking = false
@@ -357,7 +368,7 @@ local remoteInfoReady = false
 local nextAttack = 0
 local nextReport = 0
 local previousReportHP = {}
-local ATTACK_INTERVAL = 0.05
+local ATTACK_INTERVAL = 0.025
 local REPORT_INTERVAL = 0.5
 
 while RunService.Heartbeat:Wait() do
@@ -402,7 +413,7 @@ while RunService.Heartbeat:Wait() do
                 local hpBefore = previousReportHP[target] or hpAfter
                 previousReportHP[target] = hpAfter
                 lastReport = table.concat({
-                    "VERSAO: V2.2 MODERN NET",
+                    "VERSAO: V2.3 BANANA HIT",
                     "Alvo: " .. target.Name,
                     "Distancia atual: " .. tostring(math.floor(initialDistance * 10) / 10),
                     "HP leitura anterior/atual: " .. tostring(math.floor(hpBefore)) .. " / " .. tostring(math.floor(hpAfter)),
