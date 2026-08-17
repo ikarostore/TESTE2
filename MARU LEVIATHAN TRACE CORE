@@ -9,7 +9,9 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local env = getgenv and getgenv() or _G
 local ROLE = env.IKARO_MARU_TRACE_ROLE or "UNKNOWN"
 
-local enabled = true
+-- Nunca capturar durante Loading Data: o jogo dispara muitos remotes nessa
+-- fase e serializá-los pode impedir a conclusão do carregamento.
+local enabled = false
 local records = {}
 local lastRecord = nil
 local MAX_RECORDS = 800
@@ -76,7 +78,7 @@ output.Size = UDim2.new(1, -20, 1, -100)
 output.Position = UDim2.new(0, 10, 0, 42)
 output.BackgroundColor3 = Color3.fromRGB(34, 35, 40)
 output.BorderSizePixel = 0
-output.Text = "Rastreador pronto. Execute o Maru e ative Auto Leviathan."
+output.Text = "Rastreador armado, captura DESLIGADA.\nEspere Loading Data sumir e clique em Rastreamento: OFF."
 output.TextColor3 = Color3.fromRGB(225, 230, 235)
 output.Font = Enum.Font.Code
 output.TextSize = 12
@@ -100,7 +102,7 @@ local function button(text, x)
 end
 
 local copyButton = button("Copiar rastreamento", 10)
-local toggleButton = button("Rastreamento: ON", 225)
+local toggleButton = button("Rastreamento: OFF", 225)
 local clearButton = button("Limpar", 440)
 
 local function refresh()
@@ -108,7 +110,7 @@ local function refresh()
     local visible = {}
     for index = first, #records do table.insert(visible, records[index]) end
     output.Text = #visible > 0 and table.concat(visible, "\n")
-        or "Rastreador pronto. Execute o Maru e ative Auto Leviathan."
+        or "Captura desligada. Espere Loading Data sumir antes de ativar."
 end
 
 local function add(kind, detail, allowDuplicate)
@@ -132,6 +134,9 @@ end)
 toggleButton.MouseButton1Click:Connect(function()
     enabled = not enabled
     toggleButton.Text = enabled and "Rastreamento: ON" or "Rastreamento: OFF"
+    if enabled then
+        add("CAPTURE", "ativada manualmente apos o carregamento", true)
+    end
 end)
 
 clearButton.MouseButton1Click:Connect(function()
@@ -230,5 +235,5 @@ originalNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self,
     return originalNamecall(self, ...)
 end))
 
-add("START", "ROLE=" .. ROLE .. " player=" .. LocalPlayer.Name, true)
+-- O registro START é criado quando o usuário ativa manualmente a captura.
 
