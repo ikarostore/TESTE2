@@ -11,6 +11,8 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local running = false
 local bringTest = false
 local lastReport = "V2 MODERN NET carregado."
+local hoverTarget
+local hoverY
 local CameraShaker
 pcall(function()
     CameraShaker = require(ReplicatedStorage.Util.CameraShaker)
@@ -301,6 +303,10 @@ end
 
 toggle.MouseButton1Click:Connect(function()
     running = not running
+    if not running then
+        hoverTarget = nil
+        hoverY = nil
+    end
     toggle.Text = running and "Parar teste" or "Iniciar teste"
     toggle.BackgroundColor3 = running and Color3.fromRGB(55, 135, 82) or Color3.fromRGB(65, 100, 82)
 end)
@@ -324,11 +330,18 @@ while RunService.Heartbeat:Wait() do
     if running and character and humanoid and humanoid.Health > 0 and root then
         local target, targetRoot, initialDistance = FindNearestEnemy(root)
         if target and targetRoot then
+            if hoverTarget ~= target then
+                hoverTarget = target
+                hoverY = targetRoot.Position.Y + 18
+            end
             if bringTest then
                 targetRoot.CFrame = root.CFrame * CFrame.new(0, -18, 0)
                 targetRoot.CanCollide = false
             else
-                root.CFrame = CFrame.lookAt(targetRoot.Position + Vector3.new(0, 18, 0), targetRoot.Position)
+                local hoverPosition = Vector3.new(targetRoot.Position.X, hoverY, targetRoot.Position.Z)
+                root.CFrame = CFrame.lookAt(hoverPosition, targetRoot.Position)
+                root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
             end
             local targetHumanoid = target:FindFirstChildOfClass("Humanoid")
             local hpBefore = targetHumanoid and targetHumanoid.Health or -1
@@ -354,6 +367,8 @@ while RunService.Heartbeat:Wait() do
             }, "\n")
             output.Text = lastReport
         else
+            hoverTarget = nil
+            hoverY = nil
             output.Text = "Nenhum NPC normal vivo em Workspace.Enemies.\nChegue perto de uma ilha com inimigos."
         end
     end
