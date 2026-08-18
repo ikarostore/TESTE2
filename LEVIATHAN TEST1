@@ -2,6 +2,11 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+pcall(function()
+    getgenv().IKARO_BANANA_COMBAT = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua"
+    ))()
+end)
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -432,7 +437,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v5.0 FIXED EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v5.1 MODULAR EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2242,48 +2247,6 @@ end
 -- Rotina preservada do Banana para o Terrorshark. Ela não usa o preparo de
 -- EquipEvent do fallback comum: equipa, reúne Heads em até 60 studs e envia o
 -- par RegisterAttack/RegisterHit imediatamente a cada ciclo.
-local function BananaSeaCreatureAttack(eventModel)
-    EnsureSeaCombatHaki()
-    local tool = EquipSeaCombatType("Melee")
-    if not tool then return false end
-
-    local registerAttack, registerHit = GetBMModernRemotes()
-    local enemies = workspace:FindFirstChild("Enemies")
-    if not registerAttack or not registerHit or not enemies or not HRP then
-        return false
-    end
-
-    local targets = {}
-    local firstHead = nil
-    for _, enemy in ipairs(enemies:GetChildren()) do
-        local humanoid = enemy:FindFirstChildOfClass("Humanoid")
-        local head = enemy:FindFirstChild("Head")
-        if not enemy:GetAttribute("IsBoat")
-        and humanoid and humanoid.Health > 0
-        and head and (HRP.Position - head.Position).Magnitude <= 60
-        and enemy ~= Character then
-            table.insert(targets, {enemy, head})
-            firstHead = head
-        end
-    end
-
-    if eventModel and eventModel.Parent then
-        local root = eventModel:FindFirstChild("HumanoidRootPart")
-        local humanoid = eventModel:FindFirstChildOfClass("Humanoid")
-        if root then
-            root.CanCollide = false
-            root.Size = Vector3.new(60, 60, 60)
-        end
-        if humanoid then humanoid.WalkSpeed = 0 end
-    end
-
-    if not firstHead or #targets == 0 then return false end
-    return pcall(function()
-        registerAttack:FireServer(1e-9)
-        registerHit:FireServer(firstHead, targets)
-    end)
-end
-
 local function BMFastAttack(target, eventModel, eventKey)
     if not target then return false end
 
@@ -3071,20 +3034,25 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
                 if eventKey == "Terrorshark" then
                     -- Método literal do Banana + skills configuradas.
-                    BananaSeaCreatureAttack(eventModel)
+                    local banana = getgenv().IKARO_BANANA_COMBAT
+                    if banana then banana.SeaCreatureAttack(eventModel, Character, HRP) end
                     if not EscapeActive then
                         UseConfiguredSeaSkills(target)
                     end
                 elseif useBasicClick then
                     -- Mesmo AttackNoCoolDown do Banana para Shark/Piranha:
                     -- Head, raio 60 e pacote moderno sem atraso de equip.
-                    BananaSeaCreatureAttack(eventModel)
+                    local banana = getgenv().IKARO_BANANA_COMBAT
+                    if banana then
+                        banana.SeaCreatureAttack(eventModel, Character, HRP)
+                    else
+                        BMFastAttack(target, eventModel, eventKey)
+                    end
                 elseif isShipEvent then
                     -- Ships no Banana não recebem RegisterHit: mira o Engine
                     -- e usa somente skills, sem criar outra função no chunk.
-                    local engine = eventModel:FindFirstChild("Engine", true)
-                        or eventModel:FindFirstChild("VehicleSeat", true)
-                        or target
+                    local banana = getgenv().IKARO_BANANA_COMBAT
+                    local engine = banana and banana.GetShipAim(eventModel, target) or target
                     if engine and engine:IsA("BasePart") then
                         AimAtSeaTarget(engine)
                         UseConfiguredSeaSkills(engine)
@@ -5070,4 +5038,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v5.0 FIXED carregado.")
+print("IKARO Leviathan v5.1 MODULAR carregado.")
