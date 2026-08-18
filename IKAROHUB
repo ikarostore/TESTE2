@@ -114,17 +114,21 @@ local function detectCurrentSea()
 	local player = game:GetService("Players").LocalPlayer
 	local data = player and player:FindFirstChild("Data")
 	local levelValue = data and data:FindFirstChild("Level")
-	local level = levelValue and levelValue.Value or 0
-	if level >= 1500 then
-		return 3, "Level"
-	elseif level >= 700 then
-		return 2, "Level"
+	if levelValue then
+		local level = levelValue.Value
+		if level >= 1500 then
+			return 3, "Level"
+		elseif level >= 700 then
+			return 2, "Level"
+		end
+		return 1, "Level"
 	end
-	return 1, "Fallback"
+	return nil, "Loading"
 end
 
 local CurrentSea, SeaDetectionSource = detectCurrentSea()
-local SeaNames = {[1] = "First Sea", [2] = "Second Sea", [3] = "Third Sea"}
+local SeaNames = {[0] = "Detectando...", [1] = "First Sea", [2] = "Second Sea", [3] = "Third Sea"}
+CurrentSea = CurrentSea or 0
 
 -- Shop: portado do codigo-fonte do Banana Hub.
 do
@@ -133,10 +137,26 @@ do
 	local TweenService = game:GetService("TweenService")
 	local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 	local Shop = Tabs.Shop
-	Shop:AddParagraph({
+	local SeaStatus = Shop:AddParagraph({
 		Title = "Sea atual",
 		Content = SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. ")"
 	})
+	task.spawn(function()
+		while task.wait(1) do
+			local detectedSea, source = detectCurrentSea()
+			if detectedSea then
+				CurrentSea = detectedSea
+				SeaDetectionSource = source
+			end
+			if getgenv().IKAROHUB then
+				getgenv().IKAROHUB.Sea = CurrentSea
+				getgenv().IKAROHUB.SeaDetectionSource = SeaDetectionSource
+			end
+			pcall(function()
+				SeaStatus:SetDesc(SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. ") | PlaceId: " .. tostring(game.PlaceId))
+			end)
+		end
+	end)
 
 	local function notify(title, content)
 		Fluent:Notify({
