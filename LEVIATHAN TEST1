@@ -98,7 +98,9 @@ local SeaConfig = {
     ReturnHealthPercent = 90,
     TargetSeaLevel = "6",
     BoatSpeed = 330,
-    AutoDodgeEnabled = true
+    AutoDodgeEnabled = true,
+    HeartDestination = "Tiki",
+    AutoDracoTorch = true
 }
 
 local SeaNPCPositions = {
@@ -147,7 +149,9 @@ local SeaHuntState = {
     FrozenReached = false,
     FrozenActivating = false,
     FrozenActivated = false,
-    NextFrozenInteraction = 0
+    NextFrozenInteraction = 0,
+    TorchRunning = false,
+    TorchesActivated = 0
 }
 
 local BoatFlightConfig = {
@@ -208,6 +212,9 @@ local SEA6_MAPPED_DIRECTION = Vector3.new(
 )
 
 local SEA6_MAPPED_DISTANCE = 28510.4921875
+
+-- Ponto de chegada usado pelo fluxo Auto Drive To Hydra dos dumps.
+SeaHuntState.HydraHeartDestination = Vector3.new(5433, 35, 290)
 
 
 
@@ -414,7 +421,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.3 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.4 FIXED EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -1040,6 +1047,26 @@ local function VisitSpyAndReturn()
     SpyState.Visiting = true
     SpyState.LastVisit = now
 
+    -- Todos os hubs de referência pagam o Spy diretamente com a ação "2".
+    -- Se o servidor responder, não teleporta a conta para Tiki nem pausa o
+    -- barco; o monitor repetirá no próximo cooldown até o status chegar a 5.
+    local remoteAccepted, paymentResult = pcall(function()
+        local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
+        local comm = remotes and remotes:WaitForChild("CommF_", 5)
+        return comm and comm:InvokeServer("InfoLeviathan", "2")
+    end)
+    if remoteAccepted and paymentResult ~= nil then
+        SpyState.LastCheck = 0
+        task.wait(0.25)
+        RefreshSpyStatusFromGui()
+        SpyState.Visiting = false
+        SetState(
+            SpyState.Ready and "SPY_READY" or "SPY_REMOTE_PAID",
+            SpyState.Ready and SpyState.LastText or tostring(paymentResult)
+        )
+        return SpyState.Ready
+    end
+
     local boatSeat = GetBeastHunterMainSeat()
 
     SetState("GOING_TO_SPY", "Pausando o barco e indo verificar/pagar o Spy.")
@@ -1325,6 +1352,27 @@ ToggleRow(HuntPage, "Auto Pay / Check Spy", SpyState.AutoPay, function(v)
     SpyState.AutoPay = v
     SaveConfig()
     SetState(v and "AUTO_SPY_ON" or "AUTO_SPY_OFF", v and "Spy será verificado automaticamente." or "Spy automático desativado.")
+end)
+
+SeaHuntState.HeartDestinationRow = SimpleButton(
+    HuntPage,
+    "Heart Destination: " .. tostring(SeaConfig.HeartDestination),
+    function()
+        SeaConfig.HeartDestination = SeaConfig.HeartDestination == "Hydra" and "Tiki" or "Hydra"
+        local button = SeaHuntState.HeartDestinationRow
+            and SeaHuntState.HeartDestinationRow:FindFirstChildWhichIsA("TextButton")
+        if button then
+            button.Text = "  Heart Destination: " .. SeaConfig.HeartDestination
+        end
+        SaveConfig()
+        SetState("HEART_DESTINATION", "Destino do coração: " .. SeaConfig.HeartDestination)
+    end
+)
+
+ToggleRow(HuntPage, "Auto Torch Draco", SeaConfig.AutoDracoTorch, function(v)
+    SeaConfig.AutoDracoTorch = v
+    SaveConfig()
+    SetState(v and "AUTO_TORCH_ON" or "AUTO_TORCH_OFF", v and "Tochas do LeviathanGate serão ativadas em Hydra." or "Auto Torch desativado.")
 end)
 
 SimpleButton(HuntPage, "Check Status Spy", function()
@@ -3663,6 +3711,109 @@ local function TryActivateFrozenDimension(frozen)
     end)
 end
 
+SeaHuntState.EquipTorchTool = function()
+    if not Character or not Humanoid then return nil end
+    for _, container in ipairs({Character, LocalPlayer:FindFirstChild("Backpack")}) do
+        if container then
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local lower = string.lower(tool.Name)
+                    if string.find(lower, "torch", 1, true)
+                    or string.find(lower, "lantern", 1, true) then
+                        if tool.Parent ~= Character then
+                            pcall(function() Humanoid:EquipTool(tool) end)
+                            task.wait(0.15)
+                        end
+                        return tool
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- O kaitun protegido chama isto de AutoTorch. Como o código dele não está no
+-- dump, usamos os objetos reais do LeviathanGate e limitamos a três pontos.
+SeaHuntState.TryAutoDracoTorches = function()
+    if not SeaConfig.AutoDracoTorch or SeaHuntState.TorchRunning then return end
+    local map = workspace:FindFirstChild("Map")
+    local gate = map and map:FindFirstChild("LeviathanGate", true)
+    if not gate then
+        SetState("DRACO_TORCH_WAIT", "LeviathanGate ainda não apareceu em Hydra.")
+        return
+    end
+
+    SeaHuntState.TorchRunning = true
+    task.spawn(function()
+        StopBoatDrive(false)
+        ForceExitBoatForCombat()
+        SeaHuntState.EquipTorchTool()
+
+        local interactions = {}
+        local seen = {}
+        for _, obj in ipairs(gate:GetDescendants()) do
+            local lower = string.lower(obj.Name)
+            local isInteraction = obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector")
+            local namedTorch = string.find(lower, "torch", 1, true)
+                or string.find(lower, "lantern", 1, true)
+                or string.find(string.lower(obj.Parent and obj.Parent.Name or ""), "torch", 1, true)
+                or string.find(string.lower(obj.Parent and obj.Parent.Name or ""), "lantern", 1, true)
+            if isInteraction and namedTorch and not seen[obj] then
+                seen[obj] = true
+                table.insert(interactions, obj)
+            end
+        end
+
+        -- Alguns servidores deixam os prompts com nomes genéricos.
+        if #interactions < 3 then
+            for _, obj in ipairs(gate:GetDescendants()) do
+                if (obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector"))
+                and not seen[obj] then
+                    seen[obj] = true
+                    table.insert(interactions, obj)
+                end
+            end
+        end
+
+        SeaHuntState.TorchesActivated = 0
+        for index = 1, math.min(3, #interactions) do
+            if not Running or not SeaConfig.AutoDracoTorch then break end
+            local interaction = interactions[index]
+            local part = interaction.Parent
+            if part and not part:IsA("BasePart") then
+                part = part:FindFirstChildWhichIsA("BasePart", true)
+            end
+            if part and part:IsA("BasePart") then
+                SeaHuntState.EquipTorchTool()
+                FlyToPart(part, 7, true)
+                task.wait(0.2)
+                local ok = false
+                if interaction:IsA("ProximityPrompt") and type(fireproximityprompt) == "function" then
+                    ok = pcall(function() fireproximityprompt(interaction) end)
+                elseif interaction:IsA("ClickDetector") and type(fireclickdetector) == "function" then
+                    ok = pcall(function() fireclickdetector(interaction) end)
+                end
+                if ok then
+                    SeaHuntState.TorchesActivated = SeaHuntState.TorchesActivated + 1
+                end
+                task.wait(1)
+            end
+        end
+
+        local opened = pcall(function()
+            local remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
+            local comm = remotes and remotes:WaitForChild("CommF_", 5)
+            if comm then comm:InvokeServer("OpenLeviathanGate") end
+        end)
+        SeaHuntState.TorchRunning = false
+        SetState(
+            opened and "DRACO_TORCH_COMPLETE" or "DRACO_TORCH_ERROR",
+            "Tochas acionadas: " .. tostring(SeaHuntState.TorchesActivated) .. "/3"
+        )
+    end)
+end
+
 local function DestroyBoatFlightPhysics()
     if BoatLinearVelocity then
         pcall(function() BoatLinearVelocity:Destroy() end)
@@ -3869,8 +4020,11 @@ local function StartBoatDrive(forceStart)
             local navigatingFrozen = frozenPosition
                 and not SeaHuntState.FrozenActivated
                 and not SeaHuntState.ReturningHeart
+            local heartDestination = SeaConfig.HeartDestination == "Hydra"
+                and SeaHuntState.HydraHeartDestination
+                or SEA6_MAPPED_TIKI
             local targetPos = SeaHuntState.ReturningHeart
-                and Vector3.new(SEA6_MAPPED_TIKI.X, BoatFlightConfig.HeightY, SEA6_MAPPED_TIKI.Z)
+                and Vector3.new(heartDestination.X, BoatFlightConfig.HeightY, heartDestination.Z)
                 or navigatingFrozen
                     and Vector3.new(frozenPosition.X, BoatFlightConfig.HeightY, frozenPosition.Z)
                 or GetSea6VirtualTarget()
@@ -3898,7 +4052,11 @@ local function StartBoatDrive(forceStart)
                 if flatDelta.Magnitude <= 350 then
                     SeaHuntState.HeartDelivered = true
                     SeaHuntState.ReturningHeart = false
-                    SetState("HEART_AT_TIKI", "Coracao levado ate a area segura de Tiki.")
+                    local destinationName = SeaConfig.HeartDestination == "Hydra" and "Hydra" or "Tiki"
+                    SetState("HEART_AT_" .. string.upper(destinationName), "Coração levado até " .. destinationName .. ".")
+                    if destinationName == "Hydra" and SeaConfig.AutoDracoTorch then
+                        task.defer(SeaHuntState.TryAutoDracoTorches)
+                    end
                     break
                 end
                 seaDirection = flatDelta.Unit
@@ -4049,7 +4207,7 @@ local function StartHunt()
                         if not SeaHuntState.ReturningHeart and not SeaHuntState.HeartDelivered then
                             SeaHuntState.ReturningHeart = true
                             SeaHuntState.AtSea6 = false
-                            SetState("HEART_CAPTURED", "Coracao acompanhando o Beast Hunter. Retornando a Tiki.")
+                            SetState("HEART_CAPTURED", "Coração acompanhando o Beast Hunter. Retornando a " .. tostring(SeaConfig.HeartDestination) .. ".")
                             task.spawn(function()
                                 local okSeat = GoToBeastHunterSeat()
                                 if okSeat and Running then StartBoatDrive() end
@@ -4675,5 +4833,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.3 carregado.")
+print("IKARO Leviathan v4.4 FIXED carregado.")
 
