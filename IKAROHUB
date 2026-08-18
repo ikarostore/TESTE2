@@ -1,0 +1,85 @@
+-- IKAROHUB
+-- Etapa 1: interface original do Banana Hub, sem automacoes.
+
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
+local Fluent = loadstring(game:HttpGet(
+	"https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+))()
+
+local Window = Fluent:CreateWindow({
+	Title = "IKAROHUB",
+	SubTitle = "By Obii",
+	TabWidth = 160,
+	Theme = "Dark",
+	Acrylic = false,
+	Size = UDim2.fromOffset(500, 320),
+	MinimizeKey = Enum.KeyCode.End
+})
+
+local Tabs = {
+	Home = Window:AddTab({
+		Title = "Tab Information"
+	}),
+	Main = Window:AddTab({
+		Title = "Tab Farming"
+	}),
+	Sea = Window:AddTab({
+		Title = "Tab Volcano And Sea Event"
+	}),
+	Items = Window:AddTab({
+		Title = "Tab Farming Other"
+	}),
+	Setting = Window:AddTab({
+		Title = "Setting Farm"
+	}),
+	Status = Window:AddTab({
+		Title = "Tab Status And Server"
+	}),
+	Stats = Window:AddTab({
+		Title = "Tab Stats"
+	}),
+	Player = Window:AddTab({
+		Title = "Tab Local Player"
+	}),
+	Teleport = Window:AddTab({
+		Title = "Tab Teleport"
+	}),
+	Visual = Window:AddTab({
+		Title = "Tab Visual"
+	}),
+	Fruit = Window:AddTab({
+		Title = "Tab Esp And Fruit"
+	}),
+	Raid = Window:AddTab({
+		Title = "Tab Raid"
+	}),
+	Race = Window:AddTab({
+		Title = "Tab Upgrade Race"
+	}),
+	Shop = Window:AddTab({
+		Title = "Tab Shop"
+	}),
+	Misc = Window:AddTab({
+		Title = "Tab Misc"
+	})
+}
+
+local Options = Fluent.Options
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+	Title = "IKAROHUB",
+	Content = "Interface carregada.",
+	Duration = 5
+})
+
+getgenv().IKAROHUB = {
+	Library = Fluent,
+	Window = Window,
+	Tabs = Tabs,
+	Options = Options
+}
