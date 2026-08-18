@@ -712,6 +712,23 @@ do
 		Content = "Procurando a ilha..."
 	})
 
+	VolcanoTab:AddSection("Fully Volcano")
+	VolcanoTab:AddToggle("VolcanoFullyIgnoreMagnet", {
+		Title = "Ignore Craft Volcanic Magnet [ Fully ]",
+		Description = "Nao tenta fabricar o Volcanic Magnet no modo Fully",
+		Default = false
+	})
+	VolcanoTab:AddToggle("VolcanoFullyIgnoreBone", {
+		Title = "Ignore Collect Bone [ Fully ]",
+		Description = "Nao coleta Dinosaur Bones no modo Fully",
+		Default = false
+	})
+	VolcanoTab:AddToggle("VolcanoFullyEvent", {
+		Title = "Fully Event Prehistoric Island",
+		Description = "Executa automaticamente todas as etapas disponiveis",
+		Default = false
+	})
+
 	task.spawn(function()
 		while task.wait(1) do
 			local island = getIsland()
@@ -901,6 +918,78 @@ do
 			if not value then stopVolcanoMovement() end
 		end)
 	end
+
+	local lastMagnetCraft = 0
+	local fullyIslandReached = false
+	local function craftVolcanicMagnet()
+		local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+		local comm = remotes and remotes:FindFirstChild("CommF_")
+		if not comm then return false end
+		local ok = pcall(function()
+			comm:InvokeServer("CraftItem", "Craft", "Volcanic Magnet")
+		end)
+		return ok
+	end
+	local function hasLivingGolem()
+		local enemies = workspace:FindFirstChild("Enemies")
+		if not enemies then return false end
+		for _, enemy in ipairs(enemies:GetChildren()) do
+			local humanoid = enemy:FindFirstChildOfClass("Humanoid")
+			if humanoid and humanoid.Health > 0 and string.find(string.lower(enemy.Name), "golem", 1, true) then
+				return true
+			end
+		end
+		return false
+	end
+
+	Options.VolcanoFullyEvent:OnChanged(function(value)
+		if value then
+			fullyIslandReached = false
+			notifyVolcano("Modo Fully iniciado.")
+		else
+			fullyIslandReached = false
+			Options.VolcanoFlyIsland:SetValue(false)
+			Options.VolcanoFlyTrialDoor:SetValue(false)
+			Options.VolcanoDefend:SetValue(false)
+			Options.VolcanoAttackGolems:SetValue(false)
+			Options.VolcanoCollectBone:SetValue(false)
+			Options.VolcanoCollectEgg:SetValue(false)
+			stopVolcanoMovement()
+		end
+	end)
+
+	task.spawn(function()
+		while task.wait(0.75) do
+			if Options.VolcanoFullyEvent.Value then
+				local island = getIsland()
+				if not island then
+					fullyIslandReached = false
+					if not Options.VolcanoFullyIgnoreMagnet.Value and os.clock() - lastMagnetCraft >= 20 then
+						lastMagnetCraft = os.clock()
+						craftVolcanicMagnet()
+						notifyVolcano("Volcanic Magnet: pedido de craft enviado. Aguardando Prehistoric Island.")
+					end
+				else
+					if not fullyIslandReached then
+						local skull = island:FindFirstChild("Skull", true)
+						if skull and skull:IsA("BasePart") then
+							fullyIslandReached = moveTo(skull.CFrame)
+						end
+					end
+					if fullyIslandReached then
+						local redRock = findRedRock(island)
+						local golemActive = not redRock and hasLivingGolem()
+						local bone = not redRock and not golemActive and island:FindFirstChild("DinoBone", true)
+						local shouldCollectBone = bone ~= nil and not Options.VolcanoFullyIgnoreBone.Value
+						Options.VolcanoDefend:SetValue(redRock ~= nil)
+						Options.VolcanoAttackGolems:SetValue(golemActive)
+						Options.VolcanoCollectBone:SetValue(shouldCollectBone)
+						Options.VolcanoCollectEgg:SetValue(not redRock and not golemActive and not shouldCollectBone)
+					end
+				end
+			end
+		end
+	end)
 end
 
 Window:SelectTab(1)
