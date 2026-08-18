@@ -82,48 +82,11 @@ local function detectCurrentSea()
 	local seaByPlaceId = {
 		[2753915549] = 1,
 		[4442272183] = 2,
-		[7449423635] = 3
+		[7449423635] = 3,
+		-- ID observado no seu servidor atual; mantido como alias do Third Sea.
+		[100117331123089] = 3
 	}
-	if seaByPlaceId[game.PlaceId] then
-		return seaByPlaceId[game.PlaceId], "PlaceId"
-	end
-
-	local map = workspace:FindFirstChild("Map")
-	if map then
-		local thirdSeaLandmarks = {
-			"TikiOutpost", "HydraIsland", "HauntedCastle", "GreatTree",
-			"CastleontheSea", "Castle on the Sea", "Turtle", "PortTown"
-		}
-		for _, landmark in ipairs(thirdSeaLandmarks) do
-			if map:FindFirstChild(landmark, true) then
-				return 3, "Map"
-			end
-		end
-
-		local secondSeaLandmarks = {
-			"Cafe", "KingdomofRose", "Kingdom of Rose", "IceCastle",
-			"ForgottenIsland", "HotAndCold"
-		}
-		for _, landmark in ipairs(secondSeaLandmarks) do
-			if map:FindFirstChild(landmark, true) then
-				return 2, "Map"
-			end
-		end
-	end
-
-	local player = game:GetService("Players").LocalPlayer
-	local data = player and player:FindFirstChild("Data")
-	local levelValue = data and data:FindFirstChild("Level")
-	if levelValue then
-		local level = levelValue.Value
-		if level >= 1500 then
-			return 3, "Level"
-		elseif level >= 700 then
-			return 2, "Level"
-		end
-		return 1, "Level"
-	end
-	return nil, "Loading"
+	return seaByPlaceId[game.PlaceId], "PlaceId"
 end
 
 local CurrentSea, SeaDetectionSource = detectCurrentSea()
@@ -471,6 +434,101 @@ do
 						end
 					end
 					break
+				end
+			end
+		end
+	end)
+
+	Shop:AddSection("NPC Teleport")
+	local npcPositionsBySea = {
+		[1] = {
+			["Random Devil Fruit"] = CFrame.new(-1436.19727, 61.8777695, 4.75247526),
+			["Blox Fruits Dealer"] = CFrame.new(-923.255066, 7.67800522, 1608.61011),
+			["Remove Devil Fruit"] = CFrame.new(5664.80469, 64.677681, 867.85907),
+			["Ability Teacher"] = CFrame.new(-1057.67822, 9.65220833, 1799.49146),
+			["Dark Step"] = CFrame.new(-987.873047, 13.7778397, 3989.4978),
+			["Electro"] = CFrame.new(-5389.49561, 13.283, -2149.80151),
+			["Fishman Karate"] = CFrame.new(61581.8047, 18.8965912, 987.832703)
+		},
+		[2] = {
+			["Dragon Breath"] = CFrame.new(703.372986, 186.985519, 654.522034),
+			["Mysterious Man"] = CFrame.new(-2574.43335, 1627.92371, -3739.35767),
+			["Mysterious Scientist"] = CFrame.new(-6437.87793, 250.645355, -4498.92773),
+			["Awakening Expert"] = CFrame.new(-408.098846, 16.0459061, 247.432846),
+			["Nerd"] = CFrame.new(-401.783722, 73.0859299, 262.306702),
+			["Bar Manager"] = CFrame.new(-385.84726, 73.0458984, 316.088806),
+			["Blox Fruits Dealer"] = CFrame.new(-450.725464, 73.0458984, 355.636902),
+			["Trevor"] = CFrame.new(-341.498322, 331.886444, 643.024963),
+			["Plokster"] = CFrame.new(-1885.16016, 88.3838196, -1912.28723),
+			["Enhancement Editor"] = CFrame.new(-346.820221, 72.9856339, 1194.36218),
+			["Pirate Recruiter"] = CFrame.new(-428.072998, 72.9495239, 1445.32422),
+			["Marines Recruiter"] = CFrame.new(-1349.77295, 72.9853363, -1045.12964),
+			["Chemist"] = CFrame.new(-2777.45288, 72.9919434, -3572.25732),
+			["Ghoul Mark"] = CFrame.new(635.172546, 125.976357, 33219.832),
+			["Cyborg"] = CFrame.new(629.146851, 312.307373, -531.624146),
+			["Guashiem"] = CFrame.new(937.953003, 181.083359, 33277.9297),
+			["El Admin"] = CFrame.new(1322.80835, 126.345039, 33135.8789),
+			["El Rodolfo"] = CFrame.new(941.228699, 40.4686775, 32778.9922),
+			["Arowe"] = CFrame.new(-1994.51038, 125.519142, -72.2622986)
+		},
+		[3] = {
+			["Blox Fruits Dealer"] = CFrame.new(-12511, 337, -7448),
+			["Remove Devil Fruit"] = CFrame.new(-5571, 1089, -2661),
+			["Horned Man"] = CFrame.new(-11890, 931, -8760),
+			["Hungry Man"] = CFrame.new(-10919, 624, -10268),
+			["Previous Hero"] = CFrame.new(-10368, 332, -10128),
+			["Butler"] = CFrame.new(-5125, 316, -3130),
+			["Lunoven"] = CFrame.new(-5117, 316, -3093),
+			["Trevor"] = CFrame.new(-5084, 316, -3145),
+			["Elite Hunter"] = CFrame.new(-5420, 314, -2828),
+			["Player Hunter"] = CFrame.new(-5559, 314, -2840),
+			["Uzoth"] = CFrame.new(-9785, 852, 6667),
+			["Ancient Monk"] = CFrame.new(-5500, 313, -2800)
+		}
+	}
+	local currentNpcPositions = npcPositionsBySea[CurrentSea] or {}
+	local npcNames = {}
+	for name in pairs(currentNpcPositions) do
+		table.insert(npcNames, name)
+	end
+	table.sort(npcNames)
+	if #npcNames == 0 then
+		table.insert(npcNames, "Sea nao reconhecido")
+	end
+	local selectedNpc = npcNames[1]
+	local npcDropdown = Shop:AddDropdown("SelectedShopNPC", {
+		Title = "Select NPC",
+		Values = npcNames,
+		Multi = false,
+		Default = 1
+	})
+	npcDropdown:OnChanged(function(value)
+		selectedNpc = value
+	end)
+	local npcTeleportToggle = Shop:AddToggle("TeleportShopNPC", {
+		Title = "Auto Teleporter NPC",
+		Description = "Usa a coordenada fixa do NPC no Sea atual",
+		Default = false
+	})
+	npcTeleportToggle:OnChanged(function(value)
+		if not value then stopShopMovement() end
+	end)
+	task.spawn(function()
+		while task.wait(0.25) do
+			if Options.TeleportShopNPC.Value then
+				local destination = currentNpcPositions[selectedNpc]
+				if not destination then
+					Options.TeleportShopNPC:SetValue(false)
+					notify("NPC Teleport", "Sea nao reconhecido pelo game.PlaceId: " .. tostring(game.PlaceId))
+				else
+					local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+					local root = character:WaitForChild("HumanoidRootPart")
+					if (root.Position - destination.Position).Magnitude > 8 then
+						pcall(tweenTo, destination)
+					else
+						Options.TeleportShopNPC:SetValue(false)
+						notify("NPC Teleport", "Chegou em " .. selectedNpc)
+					end
 				end
 			end
 		end
