@@ -78,6 +78,177 @@ local Tabs = {
 
 local Options = Fluent.Options
 
+-- Shop: portado do codigo-fonte do Banana Hub.
+do
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local Players = game:GetService("Players")
+	local TweenService = game:GetService("TweenService")
+	local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+	local Shop = Tabs.Shop
+
+	local function notify(title, content)
+		Fluent:Notify({
+			Title = title,
+			Content = tostring(content or ""),
+			Duration = 5
+		})
+	end
+
+	local function invoke(...)
+		local ok, result = pcall(function(...)
+			return CommF:InvokeServer(...)
+		end, ...)
+		if not ok then
+			notify("Shop - erro", result)
+		end
+		return ok, result
+	end
+
+	local function addButton(title, callback)
+		Shop:AddButton({
+			Title = title,
+			Description = "",
+			Callback = function()
+				local ok, err = pcall(callback)
+				if not ok then
+					notify(title .. " - erro", err)
+				end
+			end
+		})
+	end
+
+	local function tweenTo(targetCFrame)
+		local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		local root = character:WaitForChild("HumanoidRootPart")
+		local distance = (targetCFrame.Position - root.Position).Magnitude
+		local tween = TweenService:Create(
+			root,
+			TweenInfo.new(distance / 350, Enum.EasingStyle.Linear),
+			{CFrame = targetCFrame}
+		)
+		tween:Play()
+		tween.Completed:Wait()
+	end
+
+	Shop:AddSection("Haki")
+	addButton("Geppo", function()
+		invoke("BuyHaki", "Geppo")
+	end)
+	addButton("Buso", function()
+		invoke("BuyHaki", "Buso")
+	end)
+	addButton("Soru", function()
+		invoke("BuyHaki", "Soru")
+	end)
+	addButton("Ken", function()
+		invoke("KenTalk", "Buy")
+	end)
+
+	Shop:AddSection("Kiếm")
+	local swords = {
+		"Cutlass",
+		"Katana",
+		"Iron Mace",
+		"Duel Katana",
+		"Triple Katana",
+		"Pipe",
+		"Dual-Headed Blade",
+		"Bisento",
+		"Soul Cane"
+	}
+	for _, sword in ipairs(swords) do
+		addButton(sword, function()
+			invoke("BuyItem", sword)
+		end)
+	end
+	addButton("Pole V2", function()
+		invoke("ThunderGodTalk")
+	end)
+
+	Shop:AddSection("Võ")
+	addButton("Black Leg", function()
+		invoke("BuyBlackLeg")
+	end)
+	addButton("Electro", function()
+		invoke("BuyElectro")
+	end)
+	addButton("Fishman Karate", function()
+		invoke("BuyFishmanKarate")
+	end)
+	addButton("Dragon Claw", function()
+		invoke("BlackbeardReward", "DragonClaw", "1")
+		invoke("BlackbeardReward", "DragonClaw", "2")
+	end)
+	addButton("Superhuman", function()
+		invoke("BuySuperhuman")
+	end)
+	addButton("Death Step", function()
+		invoke("BuyDeathStep")
+	end)
+	addButton("Sharkman Karate", function()
+		invoke("BuySharkmanKarate", true)
+		invoke("BuySharkmanKarate")
+	end)
+	addButton("Electric Claw", function()
+		invoke("BuyElectricClaw")
+	end)
+	addButton("Dragon Talon", function()
+		invoke("BuyDragonTalon")
+	end)
+	addButton("Godhuman", function()
+		invoke("BuyGodhuman")
+	end)
+	addButton("Sanguine Art", function()
+		invoke("BuySanguineArt")
+	end)
+
+	Shop:AddSection("Other")
+	addButton("Reset Stats", function()
+		invoke("BlackbeardReward", "Refund", "1")
+		invoke("BlackbeardReward", "Refund", "2")
+	end)
+	addButton("Random Race", function()
+		invoke("BlackbeardReward", "Reroll", "1")
+		invoke("BlackbeardReward", "Reroll", "2")
+	end)
+	addButton("Change To Ghoul Race", function()
+		invoke("Ectoplasm", "Change", 4)
+	end)
+	addButton("Change To Cyborg Race", function()
+		invoke("CyborgTrainer", "Buy")
+	end)
+	addButton("Change to Draco", function()
+		invoke("requestEntrance", Vector3.new(5661.5322265625, 1013.0907592773438, -334.9649963378906))
+		local dojo = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938)
+		tweenTo(dojo)
+
+		local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		local root = character:WaitForChild("HumanoidRootPart")
+		local deadline = os.clock() + 10
+		while (root.Position - dojo.Position).Magnitude >= 3 and os.clock() < deadline do
+			task.wait(0.1)
+		end
+
+		if (root.Position - dojo.Position).Magnitude >= 3 then
+			notify("Change to Draco", "Nao foi possivel chegar ao Dragon Wizard.")
+			return
+		end
+
+		local dragonRemote = ReplicatedStorage
+			:WaitForChild("Modules")
+			:WaitForChild("Net")
+			:FindFirstChild("RF/InteractDragonQuest")
+		if not dragonRemote then
+			notify("Change to Draco", "Remote InteractDragonQuest nao encontrado.")
+			return
+		end
+		dragonRemote:InvokeServer({
+			NPC = "Dragon Wizard",
+			Command = "DragonRace"
+		})
+	end)
+end
+
 Window:SelectTab(1)
 
 Fluent:Notify({
