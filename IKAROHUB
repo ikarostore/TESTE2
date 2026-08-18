@@ -129,6 +129,9 @@ end
 local CurrentSea, SeaDetectionSource = detectCurrentSea()
 local SeaNames = {[0] = "Detectando...", [1] = "First Sea", [2] = "Second Sea", [3] = "Third Sea"}
 CurrentSea = CurrentSea or 0
+Sea1 = CurrentSea == 1
+Sea2 = CurrentSea == 2
+Sea3 = CurrentSea == 3
 
 -- Shop: portado do codigo-fonte do Banana Hub.
 do
@@ -147,6 +150,9 @@ do
 			if detectedSea then
 				CurrentSea = detectedSea
 				SeaDetectionSource = source
+				Sea1 = CurrentSea == 1
+				Sea2 = CurrentSea == 2
+				Sea3 = CurrentSea == 3
 			end
 			if getgenv().IKAROHUB then
 				getgenv().IKAROHUB.Sea = CurrentSea
@@ -295,7 +301,8 @@ do
 		},
 		{
 			id = "FightingGodhuman", title = "Godhuman", tool = "Godhuman", sea = "Third Sea",
-			npcs = {"Ancient Monk"},
+			npcs = {"Ancient Monk", "Godhuman Teacher"},
+			fallbackCFrame = CFrame.new(-5500, 313, -2800),
 			buy = function() return invoke("BuyGodhuman") end
 		},
 		{
@@ -367,6 +374,16 @@ do
 					else
 						local trainer = findTrainer(style)
 						local trainerRoot = findRoot(trainer)
+						if not trainerRoot and style.fallbackCFrame then
+							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+							local root = character:WaitForChild("HumanoidRootPart")
+							if (root.Position - style.fallbackCFrame.Position).Magnitude > 450 then
+								pcall(tweenTo, style.fallbackCFrame)
+								task.wait(1.5)
+								trainer = findTrainer(style)
+								trainerRoot = findRoot(trainer)
+							end
+						end
 						if not trainerRoot then
 							local now = os.clock()
 							if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
