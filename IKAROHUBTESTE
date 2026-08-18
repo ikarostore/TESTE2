@@ -4363,11 +4363,17 @@ MainTab:Toggle("Auto Farm Gun Mastery", _G.Settings.Main["Auto Farm Gun Mastery"
 end);
 MainTab:Line();
 local SwordList = {};
-local Inventory = (game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("getInventory");
-for i, v in pairs(Inventory) do
-	if v.Type == "Sword" then
-		table.insert(SwordList, v.Name);
+local InventorySuccess, Inventory = pcall(function()
+	return (game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("getInventory");
+end);
+if InventorySuccess and type(Inventory) == "table" then
+	for _, v in pairs(Inventory) do
+		if type(v) == "table" and v.Type == "Sword" and v.Name then
+			table.insert(SwordList, v.Name);
+		end;
 	end;
+else
+	warn("IKAROHUB: inventário ainda indisponível; continuando a carregar as abas.");
 end;
 MainTab:Dropdown("Choose Sword", SwordList, _G.Settings.Main["Selected Mastery Sword"], function(value)
 	_G.Settings.Main["Selected Mastery Sword"] = value;
@@ -6289,10 +6295,10 @@ local env = (getgenv or getrenv or getfenv)();
 local rs = game:GetService("ReplicatedStorage");
 local players = game:GetService("Players");
 local client = players.LocalPlayer;
-local modules = rs:WaitForChild("Modules");
-local net = modules:WaitForChild("Net");
-local charFolder = workspace:WaitForChild("Characters");
-local enemyFolder = workspace:WaitForChild("Enemies");
+local modules = rs:FindFirstChild("Modules");
+local net = modules and modules:FindFirstChild("Net");
+local charFolder = workspace:FindFirstChild("Characters");
+local enemyFolder = workspace:FindFirstChild("Enemies");
 local playerFolder = game:GetService("Players");
 function getAllBladeHits(Sizes)
 	local Hits = {};
@@ -6316,10 +6322,10 @@ function getAllBladeHits(Sizes)
 	return Hits;
 end;
 local AttackModule = {};
-local RegisterAttack = net:WaitForChild("RE/RegisterAttack");
-local RegisterHit = net:WaitForChild("RE/RegisterHit");
+local RegisterAttack = net and net:FindFirstChild("RE/RegisterAttack");
+local RegisterHit = net and net:FindFirstChild("RE/RegisterHit");
 function AttackModule:AttackEnemy(EnemyHead, Table)
-	if EnemyHead then
+	if EnemyHead and RegisterAttack and RegisterHit then
 		RegisterAttack:FireServer(0);
 		RegisterAttack:FireServer(1);
 		RegisterAttack:FireServer(2);
@@ -6328,6 +6334,9 @@ function AttackModule:AttackEnemy(EnemyHead, Table)
 	end;
 end;
 function AttackModule:AttackNearest()
+	if not enemyFolder then
+		return;
+	end;
 	local args = {
 		nil,
 		{}
