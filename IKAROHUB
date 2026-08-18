@@ -1954,18 +1954,18 @@ _G.Settings = {
 		["Auto Craft Mythical Scroll"] = false
 	},
 	Race = {
-		["Auto Race V2"] = false,
-		["Auto Race V3"] = false,
-		["Auto Activate V4"] = false,
-		["Selected PlaceV4"] = nil,
-		["Teleport To PlaceV4"] = false,
-		["Auto Buy Gear"] = false,
-		["Tween To Highest Mirage"] = false,
-		["Find Blue Gear"] = false,
-		["Look Moon Ability"] = false,
-		["Auto Train"] = false,
-		["Auto Kill Player After Trial"] = false,
-		["Auto Trial"] = false
+		["Banana Auto V4"] = false,
+		["Banana Highest Mirage"] = false,
+		["Banana Blue Gear"] = false,
+		["Banana Farm Race"] = false,
+		["Banana Auto Trial"] = false,
+		["Banana Kill Trial"] = false,
+		["Banana Blaze Ember"] = false,
+		["Banana Dragon Quest"] = false,
+		["Banana Hydra Trees"] = false,
+		["Banana Fire Flowers"] = false,
+		["Banana White Belt"] = false,
+		["Banana Draco Trial"] = false
 	},
 	Combat = {
 		["Auto Kill Player Quest"] = false,
@@ -3898,7 +3898,7 @@ spawn(function()
 	pcall(function()
 		while wait() do
 			if World2 then
-				if _G.Settings.Items["Auto Farm Factory"] or _G.Settings.Items["Auto Swan Glasses"] or _G.Settings.Raid["Law Raid"] or _G.Settings.Race["Auto Race V2"] or _G.Settings.Items["Auto Rengoku"] or _G.Settings.Items["Auto Bartilo Quest"] or _G.Settings.Items["Auto Third Sea"] or _G.Settings.Items["Auto Dragon Trident"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Farm["Auto Farm Magma Ore"] or _G.Settings.Farm["Auto Farm Radioactive"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.SeaStack["Auto Attack Seabeasts"] or _G.Settings.Raid["Auto Dungeon"] then
+				if _G.Settings.Items["Auto Farm Factory"] or _G.Settings.Items["Auto Swan Glasses"] or _G.Settings.Raid["Law Raid"] or false or _G.Settings.Items["Auto Rengoku"] or _G.Settings.Items["Auto Bartilo Quest"] or _G.Settings.Items["Auto Third Sea"] or _G.Settings.Items["Auto Dragon Trident"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Farm["Auto Farm Magma Ore"] or _G.Settings.Farm["Auto Farm Radioactive"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.SeaStack["Auto Attack Seabeasts"] or _G.Settings.Raid["Auto Dungeon"] then
 					if not (game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart:FindFirstChild("BodyClip") then
 						local Noclip = Instance.new("BodyVelocity");
 						Noclip.Name = "BodyClip";
@@ -3915,7 +3915,7 @@ spawn(function()
 	pcall(function()
 		while wait() do
 			if World2 then
-				if _G.Settings.Items["Auto Farm Factory"] or _G.Settings.Items["Auto Swan Glasses"] or _G.Settings.Raid["Law Raid"] or _G.Settings.Race["Auto Race V2"] or _G.Settings.Items["Auto Rengoku"] or _G.Settings.Items["Auto Bartilo Quest"] or _G.Settings.Items["Auto Third Sea"] or _G.Settings.Items["Auto Dragon Trident"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Farm["Auto Farm Magma Ore"] or _G.Settings.Farm["Auto Farm Radioactive"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.SeaStack["Auto Attack Seabeasts"] or _G.Settings.Raid["Auto Dungeon"] then
+				if _G.Settings.Items["Auto Farm Factory"] or _G.Settings.Items["Auto Swan Glasses"] or _G.Settings.Raid["Law Raid"] or false or _G.Settings.Items["Auto Rengoku"] or _G.Settings.Items["Auto Bartilo Quest"] or _G.Settings.Items["Auto Third Sea"] or _G.Settings.Items["Auto Dragon Trident"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Farm["Auto Farm Magma Ore"] or _G.Settings.Farm["Auto Farm Radioactive"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.SeaStack["Auto Attack Seabeasts"] or _G.Settings.Raid["Auto Dungeon"] then
 					for _, v in pairs((game:GetService("Players")).LocalPlayer.Character:GetDescendants()) do
 						if v:IsA("BasePart") then
 							v.CanCollide = false;
@@ -3930,7 +3930,7 @@ spawn(function()
 	pcall(function()
 		while wait() do
 			if World3 then
-				if _G.Settings.Farm["Auto Pirate Raid"] or _G.Settings.Race["Auto Race V3"] or _G.Settings.Farm["Auto Kill Cake Prince"] or _G.Settings.SeaStack["Teleport To Kitsune Island"] or _G.Settings.SeaStack["Teleport To Frozen Dimension"] or _G.Settings.SeaStack["Sail To Frozen Dimension"] or _G.Settings.SeaStack["Summon Frozen Dimension"] or _G.Settings.SeaStack["Summon Kitsune Island"] or _G.Settings.SeaStack["Teleport To Mirage Island"] or _G.Settings.Race["Auto Train"] or _G.Settings.Items["Auto Press Haki Button"] or _G.Settings.SeaEvent["Sail Boat"] or _G.Settings.Items["Auto Arena Trainer"] or _G.Settings.Race["Auto Kill Player After Trial"] or _G.Settings.Race["Tween To Highest Mirage"] or _G.Settings.Race["Auto Trial"] or _G.Settings.Race["Find Blue Gear"] or _G.Settings.Combat["Auto Kill Player Quest"] or _G.Settings.Items["Auto Cursed Dual Katana"] or _G.Settings.Farm["Auto Farm Bone"] or _G.Settings.Farm["Auto Kill Dough King"] or _G.Settings.Items["Auto Soul Guitar"] or _G.Settings.Items["Auto Tushita"] or _G.Settings.Farm["Auto Elite Hunter"] or _G.AutoKillSelectedPlayer or _G.Settings.Items["Auto Rainbow Haki"] or _G.Settings.Items["Auto Dark Dagger"] or _G.Settings.Farm["Auto Farm Ectoplasm"] or _G.Settings.Farm["Auto Observation V2"] or _G.Settings.Farm["Auto Musketeer Hat"] or _G.Settings.Items["Auto Holy Torch"] or _G.Settings.Items["Auto Hallow Scythe"] or _G.Settings.Farm["Auto Farm Katakuri"] or _G.Settings.Farm["Auto Farm Conjured Cocoa"] or _G.Settings.Farm["Auto Farm Fish Tail"] or _G.Settings.Farm["Auto Farm Gunpowder"] or _G.Settings.Farm["Auto Farm Dragon Scale"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.Farm["Auto Farm Mini Tusk"] or _G.Settings.Items["Auto Buddy Sword"] or _G.Settings.Items["Auto Canvander"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Raid["Auto Dungeon"] then
+				if _G.Settings.Farm["Auto Pirate Raid"] or _G.Settings.Race["Banana Auto Trial"] or _G.Settings.Farm["Auto Kill Cake Prince"] or _G.Settings.SeaStack["Teleport To Kitsune Island"] or _G.Settings.SeaStack["Teleport To Frozen Dimension"] or _G.Settings.SeaStack["Sail To Frozen Dimension"] or _G.Settings.SeaStack["Summon Frozen Dimension"] or _G.Settings.SeaStack["Summon Kitsune Island"] or _G.Settings.SeaStack["Teleport To Mirage Island"] or _G.Settings.Race["Banana Farm Race"] or _G.Settings.Items["Auto Press Haki Button"] or _G.Settings.SeaEvent["Sail Boat"] or _G.Settings.Items["Auto Arena Trainer"] or _G.Settings.Race["Banana Kill Trial"] or _G.Settings.Race["Banana Highest Mirage"] or _G.Settings.Race["Banana Auto Trial"] or _G.Settings.Race["Banana Blue Gear"] or _G.Settings.Combat["Auto Kill Player Quest"] or _G.Settings.Items["Auto Cursed Dual Katana"] or _G.Settings.Farm["Auto Farm Bone"] or _G.Settings.Farm["Auto Kill Dough King"] or _G.Settings.Items["Auto Soul Guitar"] or _G.Settings.Items["Auto Tushita"] or _G.Settings.Farm["Auto Elite Hunter"] or _G.AutoKillSelectedPlayer or _G.Settings.Items["Auto Rainbow Haki"] or _G.Settings.Items["Auto Dark Dagger"] or _G.Settings.Farm["Auto Farm Ectoplasm"] or _G.Settings.Farm["Auto Observation V2"] or _G.Settings.Farm["Auto Musketeer Hat"] or _G.Settings.Items["Auto Holy Torch"] or _G.Settings.Items["Auto Hallow Scythe"] or _G.Settings.Farm["Auto Farm Katakuri"] or _G.Settings.Farm["Auto Farm Conjured Cocoa"] or _G.Settings.Farm["Auto Farm Fish Tail"] or _G.Settings.Farm["Auto Farm Gunpowder"] or _G.Settings.Farm["Auto Farm Dragon Scale"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.Farm["Auto Farm Mini Tusk"] or _G.Settings.Items["Auto Buddy Sword"] or _G.Settings.Items["Auto Canvander"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Raid["Auto Dungeon"] then
 					if not (game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart:FindFirstChild("BodyClip") then
 						local Noclip = Instance.new("BodyVelocity");
 						Noclip.Name = "BodyClip";
@@ -3947,7 +3947,7 @@ spawn(function()
 	pcall(function()
 		while wait() do
 			if World3 then
-				if _G.Settings.Farm["Auto Pirate Raid"] or _G.Settings.Race["Auto Race V3"] or _G.Settings.Farm["Auto Kill Cake Prince"] or _G.Settings.SeaStack["Teleport To Kitsune Island"] or _G.Settings.SeaStack["Teleport To Frozen Dimension"] or _G.Settings.SeaStack["Sail To Frozen Dimension"] or _G.Settings.SeaStack["Summon Frozen Dimension"] or _G.Settings.SeaStack["Summon Kitsune Island"] or _G.Settings.SeaStack["Teleport To Mirage Island"] or _G.Settings.Race["Auto Train"] or _G.Settings.Items["Auto Press Haki Button"] or _G.Settings.SeaEvent["Sail Boat"] or _G.Settings.Items["Auto Arena Trainer"] or _G.Settings.Race["Auto Kill Player After Trial"] or _G.Settings.Race["Tween To Highest Mirage"] or _G.Settings.Race["Auto Trial"] or _G.Settings.Race["Find Blue Gear"] or _G.Settings.Combat["Auto Kill Player Quest"] or _G.Settings.Items["Auto Cursed Dual Katana"] or _G.Settings.Farm["Auto Farm Bone"] or _G.Settings.Farm["Auto Kill Dough King"] or _G.Settings.Items["Auto Soul Guitar"] or _G.Settings.Items["Auto Tushita"] or _G.Settings.Farm["Auto Elite Hunter"] or _G.AutoKillSelectedPlayer or _G.Settings.Items["Auto Rainbow Haki"] or _G.Settings.Items["Auto Dark Dagger"] or _G.Settings.Farm["Auto Farm Ectoplasm"] or _G.Settings.Farm["Auto Observation V2"] or _G.Settings.Farm["Auto Musketeer Hat"] or _G.Settings.Items["Auto Holy Torch"] or _G.Settings.Items["Auto Hallow Scythe"] or _G.Settings.Farm["Auto Farm Katakuri"] or _G.Settings.Farm["Auto Farm Conjured Cocoa"] or _G.Settings.Farm["Auto Farm Fish Tail"] or _G.Settings.Farm["Auto Farm Gunpowder"] or _G.Settings.Farm["Auto Farm Dragon Scale"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.Farm["Auto Farm Mini Tusk"] or _G.Settings.Items["Auto Buddy Sword"] or _G.Settings.Items["Auto Canvander"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Raid["Auto Dungeon"] then
+				if _G.Settings.Farm["Auto Pirate Raid"] or _G.Settings.Race["Banana Auto Trial"] or _G.Settings.Farm["Auto Kill Cake Prince"] or _G.Settings.SeaStack["Teleport To Kitsune Island"] or _G.Settings.SeaStack["Teleport To Frozen Dimension"] or _G.Settings.SeaStack["Sail To Frozen Dimension"] or _G.Settings.SeaStack["Summon Frozen Dimension"] or _G.Settings.SeaStack["Summon Kitsune Island"] or _G.Settings.SeaStack["Teleport To Mirage Island"] or _G.Settings.Race["Banana Farm Race"] or _G.Settings.Items["Auto Press Haki Button"] or _G.Settings.SeaEvent["Sail Boat"] or _G.Settings.Items["Auto Arena Trainer"] or _G.Settings.Race["Banana Kill Trial"] or _G.Settings.Race["Banana Highest Mirage"] or _G.Settings.Race["Banana Auto Trial"] or _G.Settings.Race["Banana Blue Gear"] or _G.Settings.Combat["Auto Kill Player Quest"] or _G.Settings.Items["Auto Cursed Dual Katana"] or _G.Settings.Farm["Auto Farm Bone"] or _G.Settings.Farm["Auto Kill Dough King"] or _G.Settings.Items["Auto Soul Guitar"] or _G.Settings.Items["Auto Tushita"] or _G.Settings.Farm["Auto Elite Hunter"] or _G.AutoKillSelectedPlayer or _G.Settings.Items["Auto Rainbow Haki"] or _G.Settings.Items["Auto Dark Dagger"] or _G.Settings.Farm["Auto Farm Ectoplasm"] or _G.Settings.Farm["Auto Observation V2"] or _G.Settings.Farm["Auto Musketeer Hat"] or _G.Settings.Items["Auto Holy Torch"] or _G.Settings.Items["Auto Hallow Scythe"] or _G.Settings.Farm["Auto Farm Katakuri"] or _G.Settings.Farm["Auto Farm Conjured Cocoa"] or _G.Settings.Farm["Auto Farm Fish Tail"] or _G.Settings.Farm["Auto Farm Gunpowder"] or _G.Settings.Farm["Auto Farm Dragon Scale"] or _G.Settings.Farm["Auto Farm Scrap Metal"] or _G.Settings.Farm["Auto Farm Mini Tusk"] or _G.Settings.Items["Auto Buddy Sword"] or _G.Settings.Items["Auto Canvander"] or _G.Settings.Farm["Auto Farm Leather"] or _G.Settings.Raid["Auto Dungeon"] then
 					for _, v in pairs((game:GetService("Players")).LocalPlayer.Character:GetDescendants()) do
 						if v:IsA("BasePart") then
 							v.CanCollide = false;
@@ -7154,7 +7154,7 @@ elseif World3 then
 	spawn(function()
 		pcall(function()
 			while wait(0.2) do
-				if _G.Settings.Race["Tween To Highest Mirage"] then
+				if _G.Settings.Race["Banana Highest Mirage"] then
 					if (game:GetService("Workspace")).Map:FindFirstChild("MysticIsland") then
 						topos((GetHighestPoint()).CFrame * CFrame.new(0, 211.88, 0));
 					end;
@@ -7282,7 +7282,7 @@ elseif World3 then
 	spawn(function()
 		pcall(function()
 			while wait(0.2) do
-				if _G.Settings.Race["Find Blue Gear"] then
+				if _G.Settings.Race["Banana Blue Gear"] then
 					if (game:GetService("Workspace")).Map:FindFirstChild("MysticIsland") then
 						for i, v in pairs((game:GetService("Workspace")).Map.MysticIsland:GetChildren()) do
 							if v:IsA("MeshPart") then
@@ -11423,299 +11423,17 @@ spawn(function()
 		end);
 	end;
 end);
-if World2 then
-	RaceV4Tab:Seperator("Race V2");
-	RaceV4Tab:Toggle("Auto Evo Race [ V2 ]", _G.Settings.Race["Auto Race V2"], false, function(value)
-		_G.Settings.Race["Auto Race V2"] = value;
-		StopTween(_G.Settings.Race["Auto Race V2"]);
-		(getgenv()).SaveSetting();
-	end);
-	RaceV4Tab:Toggle("Auto Evo Race [ V3 ]", _G.Settings.Race["Auto Race V3"], "false", function(value)
-		_G.Settings.Race["Auto Race V3"] = value;
-		StopTween(_G.Settings.Race["Auto Race V3"]);
-		(getgenv()).SaveSetting();
-	end);
-	spawn(function()
-		while wait() do
-			pcall(function()
-				if _G.AutoSeabeasts then
-					if (game:GetService("Workspace")):FindFirstChild("SeaBeasts") then
-						for i, v in pairs((game:GetService("Workspace")).SeaBeasts:GetChildren()) do
-							if CheckSeaBeast() then
-								repeat
-									wait();
-									local CFrameSeaBeast = v.HumanoidRootPart.CFrame * CFrame.new(0, 200, 0);
-									if (CFrameSeaBeast.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame.Position).Magnitude <= 200 then
-										_G.SeaSkill = true;
-									else
-										_G.SeaSkill = false;
-									end;
-									Skillaimbot = true;
-									AimBotSkillPosition = v.HumanoidRootPart.CFrame.Position;
-									topos(CFrameSeaBeast * CFrame.new(0, 200, 0));
-								until not _G.AutoSeabeasts or CheckSeaBeast() == false or (not v:FindFirstChild("Humanoid")) or (not v:FindFirstChild("HumanoidRootPart")) or v.Humanoid.Health < 0 or (not v.Parent);
-								Skillaimbot = false;
-								_G.SeaSkill = false;
-							else
-								Skillaimbot = false;
-								_G.SeaSkill = false;
-							end;
-						end;
-					end;
-				end;
-			end);
-		end;
-	end);
-	spawn(function()
-		while wait() do
-			pcall(function()
-				if _G.AutoSeabeasts then
-					if not CheckBoat() then
-						local BuyBoatCFrame = CFrame.new(-1936.93213, 6.6355958, -2568.47974, -0.922701657, -0.00000000988315652, 0.385514766, -0.000000016636152, 1, -0.0000000141811682, -0.385514766, -0.0000000194984704, -0.922701657);
-						BuyBoat = topos(BuyBoatCFrame);
-						if (BuyBoatCFrame.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 10 then
-							if BuyBoat then
-								BuyBoat:Cancel();
-							end;
-							(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("BuyBoat", "MarineBrigade");
-							wait(1);
-							for i, v in pairs((game:GetService("Workspace")).Boats:GetChildren()) do
-								if v.Name == "MarineBrigade" then
-									if (v.VehicleSeat.CFrame.Position - (game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 100 then
-										AddEsp("MyBoatEsp", v);
-									end;
-								end;
-							end;
-						end;
-					elseif CheckBoat() then
-						for i, v in pairs((game:GetService("Workspace")).Boats:GetChildren()) do
-							if v.Name == "MarineBrigade" then
-								if v:FindFirstChild("MyBoatEsp") then
-									if (game.Players.LocalPlayer.Character:WaitForChild("Humanoid")).Sit == false then
-										if CheckSeaBeast() then
-											if TweenPlayer then
-												TweenPlayer:Cancel();
-											end;
-										else
-											local BoatPos = v.VehicleSeat.CFrame * CFrame.new(0, 1, 0);
-											local Distance = (BoatPos.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude;
-											TweenPlayer = (game:GetService("TweenService")):Create((game:GetService("Players")).LocalPlayer.Character:WaitForChild("HumanoidRootPart"), TweenInfo.new(Distance / TweenSpeed, Enum.EasingStyle.Linear), {
-												CFrame = BoatPos
-											});
-											TweenPlayer:Play();
-										end;
-									else
-										repeat
-											wait();
-											local TargetPos = CFrame.new(-4124.19531, 9.00001144, -996.203918, 0.929954946, 0.0642714053, 0.362012357, -0.0689479187, 0.997620285, 0.00000000286939827, -0.361150861, -0.0249600001, 0.932173312);
-											local Distance = (TargetPos.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude;
-											TweenBoat = (game:service("TweenService")):Create(v.VehicleSeat, TweenInfo.new(Distance / 250, Enum.EasingStyle.Linear), {
-												CFrame = TargetPos
-											});
-											if (v.VehicleSeat.CFrame.Position - TargetPos.Position).Magnitude <= 25 then
-												TweenBoat:Cancel();
-											else
-												TweenBoat:Play();
-											end;
-										until CheckSeaBeast() or (game.Players.LocalPlayer.Character:WaitForChild("Humanoid")).Sit == false;
-										if TweenBoat then
-											TweenBoat:Cancel();
-										end;
-										(game:GetService("VirtualInputManager")):SendKeyEvent(true, 32, false, game);
-										wait(0.1);
-										(game:GetService("VirtualInputManager")):SendKeyEvent(false, 32, false, game);
-									end;
-								end;
-							end;
-						end;
-					end;
-				end;
-			end);
-		end;
-	end);
-	spawn(function()
-		while wait() do
-			pcall(function()
-				if _G.AutoSeabeasts then
-					if CheckSeaBeast() then
-						if game.Players.LocalPlayer.Character.Humanoid.Sit == true then
-							(game:GetService("VirtualInputManager")):SendKeyEvent(true, 32, false, game);
-							wait(0.1);
-							(game:GetService("VirtualInputManager")):SendKeyEvent(false, 32, false, game);
-						end;
-					end;
-				end;
-			end);
-		end;
-	end);
-	function CheckV3()
-		if (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Mink" then
-			if game.Players.LocalPlayer.Backpack:FindFirstChild("Agility") then
-				return true;
-			end;
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Fishman" then
-			if game.Players.LocalPlayer.Backpack:FindFirstChild("Water Body") then
-				return true;
-			end;
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Skypiea" then
-			if game.Players.LocalPlayer.Backpack:FindFirstChild("Heavenly Blood") then
-				return true;
-			end;
-		end;
-		return false;
-	end;
-	spawn(function()
-		while wait(0.2) do
-			pcall(function()
-				if _G.AutoMeleeSkill then
-					(game:service("VirtualInputManager")):SendKeyEvent(true, "Z", false, game);
-					wait(0);
-					(game:service("VirtualInputManager")):SendKeyEvent(false, "Z", false, game);
-					(game:service("VirtualInputManager")):SendKeyEvent(true, "X", false, game);
-					wait(0);
-					(game:service("VirtualInputManager")):SendKeyEvent(false, "X", false, game);
-					(game:service("VirtualInputManager")):SendKeyEvent(true, "C", false, game);
-					wait(0);
-					(game:service("VirtualInputManager")):SendKeyEvent(false, "C", false, game);
-					(game:service("VirtualInputManager")):SendKeyEvent(true, "V", false, game);
-					wait(0);
-					(game:service("VirtualInputManager")):SendKeyEvent(false, "V", false, game);
-				end;
-			end);
-		end;
-	end);
-	spawn(function()
-		while wait() do
-			pcall(function()
-				if _G.Settings.Race["Auto Race V3"] then
-					if (game:GetService("Players")).LocalPlayer.Data.Race:FindFirstChild("Evolved") then
-						local myRace = tostring((game:GetService("Players")).LocalPlayer.Data.Race.Value);
-						if (game:GetService("Players")).LocalPlayer.Data.Beli.Value >= 2000000 then
-							_G.AutoKatakuri = false;
-							if myRace == "Skypiea" then
-								if (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 0 then
-									local QuestCFrame = CFrame.new(-1990.71094, 125.519119, -70.5762024, -0.235444918, -0.0000000715676052, -0.971887708, 0.0000000305724122, 1, -0.0000000810440568, 0.971887708, -0.0000000487943623, -0.235444918);
-									topos(QuestCFrame);
-									if (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - QuestCFrame.Position).Magnitude <= 5 then
-										(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "2");
-									end;
-								elseif (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 1 then
-									for i, v in pairs((game:GetService("Players")):GetChildren()) do
-										if tostring(v.Data.Race.Value) == "Skypiea" then
-											local Player = v:FindFirstChild(v.Name);
-											if Player then
-												repeat
-													wait();
-													topos(Player.HumanoidRootPart.CFrame * CFrame.new(0, 0, (-2)));
-													Attack();
-													AutoHaki();
-													_G.AutoMeleeSkill = true;
-													EquipWeapon("Melee");
-												until not Player or (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 2;
-												_G.AutoMeleeSkill = false;
-												UnEquipWeapon();
-											end;
-										end;
-									end;
-								elseif (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 2 then
-									(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "3");
-								end;
-							elseif myRace == "Fishman" then
-								if (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 0 then
-									local QuestCFrame = CFrame.new(-1990.71094, 125.519119, -70.5762024, -0.235444918, -0.0000000715676052, -0.971887708, 0.0000000305724122, 1, -0.0000000810440568, 0.971887708, -0.0000000487943623, -0.235444918);
-									topos(QuestCFrame);
-									if (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - QuestCFrame.Position).Magnitude <= 5 then
-										(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "2");
-									end;
-								elseif (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 1 then
-									_G.AutoSeabeasts = true;
-								elseif (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 2 then
-									_G.AutoSeabeasts = false;
-									(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "3");
-								end;
-							elseif myRace == "Mink" then
-								if (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 0 then
-									local QuestCFrame = CFrame.new(-1990.71094, 125.519119, -70.5762024, -0.235444918, -0.0000000715676052, -0.971887708, 0.0000000305724122, 1, -0.0000000810440568, 0.971887708, -0.0000000487943623, -0.235444918);
-									topos(QuestCFrame);
-									if (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - QuestCFrame.Position).Magnitude <= 5 then
-										(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "2");
-									end;
-								elseif (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 1 then
-									for i, v in pairs((game:GetService("Workspace")):GetChildren()) do
-										if string.find(v.Name, "Chest") then
-											if (game:GetService("Workspace")):FindFirstChild(v.Name) then
-												repeat
-													wait(0.5);
-													game.Players.LocalPlayer.Character:PivotTo(v:GetPivot());
-													firesignal(v.Touched, game.Players.LocalPlayer.Character.HumanoidRootPart);
-													(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("SetTeam", "Pirates");
-												until not v.Parent;
-											end;
-										end;
-									end;
-								elseif (((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "1") == 2 then
-									(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer("Wenlocktoad", "3");
-								end;
-							end;
-						end;
-					end;
-				end;
-			end);
-		end;
-	end);
-	spawn(function()
-		pcall(function()
-			while wait(0.2) do
-				if _G.Settings.Race["Auto Race V2"] then
-					if not (game:GetService("Players")).LocalPlayer.Data.Race:FindFirstChild("Evolved") then
-						if (game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("Alchemist", "1") == 0 then
-							topos(CFrame.new(-2779.83521, 72.9661407, -3574.02002, -0.730484903, 0.0000000639014104, -0.68292886, 0.0000000359963224, 1, 0.0000000550667032, 0.68292886, 0.0000000156424669, -0.730484903));
-							if (Vector3.new((-2779.83521), 72.9661407, (-3574.02002)) - (game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 4 then
-								wait(1.3);
-								(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("Alchemist", "2");
-							end;
-						elseif (game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("Alchemist", "1") == 1 then
-							pcall(function()
-								if not (game:GetService("Players")).LocalPlayer.Backpack:FindFirstChild("Flower 1") and (not (game:GetService("Players")).LocalPlayer.Character:FindFirstChild("Flower 1")) then
-									topos((game:GetService("Workspace")).Flower1.CFrame);
-								elseif not (game:GetService("Players")).LocalPlayer.Backpack:FindFirstChild("Flower 2") and (not (game:GetService("Players")).LocalPlayer.Character:FindFirstChild("Flower 2")) then
-									topos((game:GetService("Workspace")).Flower2.CFrame);
-								elseif not (game:GetService("Players")).LocalPlayer.Backpack:FindFirstChild("Flower 3") and (not (game:GetService("Players")).LocalPlayer.Character:FindFirstChild("Flower 3")) then
-									if (game:GetService("Workspace")).Enemies:FindFirstChild("Zombie") then
-										for i, v in pairs((game:GetService("Workspace")).Enemies:GetChildren()) do
-											if v.Name == "Zombie" then
-												repeat
-													(game:GetService("RunService")).Heartbeat:wait();
-													AutoHaki();
-													EquipWeapon(_G.Settings.Main["Selected Weapon"]);
-													topos(v.HumanoidRootPart.CFrame * Pos);
-													v.HumanoidRootPart.CanCollide = false;
-													v.HumanoidRootPart.Size = Vector3.new(1, 1, 1);
-													Attack();
-													PosMon = v.HumanoidRootPart.CFrame;
-													MonFarm = v.Name;
-												until (game:GetService("Players")).LocalPlayer.Backpack:FindFirstChild("Flower 3") or (not v.Parent) or v.Humanoid.Health <= 0 or _G.Settings.Race["Auto Race V2"] == false;
-											end;
-										end;
-									else
-										topos(CFrame.new(-5685.9233398438, 48.480125427246, -853.23724365234));
-									end;
-								end;
-							end);
-						elseif (game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("Alchemist", "1") == 2 then
-							(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("Alchemist", "3");
-						end;
-					end;
-				end;
-			end;
-		end);
-	end);
-end;
+-- IKAROHUB Race tab rebuilt only from Banana source
 do
-	RaceV4Tab:Seperator("Race V4 - Banana");
+	local Players = game:GetService("Players");
+	local ReplicatedStorage = game:GetService("ReplicatedStorage");
+	local VirtualInputManager = game:GetService("VirtualInputManager");
+	local LocalPlayer = Players.LocalPlayer;
+	local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_");
+	local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net");
 	local TempleEntrance = Vector3.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-	local LeverPosition = CFrame.new(28575.181640625, 14936.6279296875, 72.31636810302734);
-	local AncientOnePosition = CFrame.new(28981.552734375, 14888.4267578125, -120.245849609375);
+	local DragonEntrance = Vector3.new(5661.5322265625, 1013.0907592773438, -334.9649963378906);
+	local DragonDojo = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938);
 	local RaceDoorPositions = {
 		Human = CFrame.new(29221.822265625, 14890.9755859375, -205.99114990234375),
 		Skypiea = CFrame.new(28960.158203125, 14919.6240234375, 235.03948974609375),
@@ -11724,325 +11442,308 @@ do
 		Ghoul = CFrame.new(28674.244140625, 14890.6767578125, 445.4310607910156),
 		Mink = CFrame.new(29012.341796875, 14890.9755859375, -380.1492614746094)
 	};
-	local function EnterTemple()
-		(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("requestEntrance", TempleEntrance);
+	local TreePositions = {
+		CFrame.new(5288.61962890625, 1005.4000244140625, 392.43011474609375),
+		CFrame.new(5343.39453125, 1004.1998901367188, 361.0687561035156),
+		CFrame.new(5235.78564453125, 1004.1998901367188, 431.4530944824219),
+		CFrame.new(5321.30615234375, 1004.1998901367188, 440.8951416015625),
+		CFrame.new(5258.96484375, 1004.1998901367188, 345.5052490234375)
+	};
+	local function SaveRaceSetting()
+		pcall(function() (getgenv()).SaveSetting(); end);
 	end;
-	RaceV4Tab:Button("Temple Of Time", function()
-		EnterTemple();
-	end);
+	local function EnterTemple()
+		CommF:InvokeServer("requestEntrance", TempleEntrance);
+	end;
+	local function EnterDragonDojo()
+		CommF:InvokeServer("requestEntrance", DragonEntrance);
+		wait(0.5);
+		topos(DragonDojo);
+	end;
+	local function PressKey(key)
+		VirtualInputManager:SendKeyEvent(true, key, false, game);
+		wait(0.08);
+		VirtualInputManager:SendKeyEvent(false, key, false, game);
+	end;
+	local function UseToolSkills(toolTip)
+		local backpack = LocalPlayer:FindFirstChild("Backpack");
+		local character = LocalPlayer.Character;
+		if not backpack or not character then return; end;
+		for _, tool in pairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") and tool.ToolTip == toolTip then
+				character:WaitForChild("Humanoid"):EquipTool(tool);
+				for _, key in ipairs({"Z", "X", "C", "V", "F"}) do
+					PressKey(key);
+				end;
+				return;
+			end;
+		end;
+	end;
+
+	RaceV4Tab:Seperator("Race V4 - Banana");
+	RaceV4Tab:Button("Temple Of Time", EnterTemple);
 	RaceV4Tab:Button("Auto Pull Lever", function()
 		EnterTemple();
 		wait(0.5);
-		topos(LeverPosition);
+		topos(CFrame.new(28575.181640625, 14936.6279296875, 72.31636810302734));
 	end);
 	RaceV4Tab:Button("TP Buy Gear NPC", function()
 		EnterTemple();
 		wait(0.5);
-		topos(AncientOnePosition);
+		topos(CFrame.new(28981.552734375, 14888.4267578125, -120.245849609375));
 	end);
 	RaceV4Tab:Button("Race Door", function()
 		EnterTemple();
 		wait(0.5);
-		local race = tostring((game:GetService("Players")).LocalPlayer.Data.Race.Value);
-		local destination = RaceDoorPositions[race];
-		if destination then
-			topos(destination);
+		local race = tostring(LocalPlayer.Data.Race.Value);
+		if RaceDoorPositions[race] then
+			topos(RaceDoorPositions[race]);
 		end;
 	end);
-	RaceV4Tab:Toggle("Auto Turn On Race V4", _G.Settings.Race["Auto Activate V4"], false, function(value)
-		_G.Settings.Race["Auto Activate V4"] = value;
-		(getgenv()).SaveSetting();
+	RaceV4Tab:Toggle("Auto Turn On Race V4", _G.Settings.Race["Banana Auto V4"], false, function(value)
+		_G.Settings.Race["Banana Auto V4"] = value;
+		SaveRaceSetting();
 	end);
 	spawn(function()
 		while wait(0.5) do
 			pcall(function()
-				if _G.Settings.Race["Auto Activate V4"] then
-					local character = (game:GetService("Players")).LocalPlayer.Character;
+				if _G.Settings.Race["Banana Auto V4"] then
+					local character = LocalPlayer.Character;
 					local transformed = character and character:FindFirstChild("RaceTransformed");
-					if not transformed or transformed.Value == false then
-						(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Y", false, game);
-						wait(0.1);
-						(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Y", false, game);
-					end;
+					if not transformed or not transformed.Value then PressKey("Y"); end;
 				end;
 			end);
 		end;
 	end);
-	RaceV4Tab:Toggle("Auto Buy Gear", _G.Settings.Race["Auto Buy Gear"], false, function(value)
-		_G.Settings.Race["Auto Buy Gear"] = value;
-		StopTween(_G.Settings.Race["Auto Buy Gear"]);
-		(getgenv()).SaveSetting();
+	RaceV4Tab:Toggle("Fly To Highest Mirage", _G.Settings.Race["Banana Highest Mirage"], false, function(value)
+		_G.Settings.Race["Banana Highest Mirage"] = value;
+		SaveRaceSetting();
+	end);
+	RaceV4Tab:Toggle("Fly To Blue Gear", _G.Settings.Race["Banana Blue Gear"], false, function(value)
+		_G.Settings.Race["Banana Blue Gear"] = value;
+		SaveRaceSetting();
 	end);
 	spawn(function()
-		pcall(function()
-			while wait(0.2) do
-				if _G.Settings.Race["Auto Buy Gear"] then
-					local args = {
-						[1] = true
-					};
-					local args = {
-						[1] = "UpgradeRace",
-						[2] = "Buy"
-					};
-					(((game:GetService("ReplicatedStorage")):WaitForChild("Remotes")):WaitForChild("CommF_")):InvokeServer(unpack(args));
-				end;
-			end;
-		end);
-	end);
-	RaceV4Tab:Toggle("Tween To Highest Point Mirage Island", _G.Settings.Race["Tween To Highest Mirage"], "Tween To Top Mirage Island", function(value)
-		_G.Settings.Race["Tween To Highest Mirage"] = value;
-		StopTween(_G.Settings.Race["Tween To Highest Mirage"]);
-		(getgenv()).SaveSetting();
-	end);
-	RaceV4Tab:Toggle("Find Blue Gear", _G.Settings.Race["Find Blue Gear"], "Tween To Blue Gear", function(value)
-		_G.Settings.Race["Find Blue Gear"] = value;
-		StopTween(_G.Settings.Race["Find Blue Gear"]);
-		(getgenv()).SaveSetting();
-	end);
-	RaceV4Tab:Toggle("Auto Look Moon + Use Ability", _G.Settings.Race["Look Moon Ability"], "Camera Focus To Moon", function(value)
-		_G.Settings.Race["Look Moon Ability"] = value;
-		(getgenv()).SaveSetting();
-	end);
-	spawn(function()
-		while wait(0.2) do
+		while wait(0.25) do
 			pcall(function()
-				if _G.Settings.Race["Look Moon Ability"] then
-					wait();
-					local moonDir = game.Lighting:GetMoonDirection();
-					local lookAtPos = game.Workspace.CurrentCamera.CFrame.p + moonDir * 100;
-					game.Workspace.CurrentCamera.CFrame = CFrame.lookAt(game.Workspace.CurrentCamera.CFrame.p, lookAtPos);
+				local island = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("MysticIsland");
+				if island and _G.Settings.Race["Banana Highest Mirage"] then
+					for _, part in pairs(island:GetDescendants()) do
+						if part:IsA("MeshPart") and part.MeshId == "rbxassetid://6745037796" then
+							topos(part.CFrame * CFrame.new(0, 211.88, 0));
+							break;
+						end;
+					end;
+				elseif island and _G.Settings.Race["Banana Blue Gear"] then
+					for _, part in pairs(island:GetDescendants()) do
+						if part:IsA("BasePart") and part.Material == Enum.Material.Neon then
+							topos(part.CFrame);
+							break;
+						end;
+					end;
 				end;
 			end);
 		end;
 	end);
-	RaceV4Tab:Toggle("Auto Train", _G.Settings.Race["Auto Train"], false, function(value)
-		_G.Settings.Race["Auto Train"] = value;
-		StardFarm = value;
-		StopTween(_G.Settings.Race["Auto Train"]);
-		(getgenv()).SaveSetting();
+	RaceV4Tab:Button("Buy Gear", function()
+		CommF:InvokeServer("UpgradeRace", "Buy");
+	end);
+	RaceV4Tab:Toggle("Farm Race", _G.Settings.Race["Banana Farm Race"], false, function(value)
+		_G.Settings.Race["Banana Farm Race"] = value;
+		SaveRaceSetting();
 	end);
 	spawn(function()
-		pcall(function()
-			while wait(0.2) do
-				if _G.Settings.Race["Auto Train"] then
-					if game.Players.LocalPlayer.Character.RaceTransformed.Value == true then
-						StardFarm = false;
-						topos(CFrame.new(216.211181640625, 126.9352035522461, -12599.0732421875));
-					end;
-				end;
-			end;
-		end);
-	end);
-	spawn(function()
-		while wait(0.2) do
-			if StardFarm and World3 then
-				pcall(function()
-					if (game:GetService("Workspace")).Enemies:FindFirstChild("Cocoa Warrior") or (game:GetService("Workspace")).Enemies:FindFirstChild("Chocolate Bar Battler") or (game:GetService("Workspace")).Enemies:FindFirstChild("Sweet Thief") or (game:GetService("Workspace")).Enemies:FindFirstChild("Candy Rebel") then
-						for i, v in pairs((game:GetService("Workspace")).Enemies:GetChildren()) do
-							if v.Name == "Cocoa Warrior" or v.Name == "Chocolate Bar Battler" or v.Name == "Sweet Thief" or v.Name == "Candy Rebel" then
-								if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
-									repeat
-										(game:GetService("RunService")).Heartbeat:wait();
-										AutoHaki();
-										EquipWeapon(_G.Settings.Main["Selected Weapon"]);
-										v.HumanoidRootPart.CanCollide = false;
-										v.Humanoid.WalkSpeed = 0;
-										v.Head.CanCollide = false;
-										PosMon = v.HumanoidRootPart.CFrame;
-										MonFarm = v.Name;
-										topos(v.HumanoidRootPart.CFrame * Pos);
-										Attack();
-									until not StardFarm or (not v.Parent) or v.Humanoid.Health <= 0;
-								end;
-							end;
-						end;
+		while wait(0.5) do
+			pcall(function()
+				if _G.Settings.Race["Banana Farm Race"] then
+					local character = LocalPlayer.Character;
+					local transformed = character and character:FindFirstChild("RaceTransformed");
+					if transformed and transformed.Value then
+						topos(CFrame.new(-9698.4736328125, 445.09442138671875, 6545.8525390625));
 					else
-						topos(CFrame.new(216.211181640625, 126.9352035522461, -12599.0732421875));
+						PressKey("Y");
 					end;
-				end);
-			end;
-		end;
-	end);
-	spawn(function()
-		pcall(function()
-			while wait(0.2) do
-				if _G.Settings.Race["Auto Train"] then
-					if game.Players.LocalPlayer.Character.RaceTransformed.Value == false then
-						StardFarm = true;
-					end;
-				end;
-			end;
-		end);
-	end);
-	spawn(function()
-		while wait(0.2) do
-			pcall(function()
-				if _G.Settings.Race["Auto Train"] then
-					(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Y", false, game);
-					wait(0.1);
-					(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Y", false, game);
 				end;
 			end);
 		end;
 	end);
-	RaceV4Tab:Toggle("Disabled Inf Stairs", false, false, function(value)
-		game.Players.LocalPlayer.Character.InfiniteStairs.Disabled = value;
-	end);
-	RaceV4Tab:Seperator("Auto Complete Trials");
-	RaceV4Tab:Button("Buy Ancient One Quest", function()
-		(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("UpgradeRace", "Buy");
-	end);
-	RaceV4Tab:Toggle("Auto Kill Player After Trial", _G.Settings.Race["Auto Kill Player After Trial"], false, function(value)
-		_G.Settings.Race["Auto Kill Player After Trial"] = value;
-		StopTween(_G.Settings.Race["Auto Kill Player After Trial"]);
-		(getgenv()).SaveSetting();
-	end);
-	RaceV4Tab:Toggle("Auto Trial RaceV4", _G.Settings.Race["Auto Trial"], false, function(value)
-		_G.Settings.Race["Auto Trial"] = value;
-		StopTween(_G.Settings.Race["Auto Trial"]);
-		(getgenv()).SaveSetting();
+
+	RaceV4Tab:Seperator("Trials V4 - Banana");
+	RaceV4Tab:Toggle("Overcome Challenges", _G.Settings.Race["Banana Auto Trial"], false, function(value)
+		_G.Settings.Race["Banana Auto Trial"] = value;
+		StopTween(value);
+		SaveRaceSetting();
 	end);
 	spawn(function()
-		pcall(function()
-			while wait(0.2) do
-				if _G.Settings.Race["Auto Trial"] then
-					if (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Human" then
-						for i, v in pairs(game.Workspace.Enemies:GetDescendants()) do
-							if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
-								pcall(function()
-									repeat
-										wait(0.1);
-										v.Humanoid.Health = 0;
-										v.HumanoidRootPart.CanCollide = false;
-									until not _G.Settings.Race["Auto Trial"] or (not v.Parent) or v.Humanoid.Health <= 0;
-								end);
-							end;
-						end;
-					elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Skypiea" then
-						for i, v in pairs((game:GetService("Workspace")).Map.SkyTrial.Model:GetDescendants()) do
-							if v.Name == "snowisland_Cylinder.081" then
-								topos(v.CFrame * CFrame.new(0, 0, 0));
-							end;
-						end;
-					elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Fishman" then
-						for i, v in pairs((game:GetService("Workspace")).SeaBeasts.SeaBeast1:GetDescendants()) do
-							if v.Name == "HumanoidRootPart" then
-								repeat
-									wait();
-									topos(v.CFrame * CFrame.new(0, 200, 0));
-									for i, v in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
-										if v:IsA("Tool") then
-											if v.ToolTip == "Melee" then
-												game.Players.LocalPlayer.Character.Humanoid:EquipTool(v);
-											end;
-										end;
-									end;
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Z", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Z", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "X", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "X", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "C", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "C", false, game);
-									wait(0.2);
-									for i, v in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
-										if v:IsA("Tool") then
-											if v.ToolTip == "Blox Fruit" then
-												game.Players.LocalPlayer.Character.Humanoid:EquipTool(v);
-											end;
-										end;
-									end;
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Z", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Z", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "X", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "X", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "C", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "C", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "V", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "V", false, game);
-									wait(0.2);
-									for i, v in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
-										if v:IsA("Tool") then
-											if v.ToolTip == "Sword" then
-												game.Players.LocalPlayer.Character.Humanoid:EquipTool(v);
-											end;
-										end;
-									end;
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Z", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Z", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "X", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "X", false, game);
-									wait(0.2);
-									for i, v in pairs(game.Players.LocalPlayer.Backpack:GetChildren()) do
-										if v:IsA("Tool") then
-											if v.ToolTip == "Gun" then
-												game.Players.LocalPlayer.Character.Humanoid:EquipTool(v);
-											end;
-										end;
-									end;
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Z", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Z", false, game);
-									wait(0.2);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(true, "X", false, game);
-									(game:GetService("VirtualInputManager")):SendKeyEvent(false, "X", false, game);
-									wait(0.2);
-								until not _G.Settings.Race["Auto Trial"] or (not v.Parent) or v.Humanoid.Health <= 0 or (not v:FindFirstChild("HumanoidRootPart"));
-							end;
-						end;
-					elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Cyborg" then
-						topos(CFrame.new(28654, 14898.7832, -30, 1, 0, 0, 0, 1, 0, 0, 0, 1));
-					elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Ghoul" then
-						for i, v in pairs(game.Workspace.Enemies:GetDescendants()) do
-							if v:FindFirstChild("Humanoid") and v:FindFirstChild("HumanoidRootPart") and v.Humanoid.Health > 0 then
-								pcall(function()
-									repeat
-										wait(0.1);
-										v.Humanoid.Health = 0;
-										v.HumanoidRootPart.CanCollide = false;
-									until not _G.Settings.Race["Auto Trial"] or (not v.Parent) or v.Humanoid.Health <= 0;
-								end);
-							end;
-						end;
-					elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Mink" then
-						for i, v in pairs((game:GetService("Workspace")):GetDescendants()) do
-							if v.Name == "StartPoint" then
-								topos(v.CFrame * CFrame.new(0, 10, 0));
-							end;
+		while wait(0.2) do
+			pcall(function()
+				if not _G.Settings.Race["Banana Auto Trial"] then return; end;
+				local race = tostring(LocalPlayer.Data.Race.Value);
+				if race == "Human" or race == "Ghoul" then
+					for _, enemy in pairs(workspace.Enemies:GetDescendants()) do
+						if enemy:FindFirstChild("Humanoid") and enemy:FindFirstChild("HumanoidRootPart") and enemy.Humanoid.Health > 0 then
+							enemy.HumanoidRootPart.CanCollide = false;
+							enemy.Humanoid.Health = 0;
 						end;
 					end;
+				elseif race == "Skypiea" then
+					local skyTrial = workspace.Map:FindFirstChild("SkyTrial");
+					if skyTrial then
+						for _, part in pairs(skyTrial:GetDescendants()) do
+							if part.Name == "snowisland_Cylinder.081" then topos(part.CFrame); break; end;
+						end;
+					end;
+				elseif race == "Fishman" then
+					local seaBeasts = workspace:FindFirstChild("SeaBeasts");
+					local beast = seaBeasts and seaBeasts:FindFirstChild("SeaBeast1");
+					local root = beast and beast:FindFirstChild("HumanoidRootPart", true);
+					if root then
+						topos(root.CFrame * CFrame.new(0, 200, 0));
+						UseToolSkills("Melee"); UseToolSkills("Blox Fruit"); UseToolSkills("Sword"); UseToolSkills("Gun");
+					end;
+				elseif race == "Cyborg" then
+					topos(CFrame.new(28654, 14898.7832, -30));
+				elseif race == "Mink" then
+					for _, part in pairs(workspace:GetDescendants()) do
+						if part.Name == "StartPoint" and part:IsA("BasePart") then topos(part.CFrame * CFrame.new(0, 10, 0)); break; end;
+					end;
+				end;
+			end);
+		end;
+	end);
+	RaceV4Tab:Toggle("Kill Players After Trial", _G.Settings.Race["Banana Kill Trial"], false, function(value)
+		_G.Settings.Race["Banana Kill Trial"] = value;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.2) do
+			pcall(function()
+				if not _G.Settings.Race["Banana Kill Trial"] then return; end;
+				for _, player in pairs(Players:GetPlayers()) do
+					local character = player ~= LocalPlayer and player.Character;
+					local root = character and character:FindFirstChild("HumanoidRootPart");
+					local humanoid = character and character:FindFirstChild("Humanoid");
+					local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart");
+					if root and humanoid and myRoot and humanoid.Health > 0 and (root.Position - myRoot.Position).Magnitude <= 100 then
+						EquipWeapon(_G.Settings.Main["Selected Weapon"]); AutoHaki(); topos(root.CFrame * CFrame.new(0, 0, 5)); Attack();
+					end;
+				end;
+			end);
+		end;
+	end);
+
+	RaceV4Tab:Seperator("Draco Race - Banana");
+	RaceV4Tab:Button("Change To Draco", function()
+		EnterDragonDojo();
+		wait(0.5);
+		local remote = Net:FindFirstChild("RF/InteractDragonQuest");
+		if remote then remote:InvokeServer({NPC = "Dragon Wizard", Command = "DragonRace"}); end;
+	end);
+	RaceV4Tab:Button("Teleport To Dragon Dojo", EnterDragonDojo);
+	RaceV4Tab:Toggle("Auto Blaze Ember", _G.Settings.Race["Banana Blaze Ember"], false, function(value)
+		_G.Settings.Race["Banana Blaze Ember"] = value;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.25) do
+			pcall(function()
+				if _G.Settings.Race["Banana Blaze Ember"] then
+					local remote = Net:FindFirstChild("RE/DragonDojoEmber");
+					if remote then remote:FireServer(); end;
+				end;
+			end);
+		end;
+	end);
+	RaceV4Tab:Toggle("Get Blaze Ember Quest", _G.Settings.Race["Banana Dragon Quest"], false, function(value)
+		_G.Settings.Race["Banana Dragon Quest"] = value;
+		if value then EnterDragonDojo(); end;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.75) do
+			pcall(function()
+				if _G.Settings.Race["Banana Dragon Quest"] then
+					local remote = Net:FindFirstChild("RF/DragonHunter");
+					if remote then remote:InvokeServer({Context = "RequestQuest"}); remote:InvokeServer({Context = "Check"}); end;
+				end;
+			end);
+		end;
+	end);
+	RaceV4Tab:Toggle("Destroy Trees At Hydra", _G.Settings.Race["Banana Hydra Trees"], false, function(value)
+		_G.Settings.Race["Banana Hydra Trees"] = value;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.2) do
+			if _G.Settings.Race["Banana Hydra Trees"] then
+				for _, position in ipairs(TreePositions) do
+					if not _G.Settings.Race["Banana Hydra Trees"] then break; end;
+					pcall(function()
+						AutoHaki(); topos(position); wait(0.1);
+						UseToolSkills("Melee"); UseToolSkills("Sword"); UseToolSkills("Gun");
+					end);
 				end;
 			end;
-		end);
+		end;
+	end);
+	RaceV4Tab:Button("Craft Volcanic Magnet", function()
+		CommF:InvokeServer("CraftItem", "Craft", "Volcanic Magnet");
+	end);
+	RaceV4Tab:Toggle("Collect Fire Flowers", _G.Settings.Race["Banana Fire Flowers"], false, function(value)
+		_G.Settings.Race["Banana Fire Flowers"] = value;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.25) do
+			pcall(function()
+				if not _G.Settings.Race["Banana Fire Flowers"] then return; end;
+				local flowers = workspace:FindFirstChild("FireFlowers");
+				if not flowers then return; end;
+				for _, flower in pairs(flowers:GetChildren()) do
+					local part = flower:IsA("Model") and flower.PrimaryPart or (flower:IsA("BasePart") and flower);
+					if part then
+						topos(part.CFrame);
+						local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart");
+						if root and (root.Position - part.Position).Magnitude <= 3 then PressKey("E"); end;
+					end;
+				end;
+			end);
+		end;
+	end);
+	RaceV4Tab:Toggle("Auto White Belt", _G.Settings.Race["Banana White Belt"], false, function(value)
+		_G.Settings.Race["Banana White Belt"] = value;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.75) do
+			pcall(function()
+				if _G.Settings.Race["Banana White Belt"] then
+					local remote = Net:FindFirstChild("RF/InteractDragonQuest");
+					if remote then
+						remote:InvokeServer({NPC = "Dojo Trainer", Command = "RequestQuest"});
+						remote:InvokeServer({NPC = "Dojo Trainer", Command = "ClaimQuest"});
+					end;
+				end;
+			end);
+		end;
+	end);
+	RaceV4Tab:Toggle("Fly To Draco Trial Door", _G.Settings.Race["Banana Draco Trial"], false, function(value)
+		_G.Settings.Race["Banana Draco Trial"] = value;
+		SaveRaceSetting();
+	end);
+	spawn(function()
+		while wait(0.2) do
+			pcall(function()
+				if _G.Settings.Race["Banana Draco Trial"] then
+					local map = workspace:FindFirstChild("Map");
+					local island = map and map:FindFirstChild("PrehistoricIsland");
+					local trial = island and island:FindFirstChild("TrialTeleport", true);
+					if trial and trial:IsA("BasePart") then topos(trial.CFrame); end;
+				end;
+			end);
+		end;
 	end);
 end;
-spawn(function()
-	while wait(0.2) do
-		if _G.Settings.Race["Auto Kill Player After Trial"] then
-			if (game:GetService("Players")).LocalPlayer.PlayerGui.Main.Timer.Visible == true then
-				for i, v in pairs((game:GetService("Players")):GetPlayers()) do
-					if v ~= game.Players.LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-						if (v.Character.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 200 then
-							if v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
-								repeat
-									(game:GetService("RunService")).Heartbeat:Wait();
-									EquipWeapon(_G.Settings.Main["Selected Weapon"]);
-									AutoHaki();
-									topos(v.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 20));
-									Attack();
-								until not _G.Settings.Race["Auto Kill Player After Trial"] or (not v.Character) or v.Character.Humanoid.Health <= 0;
-							end;
-						end;
-					end;
-				end;
-			end;
-		end;
-	end;
-end);
 PvpTab:Seperator("Combat");
 local plyserv = PvpTab:Label("Players");
 spawn(function()
