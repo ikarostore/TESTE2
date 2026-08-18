@@ -647,6 +647,262 @@ do
 	end)
 end
 
+-- Volcano Event: portado da secao Prehistoric Island do Banana Hub.
+do
+	local VolcanoTab = Tabs.VolcanoEvent
+	local Players = game:GetService("Players")
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local TweenService = game:GetService("TweenService")
+	local RunService = game:GetService("RunService")
+	local VirtualInputManager = game:GetService("VirtualInputManager")
+	local player = Players.LocalPlayer
+	local activeTween
+	local movementEnabled = false
+
+	local function notifyVolcano(content)
+		Fluent:Notify({Title = "Volcano Event", Content = content, Duration = 5})
+	end
+
+	local function getIsland()
+		local map = workspace:FindFirstChild("Map")
+		return map and map:FindFirstChild("PrehistoricIsland")
+	end
+
+	local function getCharacter()
+		local character = player.Character or player.CharacterAdded:Wait()
+		return character, character:WaitForChild("HumanoidRootPart")
+	end
+
+	local function stopVolcanoMovement()
+		movementEnabled = false
+		if activeTween then
+			pcall(function() activeTween:Cancel() end)
+			activeTween = nil
+		end
+	end
+
+	RunService.Stepped:Connect(function()
+		if not movementEnabled then return end
+		local character = player.Character
+		if not character then return end
+		for _, part in ipairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then part.CanCollide = false end
+		end
+	end)
+
+	local function moveTo(target)
+		if not target then return false end
+		stopVolcanoMovement()
+		local _, root = getCharacter()
+		local distance = (root.Position - target.Position).Magnitude
+		if distance <= 7 then return true end
+		movementEnabled = true
+		root.AssemblyLinearVelocity = Vector3.zero
+		activeTween = TweenService:Create(root, TweenInfo.new(math.max(distance / 260, 0.1), Enum.EasingStyle.Linear), {CFrame = target})
+		activeTween:Play()
+		local state = activeTween.Completed:Wait()
+		movementEnabled = false
+		activeTween = nil
+		root.AssemblyLinearVelocity = Vector3.zero
+		return state == Enum.PlaybackState.Completed
+	end
+
+	local status = VolcanoTab:AddParagraph({
+		Title = "Prehistoric Island Status",
+		Content = "Procurando a ilha..."
+	})
+
+	task.spawn(function()
+		while task.wait(1) do
+			local island = getIsland()
+			status:SetDesc(island and "Prehistoric Island: SPAWNADA" or "Prehistoric Island: nao encontrada")
+		end
+	end)
+
+	VolcanoTab:AddSection("Prehistoric Island")
+	local flyTrial = VolcanoTab:AddToggle("VolcanoFlyTrialDoor", {
+		Title = "Fly To Trial Door",
+		Description = "Vai ate o TrialTeleport da ilha",
+		Default = false
+	})
+	local flyIsland = VolcanoTab:AddToggle("VolcanoFlyIsland", {
+		Title = "Fly To Prehistoric Island",
+		Description = "Vai ate o cranio da Prehistoric Relic",
+		Default = false
+	})
+	local defend = VolcanoTab:AddToggle("VolcanoDefend", {
+		Title = "Safe / Defend Volcano",
+		Description = "Remove a lava localmente e ataca as rochas vermelhas",
+		Default = false
+	})
+
+	VolcanoTab:AddSection("Weapons")
+	VolcanoTab:AddToggle("VolcanoUseMelee", {Title = "Use Melee", Default = true})
+	VolcanoTab:AddToggle("VolcanoUseSword", {Title = "Use Sword", Default = false})
+	VolcanoTab:AddToggle("VolcanoUseGun", {Title = "Use Gun", Default = false})
+
+	local function pressKey(key)
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode[key], false, game)
+		task.wait(0.04)
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode[key], false, game)
+	end
+
+	local function enableHaki()
+		local character = player.Character
+		if character and not character:FindFirstChild("HasBuso") then
+			local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+			local comm = remotes and remotes:FindFirstChild("CommF_")
+			if comm then pcall(function() comm:InvokeServer("Buso") end) end
+		end
+	end
+
+	local function equipAndCast(toolTip)
+		local character = player.Character
+		local backpack = player:FindFirstChild("Backpack")
+		if not character or not backpack then return end
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") and tool.ToolTip == toolTip then
+				tool.Parent = character
+				pcall(function() tool:Activate() end)
+				for _, key in ipairs({"Z", "X", "C", "V", "F"}) do
+					pcall(pressKey, key)
+					task.wait(0.08)
+				end
+				return
+			end
+		end
+	end
+
+	local function disableLava(island)
+		for _, object in ipairs(island:GetDescendants()) do
+			if object:IsA("BasePart") and string.find(string.lower(object.Name), "lava", 1, true) then
+				object.CanCollide = false
+				object.CanTouch = false
+				object.Transparency = 1
+			end
+		end
+	end
+
+	local function findRedRock(island)
+		local core = island:FindFirstChild("Core")
+		local rocks = core and core:FindFirstChild("VolcanoRocks")
+		if not rocks then return nil end
+		for _, object in ipairs(rocks:GetDescendants()) do
+			if object:IsA("BasePart") and string.lower(object.Name) == "volcanorock" then
+				local color = object.Color
+				if color == Color3.fromRGB(185, 53, 56) or color == Color3.fromRGB(185, 53, 57) then
+					return object
+				end
+			end
+		end
+		return nil
+	end
+
+	task.spawn(function()
+		while task.wait(0.25) do
+			if Options.VolcanoFlyTrialDoor.Value then
+				local island = getIsland()
+				local trial = island and island:FindFirstChild("TrialTeleport", true)
+				if trial and trial:IsA("BasePart") and moveTo(trial.CFrame) then
+					Options.VolcanoFlyTrialDoor:SetValue(false)
+				end
+			elseif Options.VolcanoFlyIsland.Value then
+				local island = getIsland()
+				local skull = island and island:FindFirstChild("Skull", true)
+				if skull and skull:IsA("BasePart") and moveTo(skull.CFrame) then
+					Options.VolcanoFlyIsland:SetValue(false)
+				elseif not island then
+					task.wait(1)
+				end
+			end
+		end
+	end)
+
+	task.spawn(function()
+		while task.wait(0.35) do
+			if Options.VolcanoDefend.Value then
+				local island = getIsland()
+				if island then
+					disableLava(island)
+					enableHaki()
+					local rock = findRedRock(island)
+					if rock then
+						moveTo(rock.CFrame * CFrame.new(0, 4, 0))
+						if Options.VolcanoUseMelee.Value then equipAndCast("Melee") end
+						if Options.VolcanoUseSword.Value then equipAndCast("Sword") end
+						if Options.VolcanoUseGun.Value then equipAndCast("Gun") end
+					end
+				end
+			end
+		end
+	end)
+
+	VolcanoTab:AddSection("Collect / Combat")
+	VolcanoTab:AddToggle("VolcanoAttackGolems", {Title = "Attack Golems Aura", Default = false})
+	VolcanoTab:AddToggle("VolcanoCollectBone", {Title = "Collect Dinosaur Bones", Default = false})
+	VolcanoTab:AddToggle("VolcanoCollectEgg", {Title = "Collect Dragon Egg", Default = false})
+
+	local function selectedAttack()
+		enableHaki()
+		if Options.VolcanoUseMelee.Value then equipAndCast("Melee") end
+		if Options.VolcanoUseSword.Value then equipAndCast("Sword") end
+		if Options.VolcanoUseGun.Value then equipAndCast("Gun") end
+	end
+
+	task.spawn(function()
+		while task.wait(0.35) do
+			if Options.VolcanoAttackGolems.Value then
+				local enemies = workspace:FindFirstChild("Enemies")
+				local target
+				if enemies then
+					for _, enemy in ipairs(enemies:GetChildren()) do
+						local humanoid = enemy:FindFirstChildOfClass("Humanoid")
+						local root = enemy:FindFirstChild("HumanoidRootPart")
+						if humanoid and root and humanoid.Health > 0 and string.find(string.lower(enemy.Name), "golem", 1, true) then
+							target = root
+							break
+						end
+					end
+				end
+				if target then
+					moveTo(target.CFrame * CFrame.new(0, 18, 0))
+					selectedAttack()
+				end
+			end
+		end
+	end)
+
+	task.spawn(function()
+		while task.wait(0.3) do
+			if Options.VolcanoCollectBone.Value then
+				local island = getIsland()
+				local bone = island and island:FindFirstChild("DinoBone", true)
+				if bone and bone:IsA("BasePart") then moveTo(bone.CFrame) end
+			end
+			if Options.VolcanoCollectEgg.Value then
+				local island = getIsland()
+				local eggs = island and island:FindFirstChild("SpawnedDragonEggs", true)
+				local egg = eggs and eggs:GetChildren()[1]
+				local part = egg and (egg:IsA("BasePart") and egg or egg.PrimaryPart or egg:FindFirstChildWhichIsA("BasePart", true))
+				if part and moveTo(part.CFrame) then
+					local prompt = egg:FindFirstChildWhichIsA("ProximityPrompt", true)
+					if prompt and fireproximityprompt then
+						pcall(fireproximityprompt, prompt)
+					else
+						pcall(pressKey, "E")
+					end
+				end
+			end
+		end
+	end)
+
+	for _, id in ipairs({"VolcanoFlyTrialDoor", "VolcanoFlyIsland", "VolcanoDefend"}) do
+		Options[id]:OnChanged(function(value)
+			if not value then stopVolcanoMovement() end
+		end)
+	end
+end
+
 Window:SelectTab(1)
 
 Fluent:Notify({
