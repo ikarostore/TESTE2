@@ -100,17 +100,7 @@ local SeaConfig = {
     BoatSpeed = 330,
     AutoDodgeEnabled = true,
     HeartDestination = "Tiki",
-    AutoDracoTorch = true,
-    ScrollCraft = {
-        AutoCraft = false,
-        Interval = 8,
-        Selected = {
-            CommonScroll = false,
-            RareScroll = false,
-            LegendaryScroll = false,
-            MythicalScroll = false
-        }
-    }
+    AutoDracoTorch = true
 }
 
 local SeaNPCPositions = {
@@ -431,7 +421,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.8 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.9 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -591,7 +581,6 @@ end
 
 local HuntPage = NewPage("Hunt")
 local SkillsPage = NewPage("Skills")
-NewPage("Scrolls")
 
 local function ShowPage(name)
     for pageName, page in pairs(Pages) do
@@ -636,7 +625,6 @@ end
 
 NewTab("Hunt", "Tab Setup Hunt Leviathan", 8)
 NewTab("Skills", "Setting Hold\nand Select Skill", 54)
-NewTab("Scrolls", "Craft Scrolls", 100)
 
 -- =========================================================
 -- UI HELPERS
@@ -4773,108 +4761,6 @@ for _, key in ipairs({"Z","X","C","V","F"}) do
 end
 
 -- =========================================================
--- CRAFT SCROLLS PAGE
--- =========================================================
-
-task.spawn(function()
-    local scrolls = {
-        {Id = "CommonScroll", Label = "Common Scroll"},
-        {Id = "RareScroll", Label = "Rare Scroll"},
-        {Id = "LegendaryScroll", Label = "Legendary Scroll"},
-        {Id = "MythicalScroll", Label = "Mythical Scroll"}
-    }
-    local craftBusy = false
-    SectionTitle(Pages.Scrolls, "Craft Scrolls")
-    local statusRow = Row(Pages.Scrolls, 58)
-    local statusLabel = RowLabel(statusRow, "Status: aguardando seleção.")
-    statusLabel.Size = UDim2.new(1, -20, 1, 0)
-
-    local function SetCraftStatus(text)
-        statusLabel.Text = "Status: " .. tostring(text)
-    end
-
-    local function FormatCraftResult(result)
-        if result == nil then
-            return "pedido enviado"
-        end
-        if type(result) == "table" then
-            local ok, encoded = pcall(function()
-                return HttpService:JSONEncode(result)
-            end)
-            if ok then return encoded end
-        end
-        return tostring(result)
-    end
-
-    local function CraftSelectedScrolls(source)
-        if craftBusy then
-            SetCraftStatus("craft já está em andamento")
-            return
-        end
-
-        craftBusy = true
-        local selectedCount = 0
-        local results = {}
-        local remote = ReplicatedStorage:FindFirstChild("Remotes")
-        remote = remote and remote:FindFirstChild("CommF_")
-
-        if not remote then
-            SetCraftStatus("CommF_ não encontrado")
-            craftBusy = false
-            return
-        end
-
-        for _, scroll in ipairs(scrolls) do
-            if SeaConfig.ScrollCraft.Selected[scroll.Id] then
-                selectedCount = selectedCount + 1
-                local ok, result = pcall(function()
-                    return remote:InvokeServer("CraftItem", "Craft", scroll.Id)
-                end)
-                if ok then
-                    table.insert(results, scroll.Label .. ": " .. FormatCraftResult(result))
-                else
-                    table.insert(results, scroll.Label .. ": erro - " .. tostring(result))
-                end
-                task.wait(0.45)
-            end
-        end
-
-        if selectedCount == 0 then
-            SetCraftStatus("marque pelo menos um scroll")
-        else
-            SetCraftStatus((source or "Manual") .. " | " .. table.concat(results, " | "))
-        end
-        craftBusy = false
-    end
-
-    for _, scroll in ipairs(scrolls) do
-        ToggleRow(Pages.Scrolls, "Craft " .. scroll.Label, SeaConfig.ScrollCraft.Selected[scroll.Id], function(value)
-            SeaConfig.ScrollCraft.Selected[scroll.Id] = value
-            SaveConfig()
-        end)
-    end
-
-    ToggleRow(Pages.Scrolls, "Auto Craft selecionados", SeaConfig.ScrollCraft.AutoCraft, function(value)
-        SeaConfig.ScrollCraft.AutoCraft = value
-        SaveConfig()
-        SetCraftStatus(value and "auto craft ativado" or "auto craft desativado")
-    end)
-
-    SimpleButton(Pages.Scrolls, "Craft selecionados agora", function()
-        task.spawn(CraftSelectedScrolls, "Manual")
-    end)
-
-    task.spawn(function()
-        while Gui and Gui.Parent do
-            if SeaConfig.ScrollCraft.AutoCraft then
-                CraftSelectedScrolls("Auto")
-            end
-            task.wait(math.clamp(tonumber(SeaConfig.ScrollCraft.Interval) or 8, 3, 60))
-        end
-    end)
-end)
-
--- =========================================================
 -- AUTO SPY CHECK LOOP v2
 -- =========================================================
 
@@ -4947,5 +4833,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.8 carregado.")
+print("IKARO Leviathan v4.9 carregado.")
 
