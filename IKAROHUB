@@ -269,6 +269,7 @@ do
 	Shop:AddSection("Fighting Shop")
 	local selectedStyles = {}
 	local lastMissingNotice = {}
+	local teleportToShopNpc
 	local styleDefinitions = {
 		{
 			id = "FightingBlackLeg", title = "Black Leg", tool = "Dark Step", sea = "First/Second/Third Sea",
@@ -423,47 +424,26 @@ do
 						Options[style.id]:SetValue(false)
 						notify("Fighting Shop", style.title .. " ja esta disponivel.")
 					else
-						local route = style.fallbackBySea and style.fallbackBySea[CurrentSea]
-						if not route then
+						local npcName = style.npcs[1]
+						local arrived = teleportToShopNpc and teleportToShopNpc(npcName)
+						if not arrived then
 							local now = os.clock()
 							if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
 								lastMissingNotice[style.id] = now
-								notify(style.title, "Rota indisponivel no " .. SeaNames[CurrentSea] .. ". Necessario: " .. style.sea)
+								notify(style.title, "NPC Teleport ainda nao encontrou " .. npcName .. " no " .. SeaNames[CurrentSea] .. ".")
 							end
 						else
-							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
-							local root = character:WaitForChild("HumanoidRootPart")
-							local approach = style.approachBySea and style.approachBySea[CurrentSea]
-							if approach and (root.Position - approach.Position).Magnitude > 45 then
-								pcall(tweenTo, approach)
-								task.wait(0.25)
-							end
-							if (root.Position - route.Position).Magnitude > 10 then
-								pcall(tweenTo, route)
-								task.wait(0.75)
-							end
-
-							-- A rota fixa carrega a regiao do treinador. Se o modelo estiver
-							-- disponivel, aproxima no ponto exato; a compra nao depende disso.
-							local trainerRoot = findRoot(findTrainer(style))
-							if trainerRoot and trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude > 10 then
-								pcall(tweenTo, trainerRoot.CFrame * CFrame.new(0, 0, 4))
-								task.wait(0.25)
-							end
-
-							if (root.Position - route.Position).Magnitude <= 40 or (trainerRoot and trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude <= 15) then
-								style.buy()
-								task.wait(1)
-								if ownsStyle(style) then
-									selectedStyles[style.id] = false
-									Options[style.id]:SetValue(false)
-									notify("Fighting Shop", style.title .. " comprado com sucesso.")
-								else
-									local now = os.clock()
-									if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
-										lastMissingNotice[style.id] = now
-										notify(style.title, "Compra enviada. Confira dinheiro, fragmentos e requisitos do estilo.")
-									end
+							style.buy()
+							task.wait(1)
+							if ownsStyle(style) then
+								selectedStyles[style.id] = false
+								Options[style.id]:SetValue(false)
+								notify("Fighting Shop", style.title .. " comprado com sucesso.")
+							else
+								local now = os.clock()
+								if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
+									lastMissingNotice[style.id] = now
+									notify(style.title, "Compra enviada no NPC. Confira dinheiro, fragmentos e requisitos.")
 								end
 							end
 						end
@@ -551,6 +531,19 @@ do
 			end
 		end
 	end
+	teleportToShopNpc = function(npcName)
+		mergeLoadedNPCs()
+		local destination = currentNpcPositions[npcName]
+		if not destination then return false end
+		local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		local root = character:WaitForChild("HumanoidRootPart")
+		if (root.Position - destination.Position).Magnitude > 8 then
+			local moved = false
+			pcall(function() moved = tweenTo(destination) end)
+			if not moved then return false end
+		end
+		return (root.Position - destination.Position).Magnitude <= 12
+	end
 	mergeLoadedNPCs()
 	local npcNames = {}
 	for name in pairs(currentNpcPositions) do
@@ -598,11 +591,7 @@ do
 					Options.TeleportShopNPC:SetValue(false)
 					notify("NPC Teleport", "Sea nao reconhecido pelo game.PlaceId: " .. tostring(game.PlaceId))
 				else
-					local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
-					local root = character:WaitForChild("HumanoidRootPart")
-					if (root.Position - destination.Position).Magnitude > 8 then
-						pcall(tweenTo, destination)
-					else
+					if teleportToShopNpc(selectedNpc) then
 						Options.TeleportShopNPC:SetValue(false)
 						notify("NPC Teleport", "Chegou em " .. selectedNpc)
 					end
