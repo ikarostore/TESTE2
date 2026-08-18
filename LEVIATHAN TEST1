@@ -432,7 +432,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.9 FIXED EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v5.0 FIXED EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2242,7 +2242,7 @@ end
 -- Rotina preservada do Banana para o Terrorshark. Ela não usa o preparo de
 -- EquipEvent do fallback comum: equipa, reúne Heads em até 60 studs e envia o
 -- par RegisterAttack/RegisterHit imediatamente a cada ciclo.
-local function BananaTerrorSharkAttack(eventModel)
+local function BananaSeaCreatureAttack(eventModel)
     EnsureSeaCombatHaki()
     local tool = EquipSeaCombatType("Melee")
     if not tool then return false end
@@ -2718,6 +2718,21 @@ local function GetModelTargetPart(model)
     return bestPart
 end
 
+-- Ships no Banana não recebem RegisterHit: o personagem mira o Engine e usa
+-- somente o ciclo de skills. Mantemos essa separação para não empurrar o barco
+-- com ataques básicos.
+local function BananaShipAttack(eventModel)
+    if not eventModel then return false end
+    EnsureSeaCombatHaki()
+    local engine = eventModel:FindFirstChild("Engine", true)
+        or eventModel:FindFirstChild("VehicleSeat", true)
+        or GetModelTargetPart(eventModel)
+    if not engine or not engine:IsA("BasePart") then return false end
+    AimAtSeaTarget(engine)
+    UseConfiguredSeaSkills(engine)
+    return true
+end
+
 local function IsEventAlive(model)
     if not model or not model.Parent then return false end
 
@@ -3071,12 +3086,16 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
 
                 if eventKey == "Terrorshark" then
                     -- Método literal do Banana + skills configuradas.
-                    BananaTerrorSharkAttack(eventModel)
+                    BananaSeaCreatureAttack(eventModel)
                     if not EscapeActive then
                         UseConfiguredSeaSkills(target)
                     end
                 elseif useBasicClick then
-                    BMFastAttack(target, eventModel, eventKey)
+                    -- Mesmo AttackNoCoolDown do Banana para Shark/Piranha:
+                    -- Head, raio 60 e pacote moderno sem atraso de equip.
+                    BananaSeaCreatureAttack(eventModel)
+                elseif isShipEvent then
+                    BananaShipAttack(eventModel)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
@@ -5058,4 +5077,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.9 FIXED carregado.")
+print("IKARO Leviathan v5.0 FIXED carregado.")
