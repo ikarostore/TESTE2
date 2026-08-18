@@ -17,6 +17,11 @@ pcall(function()
         "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/navigation.lua"
     ))()
 end)
+pcall(function()
+    getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=56"
+    ))()
+end)
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -414,7 +419,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v5.5 MODULAR EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v5.6 BANANA SEA EVENTS"
     title.Parent = Top
 end
 
@@ -2981,6 +2986,18 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     ForceExitBoatForCombat()
     EnsureSeaCombatHaki()
 
+    -- Controlador Banana substitui integralmente o foco/hover anterior.
+    local bananaSea = getgenv().IKARO_BANANA_SEA_COMBAT
+    if bananaSea then
+        bananaSea.Combat(eventKey, eventModel, {
+            Running = function() return Running and not EscapeActive end,
+            UseSkills = UseConfiguredSeaSkills,
+            TargetPart = GetModelTargetPart
+        })
+        SeaHuntState.CurrentEvent = nil
+        return
+    end
+
     local stopFocus = StartSeaEventFocus(eventKey, eventModel, useBasicClick)
     if not stopFocus then
         SeaHuntState.CurrentEvent = nil
@@ -5024,4 +5041,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v5.5 MODULAR carregado.")
+print("IKARO Leviathan v5.6 BANANA SEA EVENTS carregado.")
