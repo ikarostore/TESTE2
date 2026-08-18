@@ -99,8 +99,6 @@ local SeaConfig = {
     TargetSeaLevel = "6",
     BoatSpeed = 330,
     AutoDodgeEnabled = true,
-    AutoObservation = true,
-    WaterSafeClearance = 18,
     HeartDestination = "Tiki",
     AutoDracoTorch = true,
     ScrollCraft = {
@@ -433,7 +431,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.7 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.8 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -765,19 +763,6 @@ local function DestroyWaterPlatform()
     end
 end
 
-SeaHuntState.GetWaterSurfaceY = function()
-    local map = workspace:FindFirstChild("Map")
-    local waterPlane = map and map:FindFirstChild("WaterBase-Plane")
-    if waterPlane and waterPlane:IsA("BasePart") then
-        WATER_Y = waterPlane.Position.Y + waterPlane.Size.Y * 0.5
-        return WATER_Y
-    end
-
-    -- Fallback para servidores onde o plano replica atrasado. Terrain não
-    -- expõe um Y único; preservamos a última superfície válida detectada.
-    return WATER_Y
-end
-
 local function EnsureWaterPlatform()
     if not WaterWalkEnabled or not HRP or not HRP.Parent then
         DestroyWaterPlatform()
@@ -795,8 +780,7 @@ local function EnsureWaterPlatform()
         WaterPlatform.Parent = workspace
     end
 
-    local surfaceY = SeaHuntState.GetWaterSurfaceY()
-    WaterPlatform.CFrame = CFrame.new(HRP.Position.X, surfaceY, HRP.Position.Z)
+    WaterPlatform.CFrame = CFrame.new(HRP.Position.X, WATER_Y, HRP.Position.Z)
 end
 
 task.spawn(function()
@@ -807,26 +791,6 @@ task.spawn(function()
             DestroyWaterPlatform()
         end
         task.wait(0.1)
-    end
-end)
-
--- Proteção da superfície usada pelos hubs de referência. Só corrige o
--- personagem quando ele está livre e realmente abaixo da linha d'água.
-task.spawn(function()
-    while Gui and Gui.Parent do
-        if Running and HRP and Humanoid and Humanoid.Health > 0
-        and not Humanoid.SeatPart and not Humanoid.Sit then
-            local surfaceY = SeaHuntState.GetWaterSurfaceY()
-            if HRP.Position.Y < surfaceY + 2 then
-                local safeY = surfaceY + math.max(12, tonumber(SeaConfig.WaterSafeClearance) or 18)
-                pcall(function()
-                    HRP.CFrame = CFrame.new(HRP.Position.X, safeY, HRP.Position.Z)
-                        * (HRP.CFrame - HRP.Position)
-                    HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                end)
-            end
-        end
-        task.wait(0.12)
     end
 end)
 
@@ -2915,12 +2879,6 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
                 target.Position.Z + combatOffset.Z
             )
             or target.Position + Vector3.new(0, height, 0)
-        local minimumSafeY = SeaHuntState.GetWaterSurfaceY()
-            + math.max(12, tonumber(SeaConfig.WaterSafeClearance) or 18)
-        if desired.Y < minimumSafeY then
-            desired = Vector3.new(desired.X, minimumSafeY, desired.Z)
-            if stableHoverY then stableHoverY = minimumSafeY end
-        end
         local delta = desired - HRP.Position
         local distance = delta.Magnitude
 
@@ -4695,11 +4653,6 @@ ToggleRow(SkillsPage, "Auto Dodge Sea Bosses", SeaConfig.AutoDodgeEnabled, funct
     SaveConfig()
 end)
 
-ToggleRow(SkillsPage, "Auto Observation Haki", SeaConfig.AutoObservation, function(v)
-    SeaConfig.AutoObservation = v
-    SaveConfig()
-end)
-
 do
     ToggleRow(SkillsPage, "Use Melee Skills", CombatConfig.Melee.Enabled ~= false, function(v)
         CombatConfig.Melee.Enabled = v
@@ -4994,26 +4947,5 @@ task.spawn(function()
     end
 end)
 
--- Auto Observation do dump Nox/Banana: a vinheta ImageLabel em ScreenGui
--- indica que o Instinct está ativo. Se desaparecer, pressiona E novamente.
-task.spawn(function()
-    local virtualUser = game:GetService("VirtualUser")
-    while Gui and Gui.Parent do
-        if SeaConfig.AutoObservation and Character and Humanoid and Humanoid.Health > 0 then
-            local screenGui = PlayerGui:FindFirstChild("ScreenGui")
-            local observationActive = screenGui and screenGui:FindFirstChild("ImageLabel")
-            if not observationActive then
-                pcall(function()
-                    virtualUser:CaptureController()
-                    virtualUser:SetKeyDown("0x65")
-                    task.wait(0.05)
-                    virtualUser:SetKeyUp("0x65")
-                end)
-            end
-        end
-        task.wait(1)
-    end
-end)
-
-print("IKARO Leviathan v4.7 carregado.")
+print("IKARO Leviathan v4.8 carregado.")
 
