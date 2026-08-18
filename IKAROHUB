@@ -334,6 +334,7 @@ do
 			id = "FightingGodhuman", title = "Godhuman", tool = "Godhuman", sea = "Third Sea",
 			npcs = {"Ancient Monk", "Godhuman Teacher"},
 			fallbackBySea = {[3] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625)},
+			strictRoute = true,
 			buy = function() return invoke("BuyGodhuman") end
 		},
 		{
@@ -390,6 +391,19 @@ do
 			Default = false
 		})
 		toggle:OnChanged(function(value)
+			if value then
+				-- Fighting Shop executa uma compra por vez. Isso impede um estilo
+				-- anteriormente marcado de sequestrar a rota do estilo mais recente.
+				for _, otherStyle in ipairs(styleDefinitions) do
+					if otherStyle.id ~= styleDefinition.id and selectedStyles[otherStyle.id] then
+						selectedStyles[otherStyle.id] = false
+						if Options[otherStyle.id] then
+							Options[otherStyle.id]:SetValue(false)
+						end
+					end
+				end
+				stopShopMovement()
+			end
 			selectedStyles[styleDefinition.id] = value
 			if not value then
 				stopShopMovement()
@@ -424,7 +438,7 @@ do
 
 							-- A rota fixa carrega a regiao do treinador. Se o modelo estiver
 							-- disponivel, aproxima no ponto exato; a compra nao depende disso.
-							local trainerRoot = findRoot(findTrainer(style))
+							local trainerRoot = not style.strictRoute and findRoot(findTrainer(style)) or nil
 							if trainerRoot and trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude > 10 then
 								pcall(tweenTo, trainerRoot.CFrame * CFrame.new(0, 0, 4))
 								task.wait(0.25)
