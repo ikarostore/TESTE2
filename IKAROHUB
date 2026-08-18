@@ -1956,6 +1956,7 @@ _G.Settings = {
 	Race = {
 		["Auto Race V2"] = false,
 		["Auto Race V3"] = false,
+		["Auto Activate V4"] = false,
 		["Selected PlaceV4"] = nil,
 		["Teleport To PlaceV4"] = false,
 		["Auto Buy Gear"] = false,
@@ -11710,43 +11711,61 @@ if World2 then
 		end);
 	end);
 end;
-if World3 then
-	RaceV4Tab:Seperator("Race V4");
-	local PlaceV4List = {
-		"Top Of GreatTree",
-		"Timple Of Time",
-		"Lever Pull",
-		"Acient One"
+do
+	RaceV4Tab:Seperator("Race V4 - Banana");
+	local TempleEntrance = Vector3.new(28286.35546875, 14895.3017578125, 102.62469482421875);
+	local LeverPosition = CFrame.new(28575.181640625, 14936.6279296875, 72.31636810302734);
+	local AncientOnePosition = CFrame.new(28981.552734375, 14888.4267578125, -120.245849609375);
+	local RaceDoorPositions = {
+		Human = CFrame.new(29221.822265625, 14890.9755859375, -205.99114990234375),
+		Skypiea = CFrame.new(28960.158203125, 14919.6240234375, 235.03948974609375),
+		Fishman = CFrame.new(28231.17578125, 14890.9755859375, -211.64173889160156),
+		Cyborg = CFrame.new(28502.681640625, 14895.9755859375, -423.7279357910156),
+		Ghoul = CFrame.new(28674.244140625, 14890.6767578125, 445.4310607910156),
+		Mink = CFrame.new(29012.341796875, 14890.9755859375, -380.1492614746094)
 	};
-	RaceV4Tab:Dropdown("Choose Place", PlaceV4List, _G.Settings.Race["Selected PlaceV4"], function(value)
-		_G.Settings.Race["Selected PlaceV4"] = value;
-		(getgenv()).SaveSetting();
+	local function EnterTemple()
+		(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("requestEntrance", TempleEntrance);
+	end;
+	RaceV4Tab:Button("Temple Of Time", function()
+		EnterTemple();
 	end);
-	RaceV4Tab:Toggle("Teleport To Selected Place", _G.Settings.Race["Teleport To PlaceV4"], false, function(value)
-		_G.Settings.Race["Teleport To PlaceV4"] = value;
-		StopTween(_G.Settings.Race["Teleport To PlaceV4"]);
+	RaceV4Tab:Button("Auto Pull Lever", function()
+		EnterTemple();
+		wait(0.5);
+		topos(LeverPosition);
+	end);
+	RaceV4Tab:Button("TP Buy Gear NPC", function()
+		EnterTemple();
+		wait(0.5);
+		topos(AncientOnePosition);
+	end);
+	RaceV4Tab:Button("Race Door", function()
+		EnterTemple();
+		wait(0.5);
+		local race = tostring((game:GetService("Players")).LocalPlayer.Data.Race.Value);
+		local destination = RaceDoorPositions[race];
+		if destination then
+			topos(destination);
+		end;
+	end);
+	RaceV4Tab:Toggle("Auto Turn On Race V4", _G.Settings.Race["Auto Activate V4"], false, function(value)
+		_G.Settings.Race["Auto Activate V4"] = value;
 		(getgenv()).SaveSetting();
 	end);
 	spawn(function()
-		while wait(0.2) do
-			if _G.Settings.Race["Teleport To PlaceV4"] then
-				pcall(function()
-					if _G.Settings.Race["Selected PlaceV4"] == "Top Of GreatTree" then
-						topos(CFrame.new(2947.556884765625, 2281.630615234375, -7213.54931640625));
-					elseif _G.Settings.Race["Selected PlaceV4"] == "Timple Of Time" then
-						(game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-					elseif _G.Settings.Race["Selected PlaceV4"] == "Lever Pull" then
-						local LeverPullPos = CFrame.new(28575.181640625, 14936.6279296875, 72.31636810302734);
-						if (LeverPullPos.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude >= 1000 then
-							(game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-						else
-							topos(LeverPullPos);
-						end;
-					elseif _G.Settings.Race["Selected PlaceV4"] == "Acient One" then
-						topos(CFrame.new(28981.552734375, 14888.4267578125, -120.245849609375));
+		while wait(0.5) do
+			pcall(function()
+				if _G.Settings.Race["Auto Activate V4"] then
+					local character = (game:GetService("Players")).LocalPlayer.Character;
+					local transformed = character and character:FindFirstChild("RaceTransformed");
+					if not transformed or transformed.Value == false then
+						(game:GetService("VirtualInputManager")):SendKeyEvent(true, "Y", false, game);
+						wait(0.1);
+						(game:GetService("VirtualInputManager")):SendKeyEvent(false, "Y", false, game);
 					end;
-				end);
-			end;
+				end;
+			end);
 		end;
 	end);
 	RaceV4Tab:Toggle("Auto Buy Gear", _G.Settings.Race["Auto Buy Gear"], false, function(value)
@@ -11868,31 +11887,6 @@ if World3 then
 	end);
 	RaceV4Tab:Toggle("Disabled Inf Stairs", false, false, function(value)
 		game.Players.LocalPlayer.Character.InfiniteStairs.Disabled = value;
-	end);
-	RaceV4Tab:Button("Teleport To Race Door", function()
-		(Game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-		wait(0.1);
-		(Game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-		wait(0.1);
-		(Game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-		wait(0.1);
-		(Game:GetService("Players")).LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(28286.35546875, 14895.3017578125, 102.62469482421875);
-		wait(0.5);
-		if (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Human" then
-			topos(CFrame.new(29221.822265625, 14890.9755859375, -205.99114990234375));
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Skypiea" then
-			topos(CFrame.new(28960.158203125, 14919.6240234375, 235.03948974609375));
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Fishman" then
-			topos(CFrame.new(28231.17578125, 14890.9755859375, -211.64173889160156));
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Cyborg" then
-			topos(CFrame.new(28502.681640625, 14895.9755859375, -423.7279357910156));
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Ghoul" then
-			topos(CFrame.new(28674.244140625, 14890.6767578125, 445.4310607910156));
-		elseif (game:GetService("Players")).LocalPlayer.Data.Race.Value == "Mink" then
-			topos(CFrame.new(29012.341796875, 14890.9755859375, -380.1492614746094));
-		end;
-		wait(2);
-		StopTween(false);
 	end);
 	RaceV4Tab:Seperator("Auto Complete Trials");
 	RaceV4Tab:Button("Buy Ancient One Quest", function()
