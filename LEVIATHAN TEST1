@@ -432,7 +432,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.8 FIXED EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.9 FIXED EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2239,6 +2239,51 @@ local function GetBMModernRemotes()
     return SeaHuntState.BMRegisterAttack, SeaHuntState.BMRegisterHit
 end
 
+-- Rotina preservada do Banana para o Terrorshark. Ela não usa o preparo de
+-- EquipEvent do fallback comum: equipa, reúne Heads em até 60 studs e envia o
+-- par RegisterAttack/RegisterHit imediatamente a cada ciclo.
+local function BananaTerrorSharkAttack(eventModel)
+    EnsureSeaCombatHaki()
+    local tool = EquipSeaCombatType("Melee")
+    if not tool then return false end
+
+    local registerAttack, registerHit = GetBMModernRemotes()
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not registerAttack or not registerHit or not enemies or not HRP then
+        return false
+    end
+
+    local targets = {}
+    local firstHead = nil
+    for _, enemy in ipairs(enemies:GetChildren()) do
+        local humanoid = enemy:FindFirstChildOfClass("Humanoid")
+        local head = enemy:FindFirstChild("Head")
+        if not enemy:GetAttribute("IsBoat")
+        and humanoid and humanoid.Health > 0
+        and head and (HRP.Position - head.Position).Magnitude <= 60
+        and enemy ~= Character then
+            table.insert(targets, {enemy, head})
+            firstHead = head
+        end
+    end
+
+    if eventModel and eventModel.Parent then
+        local root = eventModel:FindFirstChild("HumanoidRootPart")
+        local humanoid = eventModel:FindFirstChildOfClass("Humanoid")
+        if root then
+            root.CanCollide = false
+            root.Size = Vector3.new(60, 60, 60)
+        end
+        if humanoid then humanoid.WalkSpeed = 0 end
+    end
+
+    if not firstHead or #targets == 0 then return false end
+    return pcall(function()
+        registerAttack:FireServer(1e-9)
+        registerHit:FireServer(firstHead, targets)
+    end)
+end
+
 local function BMFastAttack(target, eventModel, eventKey)
     if not target then return false end
 
@@ -3025,9 +3070,8 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if eventKey == "Terrorshark" then
-                    -- Híbrido Banana: Fast Attack moderno para dano constante
-                    -- e skills configuradas para atravessar as resistências.
-                    BMFastAttack(target, eventModel, eventKey)
+                    -- Método literal do Banana + skills configuradas.
+                    BananaTerrorSharkAttack(eventModel)
                     if not EscapeActive then
                         UseConfiguredSeaSkills(target)
                     end
@@ -5014,4 +5058,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.8 FIXED carregado.")
+print("IKARO Leviathan v4.9 FIXED carregado.")
