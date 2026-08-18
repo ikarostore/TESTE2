@@ -406,7 +406,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.1 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.2 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -473,114 +473,67 @@ do
     end)
 end
 
--- Aguarda a tela Pick a Side existir de verdade. Não chama SetTeam durante
--- Loading Data e não altera o tamanho do botão, pois ambos bloqueavam a
--- inicialização do perfil em alguns servidores.
+-- Auto Marines v4.2: reproduz o fluxo dos hubs de referência. Character
+-- pode existir atrás da tela; somente LocalPlayer.Team confirma a escolha.
 task.spawn(function()
     local teamVIM = nil
     pcall(function() teamVIM = game:GetService("VirtualInputManager") end)
     local deadline = os.clock() + 90
-    local marineVisibleSince = nil
-    local nextRemoteAttempt = 0
-    local invokePending = false
+    local nextAttempt = 0
 
     while Gui and Gui.Parent and os.clock() < deadline do
-        local spawnedCharacter = LocalPlayer.Character
-        local spawnedHumanoid = spawnedCharacter
-            and spawnedCharacter:FindFirstChildOfClass("Humanoid")
-        local spawnedRoot = spawnedCharacter
-            and spawnedCharacter:FindFirstChild("HumanoidRootPart")
-
-        if spawnedHumanoid and spawnedHumanoid.Health > 0 and spawnedRoot then
+        if LocalPlayer.Team then
             return
         end
 
         local mainGui = PlayerGui:FindFirstChild("Main")
         local chooseTeam = mainGui and mainGui:FindFirstChild("ChooseTeam", true)
-        local marineOption = chooseTeam and chooseTeam:FindFirstChild("Marines", true)
-        local currentTeam = LocalPlayer.Team and string.lower(LocalPlayer.Team.Name) or ""
-
-        if string.find(currentTeam, "marine", 1, true) then
-            -- O servidor já aceitou. Não repete chamadas enquanto aguarda o spawn.
-            task.wait(0.25)
-            continue
-        end
-
         local chooseVisible = chooseTeam
             and (not chooseTeam:IsA("GuiObject") or chooseTeam.Visible)
 
-        -- Em clientes PT-BR o texto é MARINHEIROS e o nome interno pode não
-        -- ser Marines. Procura tanto Name quanto Text e sobe até o GuiButton.
-        if chooseVisible and not marineOption then
-            for _, obj in ipairs(chooseTeam:GetDescendants()) do
-                local name = string.lower(obj.Name)
-                local text = ""
-                pcall(function() text = string.lower(obj.Text) end)
-                if string.find(name, "marin", 1, true)
-                or string.find(text, "marin", 1, true) then
-                    marineOption = obj
-                    break
-                end
-            end
-        end
+        if chooseVisible and os.clock() >= nextAttempt then
+            nextAttempt = os.clock() + 1
+            local marineButton = nil
+            pcall(function()
+                marineButton = chooseTeam.Container.Marines.Frame.ViewportFrame.TextButton
+            end)
 
-        if chooseVisible then
-            marineVisibleSince = marineVisibleSince or os.clock()
-            local marineButton = marineOption and (
-                marineOption:IsA("GuiButton") and marineOption
-                or marineOption:FindFirstChildWhichIsA("GuiButton", true)
-            )
-
-            if marineOption and not marineButton then
-                local ancestor = marineOption.Parent
-                while ancestor and ancestor ~= chooseTeam do
-                    if ancestor:IsA("GuiButton") then
-                        marineButton = ancestor
-                        break
+            -- ThunderZ: executa os callbacks reais do Activated do botão.
+            local connectionCalled = false
+            if marineButton and type(getconnections) == "function" then
+                pcall(function()
+                    for _, connection in pairs(getconnections(marineButton.Activated)) do
+                        local callback = connection.Function
+                        if type(callback) == "function" then
+                            connectionCalled = true
+                            pcall(callback)
+                        end
                     end
-                    ancestor = ancestor.Parent
-                end
-            end
-
-            if marineButton and marineButton.Visible
-            and marineButton.AbsoluteSize.X > 5 and marineButton.AbsoluteSize.Y > 5 then
-                local activated = false
-                if type(firesignal) == "function" then
-                    activated = pcall(function() firesignal(marineButton.Activated) end)
-                end
-                if not activated and teamVIM then
-                    pcall(function()
-                        local center = marineButton.AbsolutePosition + marineButton.AbsoluteSize / 2
-                        teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
-                        task.wait(0.08)
-                        teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
-                    end)
-                end
-
-                task.wait(1.5)
-            else
-                task.wait(0.25)
-            end
-
-            -- O remote depende da tela pronta, não do nome localizado do botão.
-            if os.clock() - marineVisibleSince >= 1
-            and os.clock() >= nextRemoteAttempt
-            and not invokePending then
-                invokePending = true
-                nextRemoteAttempt = os.clock() + 3
-                task.spawn(function()
-                    pcall(function()
-                        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                        local comm = remotes and remotes:FindFirstChild("CommF_")
-                        if comm then comm:InvokeServer("SetTeam", "Marines") end
-                    end)
-                    invokePending = false
                 end)
             end
-        else
-            marineVisibleSince = nil
-            task.wait(0.5)
+
+            if marineButton and not connectionCalled and type(firesignal) == "function" then
+                pcall(function() firesignal(marineButton.Activated) end)
+            end
+
+            if marineButton and not connectionCalled and teamVIM then
+                pcall(function()
+                    local center = marineButton.AbsolutePosition + marineButton.AbsoluteSize / 2
+                    teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
+                    task.wait(0.08)
+                    teamVIM:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
+                end)
+            end
+
+            -- MeyyHub/Matsune: repete SetTeam até LocalPlayer.Team existir.
+            pcall(function()
+                ReplicatedStorage:WaitForChild("Remotes")
+                    :WaitForChild("CommF_")
+                    :InvokeServer("SetTeam", "Marines")
+            end)
         end
+
+        task.wait(0.1)
     end
 end)
 
@@ -4517,5 +4470,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.1 carregado.")
+print("IKARO Leviathan v4.2 carregado.")
 
