@@ -273,21 +273,25 @@ do
 		{
 			id = "FightingBlackLeg", title = "Black Leg", tool = "Dark Step", sea = "First/Second/Third Sea",
 			npcs = {"Dark Step Teacher", "Dark Step"},
+			fallbackBySea = {[1] = CFrame.new(-987.873047, 13.7778397, 3989.4978), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function() return invoke("BuyBlackLeg") end
 		},
 		{
 			id = "FightingFishmanKarate", title = "Fishman Karate", tool = "Water Kung Fu", sea = "First/Second/Third Sea",
 			npcs = {"Water Kung Fu Teacher", "Water Kung Fu"},
+			fallbackBySea = {[1] = CFrame.new(61581.8047, 18.8965912, 987.832703), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function() return invoke("BuyFishmanKarate") end
 		},
 		{
 			id = "FightingElectro", title = "Electro", tool = "Electric", sea = "First Sea",
 			npcs = {"Mad Scientist"},
+			fallbackBySea = {[1] = CFrame.new(-5389.49561, 13.283, -2149.80151), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function() return invoke("BuyElectro") end
 		},
 		{
 			id = "FightingDragonBreath", title = "Dragon Breath", tool = "Dragon Breath", sea = "Second/Third Sea",
 			npcs = {"Sabi"},
+			fallbackBySea = {[2] = CFrame.new(703.372986, 186.985519, 654.522034), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function()
 				invoke("BlackbeardReward", "DragonClaw", "1")
 				return invoke("BlackbeardReward", "DragonClaw", "2")
@@ -296,16 +300,19 @@ do
 		{
 			id = "FightingSuperhuman", title = "Superhuman", tool = "Superhuman", sea = "Second/Third Sea",
 			npcs = {"Martial Arts Master"},
+			fallbackBySea = {[2] = CFrame.new(-3350, 282, -10527), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function() return invoke("BuySuperhuman") end
 		},
 		{
 			id = "FightingDeathStep", title = "Death Step", tool = "Death Step", sea = "Second/Third Sea",
 			npcs = {"Phoeyu, the Reformed", "Phoeyu"},
+			fallbackBySea = {[2] = CFrame.new(5400, 28, -6236), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function() return invoke("BuyDeathStep") end
 		},
 		{
 			id = "FightingSharkman", title = "Sharkman Karate", tool = "Sharkman Karate", sea = "Second/Third Sea",
-			npcs = {"Daigrock, the Sharkman", "Daigrock"},
+			npcs = {"Sharkman Teacher", "Daigrock, the Sharkman", "Daigrock"},
+			fallbackBySea = {[2] = CFrame.new(-3043, 239, -10191), [3] = CFrame.new(-5074, 315, -2991)},
 			buy = function()
 				invoke("BuySharkmanKarate", true)
 				return invoke("BuySharkmanKarate")
@@ -314,22 +321,25 @@ do
 		{
 			id = "FightingElectricClaw", title = "Electric Claw", tool = "Electric Claw", sea = "Third Sea",
 			npcs = {"Previous Hero"},
+			fallbackBySea = {[3] = CFrame.new(-10368, 332, -10128)},
 			buy = function() return invoke("BuyElectricClaw") end
 		},
 		{
 			id = "FightingDragonTalon", title = "Dragon Talon", tool = "Dragon Talon", sea = "Third Sea",
 			npcs = {"Uzoth"},
+			fallbackBySea = {[3] = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938)},
 			buy = function() return invoke("BuyDragonTalon") end
 		},
 		{
 			id = "FightingGodhuman", title = "Godhuman", tool = "Godhuman", sea = "Third Sea",
 			npcs = {"Ancient Monk", "Godhuman Teacher"},
-			fallbackCFrame = CFrame.new(-5500, 313, -2800),
+			fallbackBySea = {[3] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625)},
 			buy = function() return invoke("BuyGodhuman") end
 		},
 		{
 			id = "FightingSanguine", title = "Sanguine Art", tool = "Sanguine Art", sea = "Third Sea",
 			npcs = {"Shafi"},
+			fallbackBySea = {[3] = CFrame.new(-16218.6826, 9.08636189, 445.618408)},
 			buy = function() return invoke("BuySanguineArt") end
 		}
 	}
@@ -399,11 +409,12 @@ do
 					else
 						local trainer = findTrainer(style)
 						local trainerRoot = findRoot(trainer)
-						if not trainerRoot and style.fallbackCFrame then
+						local fallbackCFrame = style.fallbackBySea and style.fallbackBySea[CurrentSea]
+						if not trainerRoot and fallbackCFrame then
 							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
 							local root = character:WaitForChild("HumanoidRootPart")
-							if (root.Position - style.fallbackCFrame.Position).Magnitude > 450 then
-								pcall(tweenTo, style.fallbackCFrame)
+							if (root.Position - fallbackCFrame.Position).Magnitude > 450 then
+								pcall(tweenTo, fallbackCFrame)
 								task.wait(1.5)
 								trainer = findTrainer(style)
 								trainerRoot = findRoot(trainer)
@@ -439,7 +450,8 @@ do
 		end
 	end)
 
-	Shop:AddSection("NPC Teleport")
+	local NPCTab = Tabs.LocalPlayer
+	NPCTab:AddSection("NPC Teleport")
 	local npcPositionsBySea = {
 		[1] = {
 			["Random Devil Fruit"] = CFrame.new(-1436.19727, 61.8777695, 4.75247526),
@@ -483,10 +495,39 @@ do
 			["Elite Hunter"] = CFrame.new(-5420, 314, -2828),
 			["Player Hunter"] = CFrame.new(-5559, 314, -2840),
 			["Uzoth"] = CFrame.new(-9785, 852, 6667),
-			["Ancient Monk"] = CFrame.new(-5500, 313, -2800)
+			["Ancient Monk"] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625),
+			["Tacomura"] = CFrame.new(-5074, 315, -2991),
+			["Plokster"] = CFrame.new(-5074, 315, -2991),
+			["Aura Editor"] = CFrame.new(-5074, 315, -2991),
+			["Erin"] = CFrame.new(-5074, 315, -2991),
+			["Mysterious Scientist"] = CFrame.new(-5074, 315, -2991),
+			["Mad Scientist"] = CFrame.new(-5074, 315, -2991),
+			["Phoeyu, the Reformed"] = CFrame.new(-5074, 315, -2991),
+			["Dark Step Teacher"] = CFrame.new(-5074, 315, -2991),
+			["Sharkman Teacher"] = CFrame.new(-5074, 315, -2991),
+			["Water Kung Fu Teacher"] = CFrame.new(-5074, 315, -2991),
+			["Sabi"] = CFrame.new(-5074, 315, -2991),
+			["Martial Arts Master"] = CFrame.new(-5074, 315, -2991),
+			["Boat Dealer"] = CFrame.new(-5074, 315, -2991),
+			["Luxury Boat Dealer"] = CFrame.new(-5074, 315, -2991),
+			["Dragon Wizard"] = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938),
+			["Dojo Trainer"] = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938)
 		}
 	}
 	local currentNpcPositions = npcPositionsBySea[CurrentSea] or {}
+	local function mergeLoadedNPCs()
+		local npcs = workspace:FindFirstChild("NPCs")
+		if not npcs then return end
+		for _, npc in ipairs(npcs:GetDescendants()) do
+			if npc:IsA("Model") then
+				local root = findRoot(npc)
+				if root then
+					currentNpcPositions[npc.Name] = root.CFrame
+				end
+			end
+		end
+	end
+	mergeLoadedNPCs()
 	local npcNames = {}
 	for name in pairs(currentNpcPositions) do
 		table.insert(npcNames, name)
@@ -496,7 +537,7 @@ do
 		table.insert(npcNames, "Sea nao reconhecido")
 	end
 	local selectedNpc = npcNames[1]
-	local npcDropdown = Shop:AddDropdown("SelectedShopNPC", {
+	local npcDropdown = NPCTab:AddDropdown("SelectedShopNPC", {
 		Title = "Select NPC",
 		Values = npcNames,
 		Multi = false,
@@ -505,7 +546,19 @@ do
 	npcDropdown:OnChanged(function(value)
 		selectedNpc = value
 	end)
-	local npcTeleportToggle = Shop:AddToggle("TeleportShopNPC", {
+	NPCTab:AddButton({
+		Title = "Refresh NPC List",
+		Description = "Adiciona todos os NPCs carregados no mapa",
+		Callback = function()
+			mergeLoadedNPCs()
+			local refreshedNames = {}
+			for name in pairs(currentNpcPositions) do table.insert(refreshedNames, name) end
+			table.sort(refreshedNames)
+			pcall(function() npcDropdown:SetValues(refreshedNames) end)
+			notify("NPC Teleport", tostring(#refreshedNames) .. " NPCs listados.")
+		end
+	})
+	local npcTeleportToggle = NPCTab:AddToggle("TeleportShopNPC", {
 		Title = "Auto Teleporter NPC",
 		Description = "Usa a coordenada fixa do NPC no Sea atual",
 		Default = false
