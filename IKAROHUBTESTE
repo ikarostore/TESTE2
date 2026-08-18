@@ -1869,6 +1869,7 @@ _G.Settings = {
 		["ESP Mirage"] = false,
 		["ESP Kitsune"] = false,
 		["ESP Frozen"] = false,
+		["ESP Prehistoric"] = false,
 		["ESP Advanced Fruit Dealer"] = false,
 		["ESP Aura"] = false,
 		["ESP Gear"] = false
@@ -11297,7 +11298,7 @@ spawn(function()
 		end);
 	end;
 end);
-StatsTab:Toggle("Melee", _G.Settings.Stats["Auto Add Melee Stats"], "Auto Add Meele Stats", function(Value)
+StatsTab:Toggle("Melee", _G.Settings.Stats["Auto Add Melee Stats"], "Auto Add Meele Stats", function(value)
 	_G.Settings.Stats["Auto Add Melee Stats"] = value;
 	(getgenv()).SaveSetting();
 end);
@@ -11324,7 +11325,7 @@ StatsTab:Slider("Point", 1, 100, PointStats, function(value)
 end);
 spawn(function()
 	while wait(0.2) do
-		if game.Players.localPlayer.Data.Points.Value >= PointStats then
+		if game.Players.LocalPlayer.Data.Points.Value >= PointStats then
 			if _G.Settings.Stats["Auto Add Melee Stats"] then
 				local args = {
 					[1] = "AddPoint",
@@ -11377,35 +11378,35 @@ local Fruit = StatsTab:Label("Fruit : ");
 spawn(function()
 	while wait(0.2) do
 		pcall(function()
-			Melee:Set("Melee : " .. game.Players.localPlayer.Data.Stats.Melee.Level.Value);
+			Melee:Set("Melee : " .. game.Players.LocalPlayer.Data.Stats.Melee.Level.Value);
 		end);
 	end;
 end);
 spawn(function()
 	while wait(0.2) do
 		pcall(function()
-			Defense:Set("Defense : " .. game.Players.localPlayer.Data.Stats.Defense.Level.Value);
+			Defense:Set("Defense : " .. game.Players.LocalPlayer.Data.Stats.Defense.Level.Value);
 		end);
 	end;
 end);
 spawn(function()
 	while wait(0.2) do
 		pcall(function()
-			Sword:Set("Sword : " .. game.Players.localPlayer.Data.Stats.Sword.Level.Value);
+			Sword:Set("Sword : " .. game.Players.LocalPlayer.Data.Stats.Sword.Level.Value);
 		end);
 	end;
 end);
 spawn(function()
 	while wait(0.2) do
 		pcall(function()
-			Gun:Set("Gun : " .. game.Players.localPlayer.Data.Stats.Gun.Level.Value);
+			Gun:Set("Gun : " .. game.Players.LocalPlayer.Data.Stats.Gun.Level.Value);
 		end);
 	end;
 end);
 spawn(function()
 	while wait(0.2) do
 		pcall(function()
-			Fruit:Set("Fruit : " .. game.Players.localPlayer.Data.Stats["Demon Fruit"].Level.Value);
+			Fruit:Set("Fruit : " .. game.Players.LocalPlayer.Data.Stats["Demon Fruit"].Level.Value);
 		end);
 	end;
 end);
@@ -13339,14 +13340,14 @@ MiscTab:Button("Open Devil Shop", function()
 	(game:GetService("Players")).LocalPlayer.PlayerGui.Main.FruitShop.Visible = true;
 end);
 MiscTab:Button("Open Haki Color", function()
-	game.Players.localPlayer.PlayerGui.Main.Colors.Visible = true;
+	game.Players.LocalPlayer.PlayerGui.Main.Colors.Visible = true;
 end);
 MiscTab:Button("Open Title Name", function()
 	local args = {
 		[1] = "getTitles"
 	};
 	(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer(unpack(args));
-	game.Players.localPlayer.PlayerGui.Main.Titles.Visible = true;
+	game.Players.LocalPlayer.PlayerGui.Main.Titles.Visible = true;
 end);
 MiscTab:Button("Open Inventory", function()
 	(game:GetService("ReplicatedStorage")).Remotes.CommF_:InvokeServer("getInventoryWeapons");
@@ -13528,11 +13529,11 @@ if World3 then
 		(getgenv()).SaveSetting();
 	end);
 	EspTab:Toggle("Esp Prehistoric Island", _G.Settings.Esp["ESP Prehistoric"], "Highlight Prehistoric Island", function(value)
-		_G.Settings.Esp["ESP Frozen"] = value;
+		_G.Settings.Esp["ESP Prehistoric"] = value;
 		(getgenv()).SaveSetting();
 	end);
-	EspTab:Toggle("Esp Advanced Fruit Dealer", _G.Settings.Esp["ESP Fruit Dealer"], "Highlight Advanced Fruit Dealer", function(value)
-		_G.Settings.Esp["ESP Fruit Dealer"] = value;
+	EspTab:Toggle("Esp Advanced Fruit Dealer", _G.Settings.Esp["ESP Advanced Fruit Dealer"], "Highlight Advanced Fruit Dealer", function(value)
+		_G.Settings.Esp["ESP Advanced Fruit Dealer"] = value;
 		(getgenv()).SaveSetting();
 	end);
 	EspTab:Toggle("Esp Gear", _G.Settings.Esp["ESP Gear"], "Highlight Gear", function(value)
@@ -13842,4 +13843,3 @@ for _, v in pairs(resultNormal) do
 	end;
 end;
 print("Script Loaded!");
-
