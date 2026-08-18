@@ -2718,21 +2718,6 @@ local function GetModelTargetPart(model)
     return bestPart
 end
 
--- Ships no Banana não recebem RegisterHit: o personagem mira o Engine e usa
--- somente o ciclo de skills. Mantemos essa separação para não empurrar o barco
--- com ataques básicos.
-local function BananaShipAttack(eventModel)
-    if not eventModel then return false end
-    EnsureSeaCombatHaki()
-    local engine = eventModel:FindFirstChild("Engine", true)
-        or eventModel:FindFirstChild("VehicleSeat", true)
-        or GetModelTargetPart(eventModel)
-    if not engine or not engine:IsA("BasePart") then return false end
-    AimAtSeaTarget(engine)
-    UseConfiguredSeaSkills(engine)
-    return true
-end
-
 local function IsEventAlive(model)
     if not model or not model.Parent then return false end
 
@@ -3095,7 +3080,15 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                     -- Head, raio 60 e pacote moderno sem atraso de equip.
                     BananaSeaCreatureAttack(eventModel)
                 elseif isShipEvent then
-                    BananaShipAttack(eventModel)
+                    -- Ships no Banana não recebem RegisterHit: mira o Engine
+                    -- e usa somente skills, sem criar outra função no chunk.
+                    local engine = eventModel:FindFirstChild("Engine", true)
+                        or eventModel:FindFirstChild("VehicleSeat", true)
+                        or target
+                    if engine and engine:IsA("BasePart") then
+                        AimAtSeaTarget(engine)
+                        UseConfiguredSeaSkills(engine)
+                    end
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
                     -- o perfil de skills configurado, com mira mantida no alvo.
