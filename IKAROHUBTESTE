@@ -44,6 +44,25 @@ elseif game.PlaceId == 4442272183 then
 elseif game.PlaceId == 7449423635 then
 	World3 = true;
 end;
+
+-- Seleciona Marines antes de qualquer rotina que dependa do personagem.
+local PlayersService = game:GetService("Players");
+local ReplicatedStorageService = game:GetService("ReplicatedStorage");
+local LocalPlayerBootstrap = PlayersService.LocalPlayer;
+if not LocalPlayerBootstrap.Team then
+	local TeamRemote = ReplicatedStorageService:WaitForChild("Remotes"):WaitForChild("CommF_");
+	for Attempt = 1, 20 do
+		if LocalPlayerBootstrap.Team then
+			break;
+		end;
+		pcall(function()
+			TeamRemote:InvokeServer("SetTeam", "Marines");
+		end);
+		task.wait(0.5);
+	end;
+end;
+local BootstrapCharacter = LocalPlayerBootstrap.Character or LocalPlayerBootstrap.CharacterAdded:Wait();
+BootstrapCharacter:WaitForChild("HumanoidRootPart", 15);
 -- print("--------------------------------------------------------------------------");
 -- print("-- [[ Webhook ]] --");
 -- (loadstring(game:HttpGet("https://gitshare.me/backend/api/files/677ec71a-082b-4b8c-a1e8-f590f2ab286a/download")))();
@@ -3431,11 +3450,17 @@ function InfAb()
 	end;
 end;
 local LocalPlayer = (game:GetService("Players")).LocalPlayer;
-local originalstam = LocalPlayer.Character.Energy.Value;
+local EnergyObject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Energy");
+local originalstam = EnergyObject and EnergyObject.Value or 0;
 function infinitestam()
-	LocalPlayer.Character.Energy.Changed:connect(function()
+	local CurrentCharacter = LocalPlayer.Character;
+	local CurrentEnergy = CurrentCharacter and CurrentCharacter:FindFirstChild("Energy");
+	if not CurrentEnergy then
+		return;
+	end;
+	CurrentEnergy.Changed:connect(function()
 		if _G.Settings.LocalPlayer["Infinite Energy"] then
-			LocalPlayer.Character.Energy.Value = originalstam;
+			CurrentEnergy.Value = originalstam;
 		end;
 	end);
 end;
@@ -3444,8 +3469,11 @@ spawn(function()
 		while wait(0.1) do
 			if _G.Settings.LocalPlayer["Infinite Energy"] then
 				wait(0.1);
-				originalstam = LocalPlayer.Character.Energy.Value;
-				infinitestam();
+				local CurrentEnergy = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Energy");
+				if CurrentEnergy then
+					originalstam = CurrentEnergy.Value;
+					infinitestam();
+				end;
 			end;
 		end;
 	end);
