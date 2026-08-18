@@ -78,6 +78,54 @@ local Tabs = {
 
 local Options = Fluent.Options
 
+local function detectCurrentSea()
+	local seaByPlaceId = {
+		[2753915549] = 1,
+		[4442272183] = 2,
+		[7449423635] = 3
+	}
+	if seaByPlaceId[game.PlaceId] then
+		return seaByPlaceId[game.PlaceId], "PlaceId"
+	end
+
+	local map = workspace:FindFirstChild("Map")
+	if map then
+		local thirdSeaLandmarks = {
+			"TikiOutpost", "HydraIsland", "HauntedCastle", "GreatTree",
+			"CastleontheSea", "Castle on the Sea", "Turtle", "PortTown"
+		}
+		for _, landmark in ipairs(thirdSeaLandmarks) do
+			if map:FindFirstChild(landmark, true) then
+				return 3, "Map"
+			end
+		end
+
+		local secondSeaLandmarks = {
+			"Cafe", "KingdomofRose", "Kingdom of Rose", "IceCastle",
+			"ForgottenIsland", "HotAndCold"
+		}
+		for _, landmark in ipairs(secondSeaLandmarks) do
+			if map:FindFirstChild(landmark, true) then
+				return 2, "Map"
+			end
+		end
+	end
+
+	local player = game:GetService("Players").LocalPlayer
+	local data = player and player:FindFirstChild("Data")
+	local levelValue = data and data:FindFirstChild("Level")
+	local level = levelValue and levelValue.Value or 0
+	if level >= 1500 then
+		return 3, "Level"
+	elseif level >= 700 then
+		return 2, "Level"
+	end
+	return 1, "Fallback"
+end
+
+local CurrentSea, SeaDetectionSource = detectCurrentSea()
+local SeaNames = {[1] = "First Sea", [2] = "Second Sea", [3] = "Third Sea"}
+
 -- Shop: portado do codigo-fonte do Banana Hub.
 do
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -85,6 +133,10 @@ do
 	local TweenService = game:GetService("TweenService")
 	local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 	local Shop = Tabs.Shop
+	Shop:AddParagraph({
+		Title = "Sea atual",
+		Content = SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. ")"
+	})
 
 	local function notify(title, content)
 		Fluent:Notify({
@@ -242,7 +294,10 @@ do
 		if not npcs then
 			return nil
 		end
-		for _, npc in ipairs(npcs:GetChildren()) do
+		for _, npc in ipairs(npcs:GetDescendants()) do
+			if not npc:IsA("Model") then
+				continue
+			end
 			local npcName = normalizeName(npc.Name)
 			for _, alias in ipairs(style.npcs) do
 				local aliasName = normalizeName(alias)
@@ -296,7 +351,7 @@ do
 							local now = os.clock()
 							if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
 								lastMissingNotice[style.id] = now
-								notify(style.title, "Treinador nao encontrado neste mapa. Necessario: " .. style.sea)
+								notify(style.title, "Treinador nao encontrado. Atual: " .. SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. "). Necessario: " .. style.sea)
 							end
 						else
 							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
@@ -381,5 +436,7 @@ getgenv().IKAROHUB = {
 	Library = Fluent,
 	Window = Window,
 	Tabs = Tabs,
-	Options = Options
+	Options = Options,
+	Sea = CurrentSea,
+	SeaDetectionSource = SeaDetectionSource
 }
