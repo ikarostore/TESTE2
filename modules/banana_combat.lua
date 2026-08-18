@@ -57,9 +57,10 @@ function M.SeaCreatureAttack(eventModel, character, root)
     if eventModel and eventModel.Parent then
         local eventRoot = eventModel:FindFirstChild("HumanoidRootPart")
         local eventHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
+        local isTerror = string.find(string.lower(eventModel.Name), "terror", 1, true) ~= nil
         if eventRoot then
             eventRoot.CanCollide = false
-            eventRoot.Size = Vector3.new(60, 60, 60)
+            if not isTerror then eventRoot.Size = Vector3.new(60, 60, 60) end
         end
         if eventHumanoid then eventHumanoid.WalkSpeed = 0 end
     end
@@ -93,7 +94,7 @@ local function findRedzRemote()
     return redzRemote, redzRemoteId
 end
 
-function M.RedzTerrorAttack(character, root)
+function M.RedzModernAttack(character, root, preferredModel)
     if not character or not root then return false end
     local tool = character:FindFirstChildOfClass("Tool")
     if not tool or (tool:GetAttribute("WeaponType") ~= "Melee"
@@ -104,6 +105,7 @@ function M.RedzTerrorAttack(character, root)
     if not tool then return false end
 
     local targets = {}
+    local preferredHead = nil
     for _, container in ipairs({Workspace:FindFirstChild("Enemies"), Workspace:FindFirstChild("Characters")}) do
         for _, model in ipairs(container and container:GetChildren() or {}) do
             local modelRoot = model:FindFirstChild("HumanoidRootPart")
@@ -113,12 +115,18 @@ function M.RedzTerrorAttack(character, root)
                 for _, part in ipairs(model:GetChildren()) do
                     if part:IsA("BasePart") then targets[#targets + 1] = {model, part} end
                 end
+                if model == preferredModel then
+                    preferredHead = model:FindFirstChild("Head")
+                        or model:FindFirstChild("HumanoidRootPart")
+                end
             end
         end
     end
     if #targets == 0 then return false end
 
-    local head = targets[1][1]:FindFirstChild("Head")
+    local head = preferredHead
+        or targets[1][1]:FindFirstChild("Head")
+        or targets[1][1]:FindFirstChild("HumanoidRootPart")
     if not head then return false end
     return pcall(function()
         local net = require(ReplicatedStorage.Modules.Net)
@@ -142,5 +150,8 @@ function M.RedzTerrorAttack(character, root)
         end
     end)
 end
+
+
+M.RedzTerrorAttack = M.RedzModernAttack
 
 return M

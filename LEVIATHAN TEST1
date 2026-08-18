@@ -4,7 +4,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 pcall(function()
     getgenv().IKARO_BANANA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua?v=54"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua?v=55"
     ))()
 end)
 pcall(function()
@@ -414,7 +414,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v5.4 MODULAR EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v5.5 MODULAR EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2859,7 +2859,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or eventKey == "Terrorshark" and (
                 workspace:FindFirstChild("_WorldOrigin")
                 and workspace._WorldOrigin:FindFirstChild("Typhoon Splash")
-                and 300 or 60
+                and 300 or 45
             )
             -- O trace de morte do Terror Shark nao registrou RegisterHit nem
             -- RegisterAttack. Ele foi eliminado por skills com a conta acima
@@ -3022,10 +3022,9 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
                 AimAtSeaTarget(target)
 
                 if eventKey == "Terrorshark" then
-                    -- Método integral do Redz: Fast Attack moderno, sem
-                    -- aumentar/mover o boss e sem misturar nossas skills.
-                    local redz = getgenv().IKARO_BANANA_COMBAT
-                    if redz then redz.RedzTerrorAttack(Character, HRP) end
+                    -- Mesmo método de hit que já mata as Piranhas.
+                    local banana = getgenv().IKARO_BANANA_COMBAT
+                    if banana then banana.SeaCreatureAttack(eventModel, Character, HRP) end
                 elseif useBasicClick then
                     -- Mesmo AttackNoCoolDown do Banana para Shark/Piranha:
                     -- Head, raio 60 e pacote moderno sem atraso de equip.
@@ -5025,4 +5024,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v5.4 MODULAR carregado.")
+print("IKARO Leviathan v5.5 MODULAR carregado.")
