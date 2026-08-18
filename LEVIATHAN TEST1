@@ -4,7 +4,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 pcall(function()
     getgenv().IKARO_BANANA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua?v=53"
     ))()
 end)
 pcall(function()
@@ -414,7 +414,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v5.2 MODULAR EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v5.3 MODULAR EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -5023,4 +5023,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v5.2 MODULAR carregado.")
+print("IKARO Leviathan v5.3 MODULAR carregado.")

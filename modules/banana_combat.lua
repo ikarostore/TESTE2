@@ -27,7 +27,9 @@ function M.SeaCreatureAttack(eventModel, character, root)
             ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
         end)
     end
-    if not equipMelee(character) then return false end
+    -- O Banana tenta equipar, mas não bloqueia RegisterHit quando o ToolTip
+    -- ainda não replicou ou está traduzido no executor.
+    equipMelee(character)
 
     local net = ReplicatedStorage:FindFirstChild("Modules")
     net = net and net:FindFirstChild("Net")
@@ -36,15 +38,19 @@ function M.SeaCreatureAttack(eventModel, character, root)
     local enemies = Workspace:FindFirstChild("Enemies")
     if not registerAttack or not registerHit or not enemies then return false end
 
-    local targets, firstHead = {}, nil
+    local targets, lastHitPart = {}, nil
     for _, enemy in ipairs(enemies:GetChildren()) do
         local enemyHumanoid = enemy:FindFirstChildOfClass("Humanoid")
         local head = enemy:FindFirstChild("Head")
+            or enemy:FindFirstChild("HumanoidRootPart")
+            or enemy:FindFirstChildWhichIsA("BasePart", true)
         if not enemy:GetAttribute("IsBoat") and enemy ~= character
         and enemyHumanoid and enemyHumanoid.Health > 0 and head
         and (root.Position - head.Position).Magnitude <= 60 then
             targets[#targets + 1] = {enemy, head}
-            firstHead = firstHead or head
+            -- FindEnemiesInRange do Banana sobrescreve o retorno a cada alvo;
+            -- portanto RegisterHit recebe a última peça válida, não a primeira.
+            lastHitPart = head
         end
     end
 
@@ -58,10 +64,10 @@ function M.SeaCreatureAttack(eventModel, character, root)
         if eventHumanoid then eventHumanoid.WalkSpeed = 0 end
     end
 
-    if not firstHead then return false end
+    if not lastHitPart then return false end
     return pcall(function()
         registerAttack:FireServer(1e-9)
-        registerHit:FireServer(firstHead, targets)
+        registerHit:FireServer(lastHitPart, targets)
     end)
 end
 
