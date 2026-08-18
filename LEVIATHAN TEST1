@@ -79,7 +79,8 @@ local SeaEventNames = {
     PirateBrigade = {"Pirate Brigade", "PirateBrigade"},
     PirateGrandBrigade = {"Pirate Grand Brigade", "PirateGrandBrigade"},
     FishBoat = {"Fish Boat", "FishBoat"},
-    SeaBeast = {"SeaBeast1", "Sea Beast", "SeaBeast"}
+    SeaBeast = {"SeaBeast1", "Sea Beast", "SeaBeast"},
+    Leviathan = {"Leviathan Segment", "Leviathan Tail", "Leviathan"}
 }
 
 local SeaEventOrder = {
@@ -139,7 +140,14 @@ local SeaHuntState = {
     ReturningHeart = false,
     HeartDelivered = false,
     NextHeartScan = 0,
-    NextHarpoonAttempt = 0
+    NextHarpoonAttempt = 0,
+    FrozenObject = nil,
+    FrozenPosition = nil,
+    NextFrozenScan = 0,
+    FrozenReached = false,
+    FrozenActivating = false,
+    FrozenActivated = false,
+    NextFrozenInteraction = 0
 }
 
 local BoatFlightConfig = {
@@ -406,7 +414,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.2 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.3 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -854,6 +862,29 @@ local function GetVisibleGuiTexts()
 end
 
 local function RefreshSpyStatusFromGui()
+    -- Cokka/NoxHub consultam o estado real pelo mesmo remote do Spy. A
+    -- consulta "1" não compra nada e evita depender do idioma da interface.
+    if os.clock() - (SpyState.LastCheck or 0) >= SpyState.CheckInterval then
+        SpyState.LastCheck = os.clock()
+        local ok, status = pcall(function()
+            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+            local comm = remotes and remotes:FindFirstChild("CommF_")
+            return comm and comm:InvokeServer("InfoLeviathan", "1")
+        end)
+        if ok and status ~= nil then
+            local code = tonumber(status)
+            local descriptions = {
+                [1] = "Spy ainda não sabe nada.",
+                [2] = "Spy pediu fragments (etapa 1).",
+                [3] = "Spy pediu fragments (etapa 2).",
+                [4] = "Spy pediu fragments (etapa final).",
+                [5] = "Leviathan está disponível."
+            }
+            SetSpyStatus(code == 5, descriptions[code] or tostring(status))
+            if code == 5 then return true end
+        end
+    end
+
     local bestSpyText = nil
 
     for _, item in ipairs(GetVisibleGuiTexts()) do
@@ -2543,6 +2574,7 @@ end
 -- Implementada mais abaixo, depois das rotinas do Beast Hunter. A declaração
 -- antecipada garante que o combate use a função local correta em Luau.
 local FlyToPart
+local FindLeviathanCombatTarget
 
 local function GetModelTargetPart(model)
     if not model then return nil end
@@ -2598,6 +2630,34 @@ local function IsEventAlive(model)
     end
 
     return model.Parent ~= nil
+end
+
+-- Cokka mantém Leviathan, segmentos e cauda em Workspace.SeaBeasts. Cada
+-- segmento é um alvo separado; priorizamos segmentos, depois cauda e corpo.
+FindLeviathanCombatTarget = function()
+    local seaBeasts = workspace:FindFirstChild("SeaBeasts")
+    if not seaBeasts then return nil, nil end
+
+    local priorities = {
+        ["leviathan segment"] = 1,
+        ["leviathan tail"] = 2,
+        ["leviathan"] = 3
+    }
+    local best, bestPriority = nil, math.huge
+
+    for _, obj in ipairs(seaBeasts:GetChildren()) do
+        if obj:IsA("Model") and IsEventAlive(obj) then
+            local priority = priorities[string.lower(obj.Name)]
+            if priority and priority < bestPriority then
+                local part = GetModelTargetPart(obj)
+                if part and (not HRP or (part.Position - HRP.Position).Magnitude <= 3500) then
+                    best, bestPriority = obj, priority
+                end
+            end
+        end
+    end
+
+    return best and "Leviathan" or nil, best
 end
 
 local function ForceExitBoatForCombat()
@@ -2713,8 +2773,10 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         local isShipEvent = eventKey == "PirateBrigade"
             or eventKey == "PirateGrandBrigade"
             or eventKey == "FishBoat"
-        local stableSkillHover = eventKey == "Terrorshark"
+        local isLeviathan = eventKey == "Leviathan"
+        local stableSkillHover = eventKey == "Terrorshark" or isLeviathan
         local height = eventKey == "SeaBeast" and 260
+            or isLeviathan and 366
             or isShipEvent and 80
             or eventKey == "Piranha" and 18
             or useBasicClick and 30
@@ -2745,6 +2807,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
         if isShipEvent or stableSkillHover or eventKey == "Piranha" then
             local right = Vector3.new(target.CFrame.RightVector.X, 0, target.CFrame.RightVector.Z)
             local offsetDistance = isShipEvent and 95
+                or isLeviathan and 50
                 or stableSkillHover and 110
                 or 45
             combatOffset = (right.Magnitude > 0.01 and right.Unit or Vector3.new(1, 0, 0)) * offsetDistance
@@ -2866,7 +2929,8 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
             local isShipEvent = eventKey == "PirateBrigade"
                 or eventKey == "PirateGrandBrigade"
                 or eventKey == "FishBoat"
-            local attackRange = eventKey == "SeaBeast" and 340
+            local attackRange = eventKey == "Leviathan" and 460
+                or eventKey == "SeaBeast" and 340
                 or eventKey == "Terrorshark" and 300
                 or useBasicClick and 120
                 or isShipEvent and 180
@@ -3015,7 +3079,19 @@ local function GetBeastHunterHarpoonSeat()
     local boat = GetBeastHunter()
     if not boat then return nil end
     local harpoon = boat:FindFirstChild("Harpoon")
-    return harpoon and harpoon:FindFirstChild("Seat")
+    local exact = harpoon and harpoon:FindFirstChild("Seat", true)
+    if exact and exact:IsA("Seat") then return exact end
+
+    for _, obj in ipairs(boat:GetDescendants()) do
+        if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
+            local full = string.lower(obj:GetFullName())
+            if string.find(full, "harpoon", 1, true)
+            or string.find(full, "gunseat", 1, true) then
+                return obj
+            end
+        end
+    end
+    return nil
 end
 
 -- FrozenHeart pode existir mesmo quando o arpao falhou. Presenca ou
@@ -3093,9 +3169,18 @@ SeaHuntState.TryHarpoonHeart = function(heart)
     end
     if SeaVIM then
         pcall(function()
-            SeaVIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            local aimPart = heart:IsA("BasePart") and heart
+                or heart:FindFirstChildWhichIsA("BasePart", true)
+            if aimPart then AimAtSeaTarget(aimPart) end
+            local x, y = 0, 0
+            local camera = workspace.CurrentCamera
+            if camera and aimPart then
+                local screen, visible = camera:WorldToViewportPoint(aimPart.Position)
+                if visible then x, y = screen.X, screen.Y end
+            end
+            SeaVIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
             task.wait(0.08)
-            SeaVIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+            SeaVIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
         end)
     end
 end
@@ -3479,6 +3564,105 @@ local function GetSea6VirtualTarget()
     )
 end
 
+local function GetWorldPosition(obj)
+    if not obj or not obj.Parent then return nil end
+    if obj:IsA("BasePart") then return obj.Position end
+    if obj:IsA("Attachment") then return obj.WorldPosition end
+    if obj:IsA("Model") then
+        local center = obj:FindFirstChild("Center", true)
+        if center and center:IsA("BasePart") then return center.Position end
+        local ok, pivot = pcall(function() return obj:GetPivot() end)
+        if ok then return pivot.Position end
+    end
+    return nil
+end
+
+-- NoxHub usa Map.FrozenDimension para navegar e _WorldOrigin.Locations para
+-- confirmar o spawn. Mantemos ambos, sem varrer Workspace a cada frame.
+local function FindFrozenDimension()
+    if SeaHuntState.FrozenObject and SeaHuntState.FrozenObject.Parent then
+        local position = GetWorldPosition(SeaHuntState.FrozenObject)
+        if position then
+            SeaHuntState.FrozenPosition = position
+            return SeaHuntState.FrozenObject, position
+        end
+    end
+    if os.clock() < (SeaHuntState.NextFrozenScan or 0) then
+        return nil, SeaHuntState.FrozenPosition
+    end
+    SeaHuntState.NextFrozenScan = os.clock() + 1
+
+    local map = workspace:FindFirstChild("Map")
+    local frozen = map and (
+        map:FindFirstChild("FrozenDimension")
+        or map:FindFirstChild("Frozen Dimension")
+    )
+    local origin = workspace:FindFirstChild("_WorldOrigin")
+    local locations = origin and origin:FindFirstChild("Locations")
+    local marker = locations and locations:FindFirstChild("Frozen Dimension")
+    local chosen = frozen or marker
+    local position = GetWorldPosition(chosen)
+
+    if chosen and position then
+        SeaHuntState.FrozenObject = chosen
+        SeaHuntState.FrozenPosition = position
+        return chosen, position
+    end
+    SeaHuntState.FrozenObject = nil
+    SeaHuntState.FrozenPosition = nil
+    SeaHuntState.FrozenReached = false
+    return nil, nil
+end
+
+local function TryActivateFrozenDimension(frozen)
+    if SeaHuntState.FrozenActivating or not frozen or not frozen.Parent then return end
+    SeaHuntState.FrozenActivating = true
+    SetState("FROZEN_ACTIVATING", "Frozen Dimension encontrada; procurando o NPC de ativação.")
+
+    task.spawn(function()
+        local deadline = os.clock() + 45
+        while Running and frozen.Parent and os.clock() < deadline do
+            local _, leviathan = FindLeviathanCombatTarget()
+            if leviathan then
+                SeaHuntState.FrozenActivated = true
+                SetState("FROZEN_ACTIVATED", "Leviathan liberado; iniciando combate por segmentos.")
+                break
+            end
+
+            if os.clock() >= (SeaHuntState.NextFrozenInteraction or 0) then
+                SeaHuntState.NextFrozenInteraction = os.clock() + 1.5
+                local prompt, click = nil, nil
+                for _, obj in ipairs(frozen:GetDescendants()) do
+                    if not prompt and obj:IsA("ProximityPrompt") and obj.Enabled then
+                        prompt = obj
+                    elseif not click and obj:IsA("ClickDetector") then
+                        click = obj
+                    end
+                end
+
+                local interaction = prompt or click
+                local parentPart = interaction and interaction.Parent
+                if parentPart and parentPart:IsA("BasePart") and HRP and Humanoid then
+                    ForceExitBoatForCombat()
+                    FlyToPart(parentPart, 10, true)
+                    task.wait(0.2)
+                    if prompt and type(fireproximityprompt) == "function" then
+                        pcall(function() fireproximityprompt(prompt) end)
+                    elseif click and type(fireclickdetector) == "function" then
+                        pcall(function() fireclickdetector(click) end)
+                    end
+                end
+            end
+            task.wait(0.25)
+        end
+
+        SeaHuntState.FrozenActivating = false
+        if Running and not SeaHuntState.FrozenActivated and not SeaHuntState.CurrentEvent then
+            SetState("FROZEN_WAITING", "Ilha encontrada; aguardando NPC/ativação do Leviathan.")
+        end
+    end)
+end
+
 local function DestroyBoatFlightPhysics()
     if BoatLinearVelocity then
         pcall(function() BoatLinearVelocity:Destroy() end)
@@ -3681,8 +3865,14 @@ local function StartBoatDrive(forceStart)
                 nextNoclipRefresh = now + 0.10
             end
 
+            local frozenObject, frozenPosition = FindFrozenDimension()
+            local navigatingFrozen = frozenPosition
+                and not SeaHuntState.FrozenActivated
+                and not SeaHuntState.ReturningHeart
             local targetPos = SeaHuntState.ReturningHeart
                 and Vector3.new(SEA6_MAPPED_TIKI.X, BoatFlightConfig.HeightY, SEA6_MAPPED_TIKI.Z)
+                or navigatingFrozen
+                    and Vector3.new(frozenPosition.X, BoatFlightConfig.HeightY, frozenPosition.Z)
                 or GetSea6VirtualTarget()
 
             local flatDelta = Vector3.new(
@@ -3695,7 +3885,16 @@ local function StartBoatDrive(forceStart)
 
             -- Depois de entrar na região do Sea 6, segue eternamente na rota
             -- mapeada. Não tenta voltar para o ponto de entrada ao ultrapassá-lo.
-            if SeaHuntState.ReturningHeart then
+            if navigatingFrozen then
+                if flatDelta.Magnitude <= 300 then
+                    SeaHuntState.FrozenReached = true
+                    SetState("FROZEN_REACHED", "Beast Hunter chegou à Frozen Dimension.")
+                    task.defer(function() TryActivateFrozenDimension(frozenObject) end)
+                    break
+                end
+                seaDirection = flatDelta.Magnitude > 1 and flatDelta.Unit or SEA6_MAPPED_DIRECTION
+                FixedSeaDirection = seaDirection
+            elseif SeaHuntState.ReturningHeart then
                 if flatDelta.Magnitude <= 350 then
                     SeaHuntState.HeartDelivered = true
                     SeaHuntState.ReturningHeart = false
@@ -3720,7 +3919,7 @@ local function StartBoatDrive(forceStart)
             local verticalVelocity = math.clamp(heightError * 7, -140, 140)
 
             -- Limite separado para evitar os rollbacks vistos no trace.
-            local horizontalSpeed = SeaHuntState.ReturningHeart
+            local horizontalSpeed = (SeaHuntState.ReturningHeart or navigatingFrozen)
                 and math.min(SeaConfig.BoatSpeed, 180)
                 or SeaConfig.BoatSpeed
 
@@ -3881,6 +4080,9 @@ local function StartHunt()
             -- Só eventos marcados entram aqui. Eventos desmarcados são
             -- ignorados e não interrompem barco/follow.
             local eventKey, eventModel = FindSelectedSeaEvent()
+            if not eventModel then
+                eventKey, eventModel = FindLeviathanCombatTarget()
+            end
 
             if eventModel then
                 if not SeaHuntState.CurrentEvent and not SeaHuntState.CombatBatchActive then
@@ -3922,6 +4124,9 @@ local function StartHunt()
                                 while Running and os.clock() < clearDeadline do
                                     task.wait(0.25)
                                     local foundKey, foundModel = FindSelectedSeaEvent()
+                                    if not foundModel then
+                                        foundKey, foundModel = FindLeviathanCombatTarget()
+                                    end
                                     if foundModel then
                                         nextKey, nextModel = foundKey, foundModel
                                         break
@@ -4470,5 +4675,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.2 carregado.")
+print("IKARO Leviathan v4.3 carregado.")
 
