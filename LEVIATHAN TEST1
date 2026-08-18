@@ -433,7 +433,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.6 EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.7 EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -765,7 +765,7 @@ local function DestroyWaterPlatform()
     end
 end
 
-local function GetWaterSurfaceY()
+SeaHuntState.GetWaterSurfaceY = function()
     local map = workspace:FindFirstChild("Map")
     local waterPlane = map and map:FindFirstChild("WaterBase-Plane")
     if waterPlane and waterPlane:IsA("BasePart") then
@@ -795,7 +795,7 @@ local function EnsureWaterPlatform()
         WaterPlatform.Parent = workspace
     end
 
-    local surfaceY = GetWaterSurfaceY()
+    local surfaceY = SeaHuntState.GetWaterSurfaceY()
     WaterPlatform.CFrame = CFrame.new(HRP.Position.X, surfaceY, HRP.Position.Z)
 end
 
@@ -816,11 +816,12 @@ task.spawn(function()
     while Gui and Gui.Parent do
         if Running and HRP and Humanoid and Humanoid.Health > 0
         and not Humanoid.SeatPart and not Humanoid.Sit then
-            local surfaceY = GetWaterSurfaceY()
+            local surfaceY = SeaHuntState.GetWaterSurfaceY()
             if HRP.Position.Y < surfaceY + 2 then
                 local safeY = surfaceY + math.max(12, tonumber(SeaConfig.WaterSafeClearance) or 18)
                 pcall(function()
-                    HRP.CFrame = CFrame.new(HRP.Position.X, safeY, HRP.Position.Z) * HRP.CFrame.Rotation
+                    HRP.CFrame = CFrame.new(HRP.Position.X, safeY, HRP.Position.Z)
+                        * (HRP.CFrame - HRP.Position)
                     HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
                 end)
             end
@@ -2914,7 +2915,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
                 target.Position.Z + combatOffset.Z
             )
             or target.Position + Vector3.new(0, height, 0)
-        local minimumSafeY = GetWaterSurfaceY()
+        local minimumSafeY = SeaHuntState.GetWaterSurfaceY()
             + math.max(12, tonumber(SeaConfig.WaterSafeClearance) or 18)
         if desired.Y < minimumSafeY then
             desired = Vector3.new(desired.X, minimumSafeY, desired.Z)
@@ -5014,5 +5015,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.6 carregado.")
+print("IKARO Leviathan v4.7 carregado.")
 
