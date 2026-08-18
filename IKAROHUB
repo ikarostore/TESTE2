@@ -157,49 +157,169 @@ do
 		"Soul Cane"
 	}
 	for _, sword in ipairs(swords) do
-		addButton(sword, function()
-			invoke("BuyItem", sword)
+		local swordName = sword
+		addButton(swordName, function()
+			invoke("BuyItem", swordName)
 		end)
 	end
 	addButton("Pole V2", function()
 		invoke("ThunderGodTalk")
 	end)
 
-	Shop:AddSection("Võ")
-	addButton("Black Leg", function()
-		invoke("BuyBlackLeg")
-	end)
-	addButton("Electro", function()
-		invoke("BuyElectro")
-	end)
-	addButton("Fishman Karate", function()
-		invoke("BuyFishmanKarate")
-	end)
-	addButton("Dragon Claw", function()
-		invoke("BlackbeardReward", "DragonClaw", "1")
-		invoke("BlackbeardReward", "DragonClaw", "2")
-	end)
-	addButton("Superhuman", function()
-		invoke("BuySuperhuman")
-	end)
-	addButton("Death Step", function()
-		invoke("BuyDeathStep")
-	end)
-	addButton("Sharkman Karate", function()
-		invoke("BuySharkmanKarate", true)
-		invoke("BuySharkmanKarate")
-	end)
-	addButton("Electric Claw", function()
-		invoke("BuyElectricClaw")
-	end)
-	addButton("Dragon Talon", function()
-		invoke("BuyDragonTalon")
-	end)
-	addButton("Godhuman", function()
-		invoke("BuyGodhuman")
-	end)
-	addButton("Sanguine Art", function()
-		invoke("BuySanguineArt")
+	Shop:AddSection("Fighting Shop")
+	local selectedStyles = {}
+	local lastMissingNotice = {}
+	local styleDefinitions = {
+		{
+			id = "FightingBlackLeg", title = "Black Leg", tool = "Dark Step", sea = "First/Second/Third Sea",
+			npcs = {"Dark Step Teacher", "Dark Step"},
+			buy = function() return invoke("BuyBlackLeg") end
+		},
+		{
+			id = "FightingFishmanKarate", title = "Fishman Karate", tool = "Water Kung Fu", sea = "First/Second/Third Sea",
+			npcs = {"Water Kung Fu Teacher", "Water Kung Fu"},
+			buy = function() return invoke("BuyFishmanKarate") end
+		},
+		{
+			id = "FightingElectro", title = "Electro", tool = "Electric", sea = "First Sea",
+			npcs = {"Mad Scientist"},
+			buy = function() return invoke("BuyElectro") end
+		},
+		{
+			id = "FightingDragonBreath", title = "Dragon Breath", tool = "Dragon Breath", sea = "Second/Third Sea",
+			npcs = {"Sabi"},
+			buy = function()
+				invoke("BlackbeardReward", "DragonClaw", "1")
+				return invoke("BlackbeardReward", "DragonClaw", "2")
+			end
+		},
+		{
+			id = "FightingSuperhuman", title = "Superhuman", tool = "Superhuman", sea = "Second/Third Sea",
+			npcs = {"Martial Arts Master"},
+			buy = function() return invoke("BuySuperhuman") end
+		},
+		{
+			id = "FightingDeathStep", title = "Death Step", tool = "Death Step", sea = "Second/Third Sea",
+			npcs = {"Phoeyu, the Reformed", "Phoeyu"},
+			buy = function() return invoke("BuyDeathStep") end
+		},
+		{
+			id = "FightingSharkman", title = "Sharkman Karate", tool = "Sharkman Karate", sea = "Second/Third Sea",
+			npcs = {"Daigrock, the Sharkman", "Daigrock"},
+			buy = function()
+				invoke("BuySharkmanKarate", true)
+				return invoke("BuySharkmanKarate")
+			end
+		},
+		{
+			id = "FightingElectricClaw", title = "Electric Claw", tool = "Electric Claw", sea = "Third Sea",
+			npcs = {"Previous Hero"},
+			buy = function() return invoke("BuyElectricClaw") end
+		},
+		{
+			id = "FightingDragonTalon", title = "Dragon Talon", tool = "Dragon Talon", sea = "Third Sea",
+			npcs = {"Uzoth"},
+			buy = function() return invoke("BuyDragonTalon") end
+		},
+		{
+			id = "FightingGodhuman", title = "Godhuman", tool = "Godhuman", sea = "Third Sea",
+			npcs = {"Ancient Monk"},
+			buy = function() return invoke("BuyGodhuman") end
+		},
+		{
+			id = "FightingSanguine", title = "Sanguine Art", tool = "Sanguine Art", sea = "Third Sea",
+			npcs = {"Shafi"},
+			buy = function() return invoke("BuySanguineArt") end
+		}
+	}
+
+	local function normalizeName(value)
+		return string.lower(tostring(value)):gsub("[^%w]", "")
+	end
+
+	local function findTrainer(style)
+		local npcs = workspace:FindFirstChild("NPCs")
+		if not npcs then
+			return nil
+		end
+		for _, npc in ipairs(npcs:GetChildren()) do
+			local npcName = normalizeName(npc.Name)
+			for _, alias in ipairs(style.npcs) do
+				local aliasName = normalizeName(alias)
+				if npcName == aliasName or string.find(npcName, aliasName, 1, true) then
+					return npc
+				end
+			end
+		end
+		return nil
+	end
+
+	local function findRoot(model)
+		if not model then return nil end
+		return model:FindFirstChild("HumanoidRootPart")
+			or model:FindFirstChild("Head")
+			or model.PrimaryPart
+	end
+
+	local function ownsStyle(style)
+		local character = Players.LocalPlayer.Character
+		local backpack = Players.LocalPlayer:FindFirstChild("Backpack")
+		return (character and character:FindFirstChild(style.tool) ~= nil)
+			or (backpack and backpack:FindFirstChild(style.tool) ~= nil)
+	end
+
+	for _, style in ipairs(styleDefinitions) do
+		local styleDefinition = style
+		local toggle = Shop:AddToggle(styleDefinition.id, {
+			Title = styleDefinition.title,
+			Description = "Ir ao treinador e comprar",
+			Default = false
+		})
+		toggle:OnChanged(function(value)
+			selectedStyles[styleDefinition.id] = value
+		end)
+		Options[styleDefinition.id]:SetValue(false)
+	end
+
+	task.spawn(function()
+		while task.wait(0.35) do
+			for _, style in ipairs(styleDefinitions) do
+				if selectedStyles[style.id] then
+					if ownsStyle(style) then
+						selectedStyles[style.id] = false
+						Options[style.id]:SetValue(false)
+						notify("Fighting Shop", style.title .. " ja esta disponivel.")
+					else
+						local trainer = findTrainer(style)
+						local trainerRoot = findRoot(trainer)
+						if not trainerRoot then
+							local now = os.clock()
+							if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
+								lastMissingNotice[style.id] = now
+								notify(style.title, "Treinador nao encontrado neste mapa. Necessario: " .. style.sea)
+							end
+						else
+							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+							local root = character:WaitForChild("HumanoidRootPart")
+							local destination = trainerRoot.CFrame * CFrame.new(0, 0, 4)
+							if (root.Position - trainerRoot.Position).Magnitude > 8 then
+								pcall(tweenTo, destination)
+							end
+							if trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude <= 12 then
+								style.buy()
+								task.wait(1)
+								if ownsStyle(style) then
+									selectedStyles[style.id] = false
+									Options[style.id]:SetValue(false)
+									notify("Fighting Shop", style.title .. " comprado com sucesso.")
+								end
+							end
+						end
+					end
+					break
+				end
+			end
+		end
 	end)
 
 	Shop:AddSection("Other")
