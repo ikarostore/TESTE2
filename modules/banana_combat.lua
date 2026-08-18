@@ -44,7 +44,7 @@ function M.SeaCreatureAttack(eventModel, character, root)
         local head = enemy:FindFirstChild("Head")
             or enemy:FindFirstChild("HumanoidRootPart")
             or enemy:FindFirstChildWhichIsA("BasePart", true)
-        if not enemy:GetAttribute("IsBoat") and enemy ~= character
+        if (enemy == eventModel or not enemy:GetAttribute("IsBoat")) and enemy ~= character
         and enemyHumanoid and enemyHumanoid.Health > 0 and head
         and (root.Position - head.Position).Magnitude <= 60 then
             targets[#targets + 1] = {enemy, head}
@@ -57,10 +57,12 @@ function M.SeaCreatureAttack(eventModel, character, root)
     if eventModel and eventModel.Parent then
         local eventRoot = eventModel:FindFirstChild("HumanoidRootPart")
         local eventHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
-        local isTerror = string.find(string.lower(eventModel.Name), "terror", 1, true) ~= nil
+        local lowerEventName = string.lower(eventModel.Name)
+        local isTerror = string.find(lowerEventName, "terror", 1, true) ~= nil
+        local isShark = string.find(lowerEventName, "shark", 1, true) ~= nil
         if eventRoot then
             eventRoot.CanCollide = false
-            if not isTerror then eventRoot.Size = Vector3.new(60, 60, 60) end
+            if not isTerror and not isShark then eventRoot.Size = Vector3.new(60, 60, 60) end
         end
         if eventHumanoid then eventHumanoid.WalkSpeed = 0 end
     end

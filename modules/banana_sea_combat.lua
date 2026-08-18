@@ -82,16 +82,27 @@ function M.Combat(eventKey, model, context)
 
             equipSelected(character)
             root.CanCollide = false
-            root.Size = Vector3.new(60, 60, 60)
+            if eventKey ~= "Terrorshark" and eventKey ~= "Shark" then
+                root.Size = Vector3.new(60, 60, 60)
+            end
             enemyHumanoid.WalkSpeed = 0
 
-            local offsetIndex = math.floor(os.clock() / 0.2) % #OFFSETS + 1
-            characterRoot.CFrame = root.CFrame * OFFSETS[offsetIndex]
+            if eventKey == "Terrorshark" then
+                characterRoot.CFrame = CFrame.lookAt(
+                    root.Position + Vector3.new(0, 35, 0),
+                    root.Position
+                )
+            else
+                local offsetIndex = math.floor(os.clock() / 0.2) % #OFFSETS + 1
+                characterRoot.CFrame = root.CFrame * OFFSETS[offsetIndex]
+            end
             characterRoot.AssemblyLinearVelocity = Vector3.zero
             characterRoot.AssemblyAngularVelocity = Vector3.zero
 
             -- Bring Mob Normal do Banana: 250 studs, somente mesmo tipo.
-            bringSameGroup(model, root.CFrame, 250)
+            if eventKey ~= "Terrorshark" then
+                bringSameGroup(model, root.CFrame, 250)
+            end
 
             local fast = getgenv().IKARO_BANANA_COMBAT
             if fast then fast.SeaCreatureAttack(model, character, characterRoot) end
