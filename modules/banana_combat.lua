@@ -78,4 +78,69 @@ function M.GetShipAim(eventModel, fallback)
         or fallback
 end
 
+local redzRemote, redzRemoteId = nil, nil
+
+local function findRedzRemote()
+    if redzRemote and redzRemote.Parent and redzRemoteId then return redzRemote, redzRemoteId end
+    for _, containerName in ipairs({"Util", "Common", "Remotes", "Assets", "FX"}) do
+        local container = ReplicatedStorage:FindFirstChild(containerName)
+        for _, remote in ipairs(container and container:GetChildren() or {}) do
+            if remote:IsA("RemoteEvent") and remote:GetAttribute("Id") then
+                redzRemote, redzRemoteId = remote, remote:GetAttribute("Id")
+            end
+        end
+    end
+    return redzRemote, redzRemoteId
+end
+
+function M.RedzTerrorAttack(character, root)
+    if not character or not root then return false end
+    local tool = character:FindFirstChildOfClass("Tool")
+    if not tool or (tool:GetAttribute("WeaponType") ~= "Melee"
+    and tool:GetAttribute("WeaponType") ~= "Sword") then
+        equipMelee(character)
+        tool = character:FindFirstChildOfClass("Tool")
+    end
+    if not tool then return false end
+
+    local targets = {}
+    for _, container in ipairs({Workspace:FindFirstChild("Enemies"), Workspace:FindFirstChild("Characters")}) do
+        for _, model in ipairs(container and container:GetChildren() or {}) do
+            local modelRoot = model:FindFirstChild("HumanoidRootPart")
+            local humanoid = model:FindFirstChild("Humanoid")
+            if model ~= character and modelRoot and humanoid and humanoid.Health > 0
+            and (modelRoot.Position - root.Position).Magnitude <= 60 then
+                for _, part in ipairs(model:GetChildren()) do
+                    if part:IsA("BasePart") then targets[#targets + 1] = {model, part} end
+                end
+            end
+        end
+    end
+    if #targets == 0 then return false end
+
+    local head = targets[1][1]:FindFirstChild("Head")
+    if not head then return false end
+    return pcall(function()
+        local net = require(ReplicatedStorage.Modules.Net)
+        net:RemoteEvent("RegisterHit", true)
+        ReplicatedStorage.Modules.Net["RE/RegisterAttack"]:FireServer()
+        ReplicatedStorage.Modules.Net["RE/RegisterHit"]:FireServer(
+            head, targets, {},
+            tostring(Players.LocalPlayer.UserId):sub(2, 4) .. tostring(coroutine.running()):sub(11, 15)
+        )
+
+        local remote, remoteId = findRedzRemote()
+        local seed = ReplicatedStorage.Modules.Net:FindFirstChild("seed")
+        if remote and remoteId and seed and type(cloneref) == "function" then
+            cloneref(remote):FireServer(
+                string.gsub("RE/RegisterHit", ".", function(char)
+                    return string.char(bit32.bxor(string.byte(char), math.floor(Workspace:GetServerTimeNow() / 10 % 10) + 1))
+                end),
+                bit32.bxor(remoteId + 909090, seed:InvokeServer() * 2),
+                head, targets
+            )
+        end
+    end)
+end
+
 return M
