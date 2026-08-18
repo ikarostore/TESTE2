@@ -1,0 +1,239 @@
+repeat task.wait() until game:IsLoaded() and game:GetService("Players").LocalPlayer
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
+local Player = Players.LocalPlayer
+
+local Config = {
+    Running = false,
+    FastDelay = 0.03,
+    BringMode = "Normal",
+    SpinPosition = true,
+    Targets = {
+        Terrorshark = true, Shark = true, Piranha = true,
+        PirateGrandBrigade = true, PirateBrigade = true,
+        FishBoat = true, SeaBeast = true
+    }
+}
+
+local BringDistances = {Low = 150, Normal = 250, High = 800}
+local Order = {"Terrorshark", "SeaBeast", "PirateGrandBrigade", "PirateBrigade", "FishBoat", "Shark", "Piranha"}
+local Ships = {PirateGrandBrigade = true, PirateBrigade = true, FishBoat = true}
+local Creatures = {Terrorshark = true, Shark = true, Piranha = true}
+local Offsets = {
+    CFrame.new(0, 40, 0), CFrame.new(-40, 40, 0), CFrame.new(40, 40, 0),
+    CFrame.new(0, 40, 40), CFrame.new(0, 40, -40)
+}
+
+local function characterParts()
+    local character = Player.Character
+    return character,
+        character and character:FindFirstChildOfClass("Humanoid"),
+        character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function autoHaki()
+    local character = Player.Character
+    if character and not character:FindFirstChild("HasBuso") then
+        pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso") end)
+    end
+end
+
+local function equipMelee()
+    local character, humanoid = characterParts()
+    if not character or not humanoid then return end
+    for _, container in ipairs({character, Player:FindFirstChild("Backpack")}) do
+        for _, tool in ipairs(container and container:GetChildren() or {}) do
+            if tool:IsA("Tool") and (tool.ToolTip == "Melee" or tool:GetAttribute("WeaponType") == "Melee") then
+                if tool.Parent ~= character then humanoid:EquipTool(tool) end
+                return tool
+            end
+        end
+    end
+end
+
+local function alive(model)
+    if not model or not model.Parent then return false end
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid then return humanoid.Health > 0 end
+    local health = model:FindFirstChild("Health", true)
+    return not health or health.Value > 0
+end
+
+local function classify(model)
+    local lower = string.lower(model.Name)
+    if string.find(lower, "terrorshark", 1, true) then return "Terrorshark" end
+    if string.find(lower, "sea beast", 1, true) or string.find(lower, "seabeast", 1, true) then return "SeaBeast" end
+    if string.find(lower, "pirategrandbrigade", 1, true) or string.find(lower, "pirate grand brigade", 1, true) then return "PirateGrandBrigade" end
+    if string.find(lower, "piratebrigade", 1, true) or string.find(lower, "pirate brigade", 1, true) then return "PirateBrigade" end
+    if string.find(lower, "fishboat", 1, true) or string.find(lower, "fish boat", 1, true) then return "FishBoat" end
+    if lower == "shark" then return "Shark" end
+    if lower == "piranha" then return "Piranha" end
+end
+
+local function findTarget()
+    local containers = {workspace:FindFirstChild("Enemies"), workspace:FindFirstChild("SeaBeasts")}
+    for _, wanted in ipairs(Order) do
+        if Config.Targets[wanted] then
+            for _, container in ipairs(containers) do
+                for _, model in ipairs(container and container:GetChildren() or {}) do
+                    if model:IsA("Model") and classify(model) == wanted and alive(model) then return wanted, model end
+                end
+            end
+        end
+    end
+end
+
+local function attackNoCooldown()
+    local character, _, root = characterParts()
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not character or not root or not enemies or not character:FindFirstChildOfClass("Tool") then return end
+    local targets, lastPart = {}, nil
+    for _, model in ipairs(enemies:GetChildren()) do
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        local head = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+        if model ~= character and humanoid and humanoid.Health > 0 and head
+        and (head.Position - root.Position).Magnitude <= 60 then
+            targets[#targets + 1] = {model, head}
+            lastPart = head
+        end
+    end
+    if not lastPart then return end
+    pcall(function()
+        local net = ReplicatedStorage.Modules.Net
+        net["RE/RegisterAttack"]:FireServer(1e-9)
+        net["RE/RegisterHit"]:FireServer(lastPart, targets)
+    end)
+end
+
+local function bringGroup(target)
+    local targetRoot = target:FindFirstChild("HumanoidRootPart")
+    local enemies = workspace:FindFirstChild("Enemies")
+    if not targetRoot or not enemies then return end
+    local distance = BringDistances[Config.BringMode] or 250
+    for _, model in ipairs(enemies:GetChildren()) do
+        local root = model:FindFirstChild("HumanoidRootPart")
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        if model ~= target and model.Name == target.Name and root and humanoid and humanoid.Health > 0
+        and (root.Position - targetRoot.Position).Magnitude <= distance then
+            root.CFrame = targetRoot.CFrame
+            root.Size = Vector3.new(1, 1, 1)
+            root.CanCollide = false
+            humanoid.WalkSpeed = 0
+        end
+    end
+end
+
+local function useAllSkills(targetPart)
+    local character, humanoid = characterParts()
+    if not character or not humanoid or not targetPart then return end
+    for _, container in ipairs({Player:FindFirstChild("Backpack"), character}) do
+        for _, tool in ipairs(container and container:GetChildren() or {}) do
+            if tool:IsA("Tool") then
+                if tool.Parent ~= character then humanoid:EquipTool(tool) end
+                for _, key in ipairs({Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C, Enum.KeyCode.V}) do
+                    workspace.CurrentCamera.CFrame = CFrame.lookAt(workspace.CurrentCamera.CFrame.Position, targetPart.Position)
+                    VIM:SendKeyEvent(true, key, false, game)
+                    task.wait(0.08)
+                    VIM:SendKeyEvent(false, key, false, game)
+                end
+            end
+        end
+    end
+end
+
+local Status
+local function combat(key, model)
+    while Config.Running and alive(model) do
+        local character, humanoid, root = characterParts()
+        local targetRoot = model:FindFirstChild("HumanoidRootPart")
+            or model:FindFirstChild("Engine", true) or model.PrimaryPart
+        if not character or not humanoid or not root or not targetRoot then break end
+        humanoid.Sit = false
+        autoHaki()
+        Status.Text = "Alvo: " .. key .. " | HP: " .. tostring((model:FindFirstChildOfClass("Humanoid") or {}).Health or "ship")
+
+        if Creatures[key] then
+            equipMelee()
+            targetRoot.CanCollide = false
+            local enemyHumanoid = model:FindFirstChildOfClass("Humanoid")
+            if enemyHumanoid then enemyHumanoid.WalkSpeed = 0 end
+            targetRoot.Size = Vector3.new(60, 60, 60)
+            local offset = Config.SpinPosition and Offsets[math.floor(os.clock() / 0.2) % #Offsets + 1] or CFrame.new(0, 40, 0)
+            root.CFrame = targetRoot.CFrame * offset
+            root.AssemblyLinearVelocity = Vector3.zero
+            bringGroup(model)
+            attackNoCooldown()
+        elseif Ships[key] then
+            root.CFrame = targetRoot.CFrame * CFrame.new(0, -20, 0)
+            useAllSkills(targetRoot)
+        else
+            root.CFrame = targetRoot.CFrame * CFrame.new(0, 100, 0)
+            useAllSkills(targetRoot)
+        end
+        task.wait(Config.FastDelay)
+    end
+end
+
+-- Interface independente
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "BananaSeaEventsTest"
+Gui.ResetOnSpawn = false
+Gui.Parent = game:GetService("CoreGui")
+local Main = Instance.new("Frame", Gui)
+Main.Size = UDim2.fromOffset(420, 520)
+Main.Position = UDim2.new(0, 30, 0.5, -260)
+Main.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
+Main.Active, Main.Draggable = true, true
+local Layout = Instance.new("UIListLayout", Main)
+Layout.Padding = UDim.new(0, 5)
+local Padding = Instance.new("UIPadding", Main)
+Padding.PaddingTop, Padding.PaddingLeft, Padding.PaddingRight = UDim.new(0, 10), UDim.new(0, 10), UDim.new(0, 10)
+
+local function button(text, callback)
+    local b = Instance.new("TextButton", Main)
+    b.Size = UDim2.new(1, 0, 0, 38)
+    b.BackgroundColor3 = Color3.fromRGB(55, 100, 80)
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.Text = text
+    b.MouseButton1Click:Connect(function() callback(b) end)
+    return b
+end
+
+Status = Instance.new("TextLabel", Main)
+Status.Size = UDim2.new(1, 0, 0, 45)
+Status.BackgroundColor3 = Color3.fromRGB(35, 35, 38)
+Status.TextColor3 = Color3.new(1, 1, 1)
+Status.Text = "BANANA SEA EVENTS TEST | Parado"
+
+button("START / STOP", function(b)
+    Config.Running = not Config.Running
+    b.Text = Config.Running and "STOP AUTO SEA EVENTS" or "START AUTO SEA EVENTS"
+end)
+button("Bring Mode: Normal", function(b)
+    Config.BringMode = Config.BringMode == "Low" and "Normal" or Config.BringMode == "Normal" and "High" or "Low"
+    b.Text = "Bring Mode: " .. Config.BringMode
+end)
+button("Spin Position: ON", function(b)
+    Config.SpinPosition = not Config.SpinPosition
+    b.Text = "Spin Position: " .. (Config.SpinPosition and "ON" or "OFF")
+end)
+for _, key in ipairs(Order) do
+    button(key .. ": ON", function(b)
+        Config.Targets[key] = not Config.Targets[key]
+        b.Text = key .. ": " .. (Config.Targets[key] and "ON" or "OFF")
+    end)
+end
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if Config.Running then
+            local key, model = findTarget()
+            if model then combat(key, model) else Status.Text = "Procurando Sea Events..." end
+        end
+    end
+end)
+
+print("BANANA SEA EVENTS TEST carregado")
