@@ -7,6 +7,16 @@ pcall(function()
         "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua"
     ))()
 end)
+pcall(function()
+    getgenv().IKARO_SEA_EVENTS = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_events.lua"
+    ))()
+end)
+pcall(function()
+    getgenv().IKARO_NAVIGATION = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/navigation.lua"
+    ))()
+end)
 
 local LocalPlayer = Players.LocalPlayer
 if not LocalPlayer then
@@ -188,49 +198,16 @@ local BoatFlightConfig = {
     SpawnReference = Vector3.new(-16133.8, 0, 434.7)
 }
 
-local Sea6Route = {
-    -- Correção baseada no teste do usuário:
-    -- o Sea 6 fica na PARTE TRASEIRA da Tiki.
-    -- Em vez de usar "para fora do spawn do barco", calculamos o lado oposto
-    -- da ilha em relação ao ponto de spawn do Beast Hunter.
-
-    -- referência aproximada do centro da Tiki usando os NPCs marítimos
-    TikiCenter = Vector3.new(
-        (SeaNPCPositions.BeastHunter.Position.X + SeaNPCPositions.SharkHunter.Position.X) / 2,
-        0,
-        (SeaNPCPositions.BeastHunter.Position.Z + SeaNPCPositions.SharkHunter.Position.Z) / 2
-    ),
-
-    -- ponto de spawn físico do Beast Hunter que mapeamos
-    BeastHunterSpawn = Vector3.new(-16133.8, 0, 434.7),
-
-    -- distância virtual para trás da ilha
-    RearDistance = 12000
+local Navigation = getgenv().IKARO_NAVIGATION or {
+    Tiki = Vector3.new(-16209.3115234375, 9.123141288757324, 436.32470703125),
+    Sea6 = Vector3.new(-44718.37109375, 24.00019073486328, 150.4124755859375),
+    Direction = Vector3.new(-0.9999496936798096, 0, -0.010028315708041191),
+    Distance = 28510.4921875,
+    HydraHeartDestination = Vector3.new(5433, 35, 290)
 }
 
--- ROTA REAL MAPEADA NO JOGO
-local SEA6_MAPPED_TIKI = Vector3.new(
-    -16209.3115234375,
-    9.123141288757324,
-    436.32470703125
-)
-
-local SEA6_MAPPED_POSITION = Vector3.new(
-    -44718.37109375,
-    24.00019073486328,
-    150.4124755859375
-)
-
-local SEA6_MAPPED_DIRECTION = Vector3.new(
-    -0.9999496936798096,
-    0,
-    -0.010028315708041191
-)
-
-local SEA6_MAPPED_DISTANCE = 28510.4921875
-
 -- Ponto de chegada usado pelo fluxo Auto Drive To Hydra dos dumps.
-SeaHuntState.HydraHeartDestination = Vector3.new(5433, 35, 290)
+SeaHuntState.HydraHeartDestination = Navigation.HydraHeartDestination
 
 
 
@@ -437,7 +414,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v5.1 MODULAR EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v5.2 MODULAR EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -2564,6 +2541,10 @@ local function IsLikelyCombatModel(obj)
 end
 
 local function FindSelectedSeaEvent()
+    local detector = getgenv().IKARO_SEA_EVENTS
+    if detector then
+        return detector.FindSelected(workspace, SeaEventsSelected, HRP, SeaHuntState)
+    end
     -- Pode replicar antes do Humanoid/Health. A busca direta impede que o
     -- evento marcado seja ignorado enquanto IsLikelyCombatModel ainda falha.
     local priorityEnemies = workspace:FindFirstChild("Enemies")
@@ -2649,6 +2630,8 @@ local FlyToPart
 local FindLeviathanCombatTarget
 
 local function GetModelTargetPart(model)
+    local detector = getgenv().IKARO_SEA_EVENTS
+    if detector then return detector.TargetPart(model) end
     if not model then return nil end
 
     if model:IsA("BasePart") then
@@ -2682,6 +2665,8 @@ local function GetModelTargetPart(model)
 end
 
 local function IsEventAlive(model)
+    local detector = getgenv().IKARO_SEA_EVENTS
+    if detector then return detector.Alive(model) end
     if not model or not model.Parent then return false end
 
     local hum = model:FindFirstChildOfClass("Humanoid")
@@ -3668,15 +3653,15 @@ end
 local function CalculateFixedSeaDirection(boatPart)
     -- Direção real medida com o mapper:
     -- praticamente -X, com pequena componente -Z.
-    FixedSeaDirection = SEA6_MAPPED_DIRECTION
+    FixedSeaDirection = Navigation.Direction
     return FixedSeaDirection
 end
 
 local function GetSea6VirtualTarget()
     return Vector3.new(
-        SEA6_MAPPED_POSITION.X,
+        Navigation.Sea6.X,
         BoatFlightConfig.HeightY,
-        SEA6_MAPPED_POSITION.Z
+        Navigation.Sea6.Z
     )
 end
 
@@ -4079,7 +4064,7 @@ local function StartBoatDrive(forceStart)
                 ApplyBoatNoclip()
                 ApplyBoatObstacleNoclip(
                     drivePart,
-                    FixedSeaDirection or SEA6_MAPPED_DIRECTION
+                    FixedSeaDirection or Navigation.Direction
                 )
                 nextNoclipRefresh = now + 0.10
             end
@@ -4090,7 +4075,7 @@ local function StartBoatDrive(forceStart)
                 and not SeaHuntState.ReturningHeart
             local heartDestination = SeaConfig.HeartDestination == "Hydra"
                 and SeaHuntState.HydraHeartDestination
-                or SEA6_MAPPED_TIKI
+                or Navigation.Tiki
             local targetPos = SeaHuntState.ReturningHeart
                 and Vector3.new(heartDestination.X, BoatFlightConfig.HeightY, heartDestination.Z)
                 or navigatingFrozen
@@ -4114,7 +4099,7 @@ local function StartBoatDrive(forceStart)
                     task.defer(function() TryActivateFrozenDimension(frozenObject) end)
                     break
                 end
-                seaDirection = flatDelta.Magnitude > 1 and flatDelta.Unit or SEA6_MAPPED_DIRECTION
+                seaDirection = flatDelta.Magnitude > 1 and flatDelta.Unit or Navigation.Direction
                 FixedSeaDirection = seaDirection
             elseif SeaHuntState.ReturningHeart then
                 if flatDelta.Magnitude <= 350 then
@@ -4131,7 +4116,7 @@ local function StartBoatDrive(forceStart)
                 FixedSeaDirection = seaDirection
             elseif SeaHuntState.AtSea6 or flatDelta.Magnitude <= 1000 then
                 SeaHuntState.AtSea6 = true
-                seaDirection = SEA6_MAPPED_DIRECTION
+                seaDirection = Navigation.Direction
                 FixedSeaDirection = seaDirection
             elseif flatDelta.Magnitude > 250 then
                 seaDirection = flatDelta.Unit
@@ -4641,7 +4626,7 @@ SimpleButton(HuntPage, "Debug Sea 6 Route", function()
             "Dir=(%.5f, %.5f, %.5f) | Target=(%.0f, %.0f, %.0f) | DistMap=%.0f",
             dir.X, dir.Y, dir.Z,
             target.X, target.Y, target.Z,
-            SEA6_MAPPED_DISTANCE
+            Navigation.Distance
         )
     )
 end)
@@ -5038,4 +5023,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v5.1 MODULAR carregado.")
+print("IKARO Leviathan v5.2 MODULAR carregado.")
