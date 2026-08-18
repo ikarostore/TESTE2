@@ -11,7 +11,7 @@ local Fluent = loadstring(game:HttpGet(
 
 local Window = Fluent:CreateWindow({
 	Title = "IKAROHUB",
-	SubTitle = "By Obii",
+	SubTitle = "by ikaro",
 	TabWidth = 160,
 	Theme = "Dark",
 	Acrylic = false,
@@ -20,50 +20,59 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-	Home = Window:AddTab({
-		Title = "Tab Information"
-	}),
-	Main = Window:AddTab({
-		Title = "Tab Farming"
-	}),
-	Sea = Window:AddTab({
-		Title = "Tab Volcano And Sea Event"
-	}),
-	Items = Window:AddTab({
-		Title = "Tab Farming Other"
-	}),
-	Setting = Window:AddTab({
-		Title = "Setting Farm"
+	Shop = Window:AddTab({
+		Title = "Shop"
 	}),
 	Status = Window:AddTab({
-		Title = "Tab Status And Server"
+		Title = "Status And Server"
 	}),
-	Stats = Window:AddTab({
-		Title = "Tab Stats"
+	LocalPlayer = Window:AddTab({
+		Title = "Localplayer"
 	}),
-	Player = Window:AddTab({
-		Title = "Tab Local Player"
+	SettingFarm = Window:AddTab({
+		Title = "setting farm"
 	}),
-	Teleport = Window:AddTab({
-		Title = "Tab Teleport"
+	Skills = Window:AddTab({
+		Title = "Hold and select Skill"
 	}),
-	Visual = Window:AddTab({
-		Title = "Tab Visual"
+	Farming = Window:AddTab({
+		Title = "Farming"
 	}),
-	Fruit = Window:AddTab({
-		Title = "Tab Esp And Fruit"
+	StackFarming = Window:AddTab({
+		Title = "Stack farming"
 	}),
-	Raid = Window:AddTab({
-		Title = "Tab Raid"
+	FarmingOther = Window:AddTab({
+		Title = "Farming Other"
 	}),
-	Race = Window:AddTab({
-		Title = "Tab Upgrade Race"
+	FruitRaid = Window:AddTab({
+		Title = "Fruit and Raid"
 	}),
-	Shop = Window:AddTab({
-		Title = "Tab Shop"
+	Dungeon = Window:AddTab({
+		Title = "Dungeon"
 	}),
-	Misc = Window:AddTab({
-		Title = "Tab Misc"
+	SeaEvent = Window:AddTab({
+		Title = "Sea event"
+	}),
+	UpgradeRace = Window:AddTab({
+		Title = "upgrade Race"
+	}),
+	UpgradeItem = Window:AddTab({
+		Title = "get and upgrade item"
+	}),
+	VolcanoEvent = Window:AddTab({
+		Title = "volcano event"
+	}),
+	ESP = Window:AddTab({
+		Title = "esp"
+	}),
+	PVP = Window:AddTab({
+		Title = "PVP"
+	}),
+	Webhook = Window:AddTab({
+		Title = "Tab webhook"
+	}),
+	Setting = Window:AddTab({
+		Title = "setting"
 	})
 }
 
