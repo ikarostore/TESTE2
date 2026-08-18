@@ -1690,7 +1690,7 @@ if Update:LoadAnimation() then
 end;
 local Library = Update:Window({
 	Title = "IKAROHUB",
-	SubTitle = "Blox Fruits",
+	SubTitle = "Blox Fruits | v0.4",
 	Size = UDim2.new(0, 450, 0, 300),
 	TabWidth = 140
 });
@@ -4375,6 +4375,10 @@ if InventorySuccess and type(Inventory) == "table" then
 else
 	warn("IKAROHUB: inventário ainda indisponível; continuando a carregar as abas.");
 end;
+if #SwordList == 0 then
+	table.insert(SwordList, "Nenhuma espada carregada");
+end;
+print("[IKAROHUB v0.4] Main: inventário processado; continuando módulos.");
 MainTab:Dropdown("Choose Sword", SwordList, _G.Settings.Main["Selected Mastery Sword"], function(value)
 	_G.Settings.Main["Selected Mastery Sword"] = value;
 	(getgenv()).SaveSetting();
@@ -5374,6 +5378,7 @@ spawn(function()
 		end;
 	end;
 end);
+print("[IKAROHUB v0.4] Main concluída; iniciando Farming.");
 if World3 then
 	FarmTab:Seperator("Elite Hunter");
 	local Elite_Hunter_Status = FarmTab:Label("Status");
