@@ -333,8 +333,10 @@ do
 		{
 			id = "FightingGodhuman", title = "Godhuman", tool = "Godhuman", sea = "Third Sea",
 			npcs = {"Ancient Monk", "Godhuman Teacher"},
-			fallbackBySea = {[3] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625)},
-			strictRoute = true,
+			-- O ponto Y=531 e apenas a entrada/galho da arvore. O Ancient Monk
+			-- fica na camara inferior do tronco; por isso a rota termina abaixo.
+			fallbackBySea = {[3] = CFrame.new(-13274.528320313, 429, -7579.22265625)},
+			approachBySea = {[3] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625)},
 			buy = function() return invoke("BuyGodhuman") end
 		},
 		{
@@ -431,6 +433,11 @@ do
 						else
 							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
 							local root = character:WaitForChild("HumanoidRootPart")
+							local approach = style.approachBySea and style.approachBySea[CurrentSea]
+							if approach and (root.Position - approach.Position).Magnitude > 45 then
+								pcall(tweenTo, approach)
+								task.wait(0.25)
+							end
 							if (root.Position - route.Position).Magnitude > 10 then
 								pcall(tweenTo, route)
 								task.wait(0.75)
@@ -438,7 +445,7 @@ do
 
 							-- A rota fixa carrega a regiao do treinador. Se o modelo estiver
 							-- disponivel, aproxima no ponto exato; a compra nao depende disso.
-							local trainerRoot = not style.strictRoute and findRoot(findTrainer(style)) or nil
+							local trainerRoot = findRoot(findTrainer(style))
 							if trainerRoot and trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude > 10 then
 								pcall(tweenTo, trainerRoot.CFrame * CFrame.new(0, 0, 4))
 								task.wait(0.25)
