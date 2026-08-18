@@ -407,39 +407,42 @@ do
 						Options[style.id]:SetValue(false)
 						notify("Fighting Shop", style.title .. " ja esta disponivel.")
 					else
-						local trainer = findTrainer(style)
-						local trainerRoot = findRoot(trainer)
-						local fallbackCFrame = style.fallbackBySea and style.fallbackBySea[CurrentSea]
-						if not trainerRoot and fallbackCFrame then
-							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
-							local root = character:WaitForChild("HumanoidRootPart")
-							if (root.Position - fallbackCFrame.Position).Magnitude > 450 then
-								pcall(tweenTo, fallbackCFrame)
-								task.wait(1.5)
-								trainer = findTrainer(style)
-								trainerRoot = findRoot(trainer)
-							end
-						end
-						if not trainerRoot then
+						local route = style.fallbackBySea and style.fallbackBySea[CurrentSea]
+						if not route then
 							local now = os.clock()
 							if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
 								lastMissingNotice[style.id] = now
-								notify(style.title, "Treinador nao encontrado. Atual: " .. SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. "). Necessario: " .. style.sea)
+								notify(style.title, "Rota indisponivel no " .. SeaNames[CurrentSea] .. ". Necessario: " .. style.sea)
 							end
 						else
 							local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
 							local root = character:WaitForChild("HumanoidRootPart")
-							local destination = trainerRoot.CFrame * CFrame.new(0, 0, 4)
-							if (root.Position - trainerRoot.Position).Magnitude > 8 then
-								pcall(tweenTo, destination)
+							if (root.Position - route.Position).Magnitude > 10 then
+								pcall(tweenTo, route)
+								task.wait(0.75)
 							end
-							if trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude <= 12 then
+
+							-- A rota fixa carrega a regiao do treinador. Se o modelo estiver
+							-- disponivel, aproxima no ponto exato; a compra nao depende disso.
+							local trainerRoot = findRoot(findTrainer(style))
+							if trainerRoot and trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude > 10 then
+								pcall(tweenTo, trainerRoot.CFrame * CFrame.new(0, 0, 4))
+								task.wait(0.25)
+							end
+
+							if (root.Position - route.Position).Magnitude <= 40 or (trainerRoot and trainerRoot.Parent and (root.Position - trainerRoot.Position).Magnitude <= 15) then
 								style.buy()
 								task.wait(1)
 								if ownsStyle(style) then
 									selectedStyles[style.id] = false
 									Options[style.id]:SetValue(false)
 									notify("Fighting Shop", style.title .. " comprado com sucesso.")
+								else
+									local now = os.clock()
+									if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
+										lastMissingNotice[style.id] = now
+										notify(style.title, "Compra enviada. Confira dinheiro, fragmentos e requisitos do estilo.")
+									end
 								end
 							end
 						end
