@@ -431,7 +431,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.5 FIXED EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.6 FIXED EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -4784,6 +4784,7 @@ task.spawn(function()
         {Id = "MythicalScroll", Label = "Mythical Scroll"}
     }
     local craftBusy = false
+    local autoQueueIndex = 0
     SectionTitle(Pages.Scrolls, "Craft Scrolls")
     local statusRow = Row(Pages.Scrolls, 58)
     local statusLabel = RowLabel(statusRow, "Status: aguardando seleção.")
@@ -4794,7 +4795,7 @@ task.spawn(function()
     end
 
     local function FormatCraftResult(result)
-        if result == nil then return "pedido enviado" end
+        if result == nil then return "servidor não confirmou" end
         if type(result) == "table" then
             local ok, encoded = pcall(function()
                 return HttpService:JSONEncode(result)
@@ -4804,7 +4805,7 @@ task.spawn(function()
         return tostring(result)
     end
 
-    local function CraftSelectedScrolls(source)
+    local function CraftSelectedScrolls(source, onePerCycle)
         if craftBusy then
             SetCraftStatus("craft já está em andamento")
             return
@@ -4822,7 +4823,21 @@ task.spawn(function()
             return
         end
 
-        for _, scroll in ipairs(scrolls) do
+        local orderedScrolls = scrolls
+        if onePerCycle then
+            orderedScrolls = {}
+            for offset = 1, #scrolls do
+                local index = ((autoQueueIndex + offset - 1) % #scrolls) + 1
+                local candidate = scrolls[index]
+                if SeaConfig.ScrollCraft.Selected[candidate.Id] then
+                    table.insert(orderedScrolls, candidate)
+                    autoQueueIndex = index
+                    break
+                end
+            end
+        end
+
+        for _, scroll in ipairs(orderedScrolls) do
             if SeaConfig.ScrollCraft.Selected[scroll.Id] then
                 selectedCount = selectedCount + 1
                 local ok, result = pcall(function()
@@ -4833,7 +4848,9 @@ task.spawn(function()
                 else
                     table.insert(results, scroll.Label .. ": erro - " .. tostring(result))
                 end
-                task.wait(0.45)
+                -- O CraftItem aplica cooldown no servidor. O intervalo curto
+                -- anterior fazia os crafts seguintes serem ignorados.
+                task.wait(1.35)
             end
         end
 
@@ -4870,7 +4887,7 @@ task.spawn(function()
     task.spawn(function()
         while Gui and Gui.Parent do
             if SeaConfig.ScrollCraft.AutoCraft then
-                CraftSelectedScrolls("Auto")
+                CraftSelectedScrolls("Auto", true)
             end
             task.wait(math.clamp(tonumber(SeaConfig.ScrollCraft.Interval) or 8, 3, 60))
         end
@@ -4950,5 +4967,5 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.5 FIXED carregado.")
+print("IKARO Leviathan v4.6 FIXED carregado.")
 
