@@ -432,7 +432,7 @@ do
     title.TextColor3 = Color3.fromRGB(235, 235, 235)
     title.Font = Enum.Font.SourceSansBold
     title.TextSize = 14
-    title.Text = "IKARO Leviathan v4.7 FIXED EXACT SEA6 ROUTE"
+    title.Text = "IKARO Leviathan v4.8 FIXED EXACT SEA6 ROUTE"
     title.Parent = Top
 end
 
@@ -1977,6 +1977,21 @@ local function StartEscape()
 
     EscapeActive = true
 
+    -- Teleport Y: salva o ponto do combate e sai instantaneamente da zona de
+    -- dano. Isso substitui a subida contínua que podia deixar a conta presa.
+    SeaHuntState.EscapeReturnCFrame = HRP.CFrame
+    SeaHuntState.EscapeSafePosition = Vector3.new(
+        HRP.Position.X,
+        HRP.Position.Y + 350,
+        HRP.Position.Z
+    )
+    pcall(function()
+        HRP.CFrame = CFrame.new(SeaHuntState.EscapeSafePosition)
+            * (SeaHuntState.EscapeReturnCFrame - SeaHuntState.EscapeReturnCFrame.Position)
+        HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    end)
+
     -- A fuga sempre tem prioridade sobre follow/hunt.
     StopFollow()
 
@@ -1989,7 +2004,7 @@ local function StartEscape()
     EscapeBodyVelocity.Name = "IKAROEscapeVelocity"
     EscapeBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
     EscapeBodyVelocity.P = 12000
-    EscapeBodyVelocity.Velocity = Vector3.new(0, EscapeSpeed, 0)
+    EscapeBodyVelocity.Velocity = Vector3.new(0, 0, 0)
     EscapeBodyVelocity.Parent = HRP
 
     EscapeBodyGyro = Instance.new("BodyGyro")
@@ -2012,6 +2027,8 @@ local function StartEscape()
 
         if not HRP or not HRP.Parent or not Humanoid or Humanoid.Health <= 0 then
             StopEscape()
+            SeaHuntState.EscapeReturnCFrame = nil
+            SeaHuntState.EscapeSafePosition = nil
             return
         end
 
@@ -2029,48 +2046,29 @@ local function StartEscape()
                 "%. Voltando ao modo normal."
             )
 
+            local returnCFrame = SeaHuntState.EscapeReturnCFrame
             StopEscape()
+            if returnCFrame and HRP and HRP.Parent then
+                pcall(function()
+                    HRP.CFrame = returnCFrame
+                    HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end)
+            end
+            SeaHuntState.EscapeReturnCFrame = nil
+            SeaHuntState.EscapeSafePosition = nil
+            SeaHuntState.ResumeAfterEscape = true
             return
         end
 
-        local _, threatPart = FindLeviathanThreat()
-        if not threatPart and SeaHuntState.CurrentEvent then
-            local event = SeaHuntState.CurrentEvent
-            threatPart = event:FindFirstChild("HumanoidRootPart", true)
-                or event.PrimaryPart
-                or event:FindFirstChildWhichIsA("BasePart", true)
+        local safePosition = SeaHuntState.EscapeSafePosition
+        if safePosition then
+            HRP.CFrame = CFrame.new(safePosition)
+                * (HRP.CFrame - HRP.Position)
+            HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            EscapeBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            EscapeBodyGyro.CFrame = HRP.CFrame
         end
-
-        local fleeDirection
-
-        if threatPart then
-            -- Foge diretamente para o lado oposto do Leviathan.
-            local away = HRP.Position - threatPart.Position
-
-            if away.Magnitude > 0.01 then
-                away = away.Unit
-            else
-                away = Vector3.new(0, 0, -1)
-            end
-
-            -- Mistura afastamento horizontal com subida forte.
-            fleeDirection = (
-                away
-                + Vector3.new(0, EscapeVerticalBias, 0)
-            ).Unit
-        else
-            -- Se não conseguir localizar o Leviathan,
-            -- sobe rapidamente para sair da região de perigo.
-            fleeDirection = Vector3.new(0, 1, 0)
-        end
-
-        EscapeBodyVelocity.Velocity =
-            fleeDirection * EscapeSpeed
-
-        EscapeBodyGyro.CFrame = CFrame.new(
-            HRP.Position,
-            HRP.Position + fleeDirection
-        )
     end)
 end
 
@@ -2254,7 +2252,7 @@ local function BMFastAttack(target, eventModel, eventKey)
     -- Head + tabela vazia executava sem erro, mas nao reduzia HP no servidor.
     local registerAttack, registerHit = GetBMModernRemotes()
     if registerAttack and registerHit
-    and (eventKey == "Shark" or eventKey == "Piranha") then
+    and (eventKey == "Shark" or eventKey == "Piranha" or eventKey == "Terrorshark") then
         local now = os.clock()
 
         -- O trace registra EquipEvent uma única vez e o primeiro hit somente
@@ -2291,6 +2289,8 @@ local function BMFastAttack(target, eventModel, eventKey)
                     or eventKey == "Shark"
                     and string.find(lower, "shark", 1, true)
                     and not string.find(lower, "terror", 1, true)
+                    or eventKey == "Terrorshark"
+                    and string.find(lower, "terrorshark", 1, true)
                 local humanoid = model:FindFirstChildOfClass("Humanoid")
                 local hitPart = model:FindFirstChild("HumanoidRootPart", true)
                     or model:FindFirstChild("Head", true)
@@ -2863,6 +2863,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             or isShipEvent and 80
             or eventKey == "Piranha" and 18
             or useBasicClick and 30
+            or eventKey == "Terrorshark" and 45
             -- O trace de morte do Terror Shark nao registrou RegisterHit nem
             -- RegisterAttack. Ele foi eliminado por skills com a conta acima
             -- do alvo; mantemos altura segura sem copiar o sobe/desce do Maru.
@@ -2891,6 +2892,7 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
             local right = Vector3.new(target.CFrame.RightVector.X, 0, target.CFrame.RightVector.Z)
             local offsetDistance = isShipEvent and 95
                 or isLeviathan and 50
+                or eventKey == "Terrorshark" and 30
                 or stableSkillHover and 110
                 or 45
             combatOffset = (right.Magnitude > 0.01 and right.Unit or Vector3.new(1, 0, 0)) * offsetDistance
@@ -3022,7 +3024,14 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
             if distance <= attackRange then
                 AimAtSeaTarget(target)
 
-                if useBasicClick then
+                if eventKey == "Terrorshark" then
+                    -- Híbrido Banana: Fast Attack moderno para dano constante
+                    -- e skills configuradas para atravessar as resistências.
+                    BMFastAttack(target, eventModel, eventKey)
+                    if not EscapeActive then
+                        UseConfiguredSeaSkills(target)
+                    end
+                elseif useBasicClick then
                     BMFastAttack(target, eventModel, eventKey)
                 else
                     -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
@@ -5005,4 +5014,4 @@ task.spawn(function()
     end
 end)
 
-print("IKARO Leviathan v4.7 FIXED carregado.")
+print("IKARO Leviathan v4.8 FIXED carregado.")
