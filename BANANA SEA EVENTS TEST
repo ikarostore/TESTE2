@@ -8,6 +8,8 @@ local Player = Players.LocalPlayer
 
 local Config = {
     Running = false,
+    AutoBoat = true,
+    BoatSpeed = 330,
     FastDelay = 0.03,
     BringMode = "Normal",
     SpinPosition = true,
@@ -22,6 +24,9 @@ local BringDistances = {Low = 150, Normal = 250, High = 800}
 local Order = {"Terrorshark", "SeaBeast", "PirateGrandBrigade", "PirateBrigade", "FishBoat", "Shark", "Piranha"}
 local Ships = {PirateGrandBrigade = true, PirateBrigade = true, FishBoat = true}
 local Creatures = {Terrorshark = true, Shark = true, Piranha = true}
+local Sea6Position = Vector3.new(-44718.37109375, 70, 150.4124755859375)
+local Sea6Direction = Vector3.new(-0.9999496936798096, 0, -0.010028315708041191)
+local ActiveBoat, BoatVelocity, BoatGyro = nil, nil, nil
 local Offsets = {
     CFrame.new(0, 40, 0), CFrame.new(-40, 40, 0), CFrame.new(40, 40, 0),
     CFrame.new(0, 40, 40), CFrame.new(0, 40, -40)
@@ -86,6 +91,91 @@ local function findTarget()
     end
 end
 
+local function boatOwnerMatches(boat)
+    local owner = boat:FindFirstChild("BoatOwner", true) or boat:FindFirstChild("Owner", true)
+    if not owner then return true end
+    local value = owner.Value
+    return value == Player or value == Player.Name or value == Player.UserId
+end
+
+local function findMyBoat()
+    local boats = workspace:FindFirstChild("Boats")
+    if not boats then return nil end
+    for _, boat in ipairs(boats:GetChildren()) do
+        if (boat.Name == "Beast Hunter" or boat.Name == "PirateBrigade") and boatOwnerMatches(boat) then
+            return boat
+        end
+    end
+end
+
+local function stopBoat()
+    if BoatVelocity then BoatVelocity.Velocity = Vector3.zero end
+    if ActiveBoat then
+        local seat = ActiveBoat:FindFirstChild("VehicleSeat", true) or ActiveBoat:FindFirstChildWhichIsA("VehicleSeat", true)
+        if seat then seat.AssemblyLinearVelocity = Vector3.zero end
+    end
+end
+
+local function ensureBoat()
+    local boat = findMyBoat()
+    if not boat then
+        pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyBoat", "Beast Hunter") end)
+        task.wait(1)
+        boat = findMyBoat()
+    end
+    if not boat then
+        pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyBoat", "PirateBrigade") end)
+        task.wait(1)
+        boat = findMyBoat()
+    end
+    if not boat then return nil end
+
+    ActiveBoat = boat
+    local seat = boat:FindFirstChild("VehicleSeat", true) or boat:FindFirstChildWhichIsA("VehicleSeat", true)
+    local drive = seat or boat.PrimaryPart or boat:FindFirstChildWhichIsA("BasePart", true)
+    if not seat or not drive then return nil end
+
+    local character, humanoid, root = characterParts()
+    if humanoid and root and humanoid.SeatPart ~= seat then
+        root.CFrame = seat.CFrame + Vector3.new(0, 3, 0)
+        task.wait(0.15)
+        seat:Sit(humanoid)
+    end
+
+    for _, part in ipairs(boat:GetDescendants()) do
+        if part:IsA("BasePart") then part.CanCollide = false end
+    end
+
+    if not BoatVelocity or BoatVelocity.Parent ~= drive then
+        if BoatVelocity then BoatVelocity:Destroy() end
+        if BoatGyro then BoatGyro:Destroy() end
+        BoatVelocity = Instance.new("BodyVelocity")
+        BoatVelocity.Name = "BananaSeaBoatVelocity"
+        BoatVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        BoatVelocity.P = 50000
+        BoatVelocity.Parent = drive
+        BoatGyro = Instance.new("BodyGyro")
+        BoatGyro.Name = "BananaSeaBoatGyro"
+        BoatGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        BoatGyro.P = 50000
+        BoatGyro.D = 1000
+        BoatGyro.Parent = drive
+    end
+    return boat, drive
+end
+
+local function sailSea6()
+    local boat, drive = ensureBoat()
+    if not boat or not drive then return false end
+    local flatDelta = Vector3.new(Sea6Position.X - drive.Position.X, 0, Sea6Position.Z - drive.Position.Z)
+    local direction = flatDelta.Magnitude > 1000 and flatDelta.Unit or Sea6Direction
+    local vertical = math.clamp((70 - drive.Position.Y) * 7, -140, 140)
+    BoatVelocity.Velocity = direction * Config.BoatSpeed + Vector3.new(0, vertical, 0)
+    BoatGyro.CFrame = CFrame.lookAt(Vector3.zero, direction, Vector3.yAxis)
+    drive.AssemblyLinearVelocity = BoatVelocity.Velocity
+    return true
+end
+
 local function attackNoCooldown()
     local character, _, root = characterParts()
     local enemies = workspace:FindFirstChild("Enemies")
@@ -146,6 +236,7 @@ end
 
 local Status
 local function combat(key, model)
+    stopBoat()
     while Config.Running and alive(model) do
         local character, humanoid, root = characterParts()
         local targetRoot = model:FindFirstChild("HumanoidRootPart")
@@ -220,6 +311,11 @@ button("Spin Position: ON", function(b)
     Config.SpinPosition = not Config.SpinPosition
     b.Text = "Spin Position: " .. (Config.SpinPosition and "ON" or "OFF")
 end)
+button("Auto Buy/Sail Sea 6: ON", function(b)
+    Config.AutoBoat = not Config.AutoBoat
+    b.Text = "Auto Buy/Sail Sea 6: " .. (Config.AutoBoat and "ON" or "OFF")
+    if not Config.AutoBoat then stopBoat() end
+end)
 for _, key in ipairs(Order) do
     button(key .. ": ON", function(b)
         Config.Targets[key] = not Config.Targets[key]
@@ -231,7 +327,15 @@ task.spawn(function()
     while task.wait(0.1) do
         if Config.Running then
             local key, model = findTarget()
-            if model then combat(key, model) else Status.Text = "Procurando Sea Events..." end
+            if model then
+                combat(key, model)
+            elseif Config.AutoBoat then
+                Status.Text = sailSea6() and "Navegando e procurando Sea Events..." or "Comprando/localizando barco..."
+            else
+                Status.Text = "Procurando Sea Events..."
+            end
+        else
+            stopBoat()
         end
     end
 end)
