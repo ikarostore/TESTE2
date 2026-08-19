@@ -3646,12 +3646,12 @@ do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:Fin
     local v495 = v16.Main:AddToggle("ToggleSpawnCake", {
         Title = "Spawm Cake Prince",
         Description = "",
-        Default = true
+        Default = false
     });
     v495:OnChanged(function(v577)
         _G.SpawnCakePrince = v577;
     end);
-    v17.ToggleSpawnCake:SetValue(true);
+    v17.ToggleSpawnCake:SetValue(false);
 end
 spawn(function()
     while wait() do
@@ -7153,6 +7153,9 @@ v17.ToggleBringMob:SetValue(true);
 spawn(function()
     while wait() do
         pcall(function()
+            if not (_G.BringMob and bringmob) then
+                return
+            end
             for v733, v734 in 
 pairs(game:GetService("Workspace").Enemies:GetChildren()) do
                 if (_G.BringMob and bringmob) then
@@ -9861,20 +9864,20 @@ v151:OnChanged(function(v381)
     _G.AutoRejoin = v381;
 end);
 v17.ToggleRejoin:SetValue(true);
-spawn(function()
-    while wait() do
-        if _G.AutoRejoin then
-            getgenv().rejoin = 
-game:GetService("CoreGui").RobloxPromptGui.promptOverlay.ChildAdded:Connect(function(v808)
-                if ((v808.Name == "ErrorPrompt") and 
-v808:FindFirstChild("MessageArea") and 
-v808.MessageArea:FindFirstChild("ErrorFrame")) then
-                    game:GetService("TeleportService"):Teleport(game.PlaceId);
-                end
-            end);
-        end
+if not getgenv().IKARO_REJOIN_CONNECTION then
+    local coreGui = game:GetService("CoreGui")
+    local promptGui = coreGui:FindFirstChild("RobloxPromptGui")
+    local overlay = promptGui and promptGui:FindFirstChild("promptOverlay")
+    if overlay then
+        getgenv().IKARO_REJOIN_CONNECTION = overlay.ChildAdded:Connect(function(v808)
+            if _G.AutoRejoin and (v808.Name == "ErrorPrompt") and
+                v808:FindFirstChild("MessageArea") and
+                v808.MessageArea:FindFirstChild("ErrorFrame") then
+                game:GetService("TeleportService"):Teleport(game.PlaceId)
+            end
+        end)
     end
-end);
+end
 local v56 = v16.Misc:AddSection("Fog");
 local function v152()
     local v382 = game:GetService("Lighting");
