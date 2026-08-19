@@ -14,7 +14,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_SEA_RUNTIME = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=1"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=2"
     ))()
 end)
 pcall(function()
@@ -3675,13 +3675,13 @@ local function ApplyBoatObstacleNoclip(drivePart, direction)
     -- A caixa acompanha a frente do barco e remove localmente somente a
     -- colisão de geometria estática. Isso cobre muralhas/rochas grandes que
     -- continuam bloqueando a assembly mesmo com as peças do barco em noclip.
-    local center = drivePart.Position + flatDirection * 55
+    local center = drivePart.Position + flatDirection * 120
     local scanCFrame = CFrame.lookAt(center, center + flatDirection)
     local seenNow = {}
 
     for _, part in ipairs(workspace:GetPartBoundsInBox(
         scanCFrame,
-        Vector3.new(150, 150, 190),
+        Vector3.new(280, 360, 520),
         params
     )) do
         if part:IsA("BasePart")
@@ -4132,8 +4132,16 @@ local function StartBoatDrive(forceStart)
         BoatNoclipConnection = nil
     end
 
-    -- A própria rotina de direção reaplica o noclip em intervalo controlado.
-    -- Enumerar todas as peças do barco em todo Stepped causava uso excessivo.
+    -- Peças do Beast Hunter que aparecerem por streaming também recebem
+    -- noclip imediatamente; a varredura periódica continua como redundância.
+    BoatNoclipConnection = boat.DescendantAdded:Connect(function(obj)
+        if obj:IsA("BasePart") then
+            if BoatCollisionCache[obj] == nil then
+                BoatCollisionCache[obj] = obj.CanCollide
+            end
+            obj.CanCollide = false
+        end
+    end)
 
     SetState(
         "BOAT_FLYING_TO_SEA6",

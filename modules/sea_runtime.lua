@@ -27,7 +27,9 @@ function M.DepartureHeight(position, tikiPosition, normalHeight, returningHeart,
     local deltaX = position.X - tikiPosition.X
     local deltaZ = position.Z - tikiPosition.Z
     local horizontalDistance = math.sqrt(deltaX * deltaX + deltaZ * deltaZ)
-    return horizontalDistance <= 2200 and 200 or normalHeight
+    -- Tiki possui muralhas e estruturas altas ao redor do cais. Mantém a
+    -- altitude de liberação até o barco estar completamente fora da ilha.
+    return horizontalDistance <= 3000 and 320 or normalHeight
 end
 
 return M
