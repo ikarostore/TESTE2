@@ -17,6 +17,22 @@ local POSITIONS = {
 local activeSharkModel = nil
 local replayingValidHit = false
 local hitMirrorInstalled = false
+local capturedHitModel = nil
+local capturedHitRemote = nil
+local capturedHitPacket = nil
+
+local function replayCapturedBananaPair(model)
+    if capturedHitModel ~= model or not capturedHitRemote or not capturedHitPacket then
+        return false
+    end
+    replayingValidHit = true
+    local ok = pcall(function()
+        capturedHitRemote:FireServer(table.unpack(capturedHitPacket, 1, capturedHitPacket.n))
+        capturedHitRemote:FireServer(table.unpack(capturedHitPacket, 1, capturedHitPacket.n))
+    end)
+    replayingValidHit = false
+    return ok
+end
 
 local function installValidHitMirror()
     if hitMirrorInstalled then return true end
@@ -42,6 +58,9 @@ local function installValidHitMirror()
         and args[4] ~= "" then
             local remote = self
             local packet = table.pack(...)
+            capturedHitModel = activeSharkModel
+            capturedHitRemote = remote
+            capturedHitPacket = packet
             task.defer(function()
                 if activeSharkModel and activeSharkModel.Parent then
                     replayingValidHit = true
@@ -121,8 +140,12 @@ function M.Combat(eventKey, eventModel, context)
     local started = os.clock()
     local terrorAttackUntil = 0
     local nextTerrorAttack = started
+    local nextBananaPair = 0
     local mirrorThisFight = eventKey == "Shark" or eventKey == "Terrorshark"
     if mirrorThisFight and installValidHitMirror() then
+        capturedHitModel = nil
+        capturedHitRemote = nil
+        capturedHitPacket = nil
         activeSharkModel = eventModel
     end
     local nextToolAttack = 0
@@ -150,13 +173,15 @@ function M.Combat(eventKey, eventModel, context)
                 enemyRoot.CanCollide = false
                 hitPart.CanCollide = false
                 local now = os.clock()
-                if isTerror and now >= nextTerrorAttack then
-                    -- O contato do M1 é instantâneo. Uma janela curta mantém o
-                    -- hit válido sem deixar a conta dentro das skills do boss.
+                local hasValidatedPacket = capturedHitModel == eventModel
+                    and capturedHitRemote ~= nil and capturedHitPacket ~= nil
+                if isTerror and not hasValidatedPacket and now >= nextTerrorAttack then
+                    -- Apenas até obter o primeiro pacote/token legítimo.
                     terrorAttackUntil = now + 0.16
                     nextTerrorAttack = now + 0.58
                 end
-                local inTerrorAttackWindow = not isTerror or now < terrorAttackUntil
+                local inTerrorAttackWindow = not isTerror
+                    or (not hasValidatedPacket and now < terrorAttackUntil)
                 local desired = inTerrorAttackWindow
                     and Vector3.new(
                         hitPart.Position.X,
@@ -169,6 +194,13 @@ function M.Combat(eventKey, eventModel, context)
                         hitPart.Position.Z
                     )
                 root.CFrame = CFrame.lookAt(desired, hitPart.Position)
+
+                -- Após o primeiro contato, não volta mais para perto. Usa em
+                -- segurança o pacote real e o envia em pares como o Banana.
+                if isTerror and hasValidatedPacket and now >= nextBananaPair then
+                    nextBananaPair = now + 0.18
+                    replayCapturedBananaPair(eventModel)
+                end
             else
                 -- Mantém o comportamento já validado para grupos de Piranhas.
                 enemyRoot.CanCollide = false
@@ -184,7 +216,10 @@ function M.Combat(eventKey, eventModel, context)
             if isShark then
                 -- Cria primeiro o estado legítimo de M1; o próprio jogo gera o
                 -- RegisterHit observado no Banana.
-                local canM1 = eventKey ~= "Terrorshark" or now < terrorAttackUntil
+                local hasValidatedPacket = capturedHitModel == eventModel
+                    and capturedHitRemote ~= nil and capturedHitPacket ~= nil
+                local canM1 = eventKey ~= "Terrorshark"
+                    or (not hasValidatedPacket and now < terrorAttackUntil)
                 if tool and canM1 and now >= nextToolAttack then
                     nextToolAttack = now + 0.12
                     pcall(function()
