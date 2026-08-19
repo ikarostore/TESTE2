@@ -73,9 +73,9 @@ local FollowSpeed = 140
 local FollowHeight = 22
 local FollowBack = 8
 
-local FollowSpeedFar = 560
-local FollowSpeedMid = 480
-local FollowSpeedNear = 390
+local FollowSpeedFar = 450
+local FollowSpeedMid = 410
+local FollowSpeedNear = 370
 
 local WaterWalkEnabled = true
 local WaterPlatform = nil
