@@ -14,7 +14,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_SEA_RUNTIME = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=2"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=3"
     ))()
 end)
 pcall(function()
@@ -1921,7 +1921,13 @@ local function StartFollowBeastHunter()
                 end
                 return
             end
-
+            -- Noclip permanece ativo em todos os frames da aproximação ao
+            -- assento, inclusive quando novas partes do personagem carregam.
+            if os.clock() >= nextNoclipRefresh then
+                CacheFollowParts()
+                SetFollowNoclip()
+                nextNoclipRefresh = os.clock() + 0.10
+            end
             if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
                 ApplyFollowPhysics()
             end
@@ -3548,27 +3554,22 @@ local function GoToBeastHunterSeat()
 
     SetState("GOING_TO_BOAT", "Voando com noclip até o VehicleSeat principal.")
 
+    -- Ativa antes do voo para não existir nenhum frame com colisão entre o
+    -- piloto, as paredes de Tiki e a geometria interna do Beast Hunter.
+    CacheFollowParts()
+    SetFollowNoclip()
     local arrived = FlyToPart(seat, 4)
     if not arrived then
+        RestoreFollowPhysics()
         return false, "Não chegou próximo ao VehicleSeat"
-    end
-
-    -- Mantém noclip por alguns instantes para atravessar a geometria do barco.
-    local collisionCache = {}
-
-    if Character then
-        for _, obj in ipairs(Character:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                collisionCache[obj] = obj.CanCollide
-                obj.CanCollide = false
-            end
-        end
     end
 
     local seated = false
     local deadline = os.clock() + 3
 
     repeat
+        CacheFollowParts()
+        SetFollowNoclip()
         pcall(function()
             -- aproximação final muito curta, apenas já dentro do barco
             HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -3579,13 +3580,7 @@ local function GoToBeastHunterSeat()
         seated = Humanoid.Sit == true and Humanoid.SeatPart == seat
     until seated or os.clock() >= deadline
 
-    for obj, oldValue in pairs(collisionCache) do
-        if obj and obj.Parent then
-            pcall(function()
-                obj.CanCollide = oldValue
-            end)
-        end
-    end
+    RestoreFollowPhysics()
 
     if seated then
         return true, seat
