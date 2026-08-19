@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=76"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=77"
     ))()
 end)
 
@@ -1972,15 +1972,20 @@ local function StartEscape()
         HRP.Position.Y + 350,
         HRP.Position.Z
     )
+    -- A fuga sempre tem prioridade sobre follow/hunt.
+    StopFollow()
+
+    -- Dá um frame para o controlador de combate encerrar e soltar qualquer
+    -- contato/assembly com Sea Events antes de mover o HRP 350 studs.
+    RunService.Heartbeat:Wait()
+    if not EscapeActive or not HRP or not HRP.Parent then return end
+
     pcall(function()
         HRP.CFrame = CFrame.new(SeaHuntState.EscapeSafePosition)
             * (SeaHuntState.EscapeReturnCFrame - SeaHuntState.EscapeReturnCFrame.Position)
         HRP.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
         HRP.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     end)
-
-    -- A fuga sempre tem prioridade sobre follow/hunt.
-    StopFollow()
 
     CacheFollowParts()
     SetFollowNoclip()

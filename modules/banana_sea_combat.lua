@@ -90,6 +90,25 @@ local function targetPart(model)
         or model:FindFirstChildWhichIsA("BasePart", true))
 end
 
+local function nearestBeastHunter(position)
+    local boats = Workspace:FindFirstChild("Boats")
+    local bestPart, bestDistance = nil, math.huge
+    for _, candidate in ipairs(boats and boats:GetChildren() or {}) do
+        if string.find(string.lower(candidate.Name), "beast hunter", 1, true) then
+            local part = candidate:FindFirstChild("VehicleSeat", true)
+                or candidate.PrimaryPart
+                or candidate:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                local distance = (part.Position - position).Magnitude
+                if distance < bestDistance then
+                    bestPart, bestDistance = part, distance
+                end
+            end
+        end
+    end
+    return bestPart, bestDistance
+end
+
 function M.Combat(eventKey, eventModel, context)
     if not eventModel or not context then return false end
 
@@ -98,6 +117,10 @@ function M.Combat(eventKey, eventModel, context)
     local collisionCache = {}
     local creatureSafeY = nil
     local nextCreatureAttack = 0
+    local preparedTool = nil
+    local weaponReadyAt = 0
+    local lastTargetHealth = nil
+    local lastDamageAt = os.clock()
     local shipSkillsBusy = false
     local shipAimPart = nil
     local shipAimConnection = nil
@@ -134,7 +157,22 @@ function M.Combat(eventKey, eventModel, context)
                 local enemyRoot = eventModel:FindFirstChild("HumanoidRootPart", true)
                 local enemyHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
                 if not enemyRoot or not enemyHumanoid or enemyHumanoid.Health <= 0 then break end
-                equipWeapon(character, context)
+                if not preparedTool or not preparedTool.Parent then
+                    preparedTool = equipWeapon(character, context)
+                    weaponReadyAt = os.clock() + 1.75
+                    lastDamageAt = weaponReadyAt
+                    if preparedTool then
+                        pcall(function()
+                            local equipEvent = preparedTool:FindFirstChild("EquipEvent")
+                            if equipEvent then equipEvent:FireServer(true) end
+                        end)
+                    end
+                end
+
+                if lastTargetHealth and enemyHumanoid.Health < lastTargetHealth then
+                    lastDamageAt = os.clock()
+                end
+                lastTargetHealth = enemyHumanoid.Health
 
                 -- Nox usa +60 no Terror. Usamos 55 para respeitar o filtro
                 -- estrito <60. Nos demais, Y fixo evita acompanhar mergulhos.
@@ -148,13 +186,34 @@ function M.Combat(eventKey, eventModel, context)
                     creatureSafeY = math.max(enemyRoot.Position.Y + desiredOffset, minimumY)
                     creatureSafeY = math.min(creatureSafeY, enemyRoot.Position.Y + 55)
                 end
-                local desired = Vector3.new(enemyRoot.Position.X, creatureSafeY, enemyRoot.Position.Z)
+                local horizontalOffset = Vector3.zero
+                local boatPart, boatDistance = nearestBeastHunter(enemyRoot.Position)
+                if boatPart and boatDistance < 65 then
+                    local away = Vector3.new(
+                        enemyRoot.Position.X - boatPart.Position.X,
+                        0,
+                        enemyRoot.Position.Z - boatPart.Position.Z
+                    )
+                    if away.Magnitude < 0.1 then
+                        away = Vector3.new(1, 0, 0)
+                    end
+                    horizontalOffset = away.Unit * 20
+                end
+                local desired = Vector3.new(
+                    enemyRoot.Position.X + horizontalOffset.X,
+                    creatureSafeY,
+                    enemyRoot.Position.Z + horizontalOffset.Z
+                )
                 root.CFrame = CFrame.lookAt(desired, enemyRoot.Position)
                 root.AssemblyLinearVelocity = Vector3.zero
                 root.AssemblyAngularVelocity = Vector3.zero
 
                 local now = os.clock()
-                if now >= nextCreatureAttack then
+                if now - lastDamageAt > 4.5 then
+                    preparedTool = nil
+                    lastTargetHealth = enemyHumanoid.Health
+                    lastDamageAt = now
+                elseif now >= weaponReadyAt and now >= nextCreatureAttack then
                     nextCreatureAttack = now + 0.12
                     verifiedFastAttack(eventModel, root)
                 end
