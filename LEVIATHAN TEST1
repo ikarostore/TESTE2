@@ -1818,8 +1818,22 @@ local function GetFollowerPassengerSeat(boat)
     local seats = GetBeastHunterPassengerSeats(boat)
     if #seats == 0 then return nil end
 
+    -- Mantém o assento reservado durante a aproximação. Sem esse lock a
+    -- replicação entre várias contas podia fazê-las trocar de assento no ar.
+    if SeaHuntState.FollowerSeat
+    and SeaHuntState.FollowerSeat.Parent
+    and SeaHuntState.FollowerSeat:IsDescendantOf(boat)
+    and (not SeaHuntState.FollowerSeat.Occupant
+        or SeaHuntState.FollowerSeat.Occupant == Humanoid) then
+        return SeaHuntState.FollowerSeat
+    end
+    SeaHuntState.FollowerSeat = nil
+
     for _, seat in ipairs(seats) do
-        if seat.Occupant == Humanoid then return seat end
+        if seat.Occupant == Humanoid then
+            SeaHuntState.FollowerSeat = seat
+            return seat
+        end
     end
 
     local followers = {}
@@ -1833,9 +1847,15 @@ local function GetFollowerPassengerSeat(boat)
 
     local rank = table.find(followers, LocalPlayer) or 1
     local preferred = seats[((rank - 1) % #seats) + 1]
-    if preferred and not preferred.Occupant then return preferred end
+    if preferred and not preferred.Occupant then
+        SeaHuntState.FollowerSeat = preferred
+        return preferred
+    end
     for _, seat in ipairs(seats) do
-        if not seat.Occupant then return seat end
+        if not seat.Occupant then
+            SeaHuntState.FollowerSeat = seat
+            return seat
+        end
     end
     return nil
 end
@@ -1901,14 +1921,31 @@ local function StartFollowBeastHunter()
                 end
                 return
             end
-            RestoreFollowPhysics()
-            CacheFollowParts()
-            SetFollowNoclip()
-            HRP.CFrame = passengerSeat.CFrame * CFrame.new(0, 2, 0)
-            HRP.AssemblyLinearVelocity = Vector3.zero
-            pcall(function() passengerSeat:Sit(Humanoid) end)
-            if Humanoid.SeatPart == passengerSeat then
-                SetState("SEATED_BEAST_HUNTER", "Sentado no Beast Hunter de " .. OwnerPlayer.Name)
+
+            if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
+                ApplyFollowPhysics()
+            end
+
+            local seatTarget = passengerSeat.Position + Vector3.new(0, 2.5, 0)
+            local seatDelta = seatTarget - HRP.Position
+            local seatDistance = seatDelta.Magnitude
+            local seatVelocity = passengerSeat.AssemblyLinearVelocity
+
+            if seatDistance > 5 then
+                local seatSpeed = seatDistance > 300 and FollowSpeedMid or FollowSpeedNear
+                FollowBodyVelocity.Velocity = seatDelta.Unit * seatSpeed + seatVelocity
+                FollowBodyGyro.CFrame = CFrame.new(HRP.Position, seatTarget)
+                if State ~= "FLYING_TO_BEAST_HUNTER_SEAT" then
+                    SetState("FLYING_TO_BEAST_HUNTER_SEAT", "Voando até o assento reservado.")
+                end
+            else
+                FollowBodyVelocity.Velocity = seatVelocity + seatDelta * 2
+                Humanoid.PlatformStand = false
+                pcall(function() passengerSeat:Sit(Humanoid) end)
+                if Humanoid.SeatPart == passengerSeat then
+                    RestoreFollowPhysics()
+                    SetState("SEATED_BEAST_HUNTER", "Sentado no Beast Hunter de " .. OwnerPlayer.Name)
+                end
             end
             return
         end
