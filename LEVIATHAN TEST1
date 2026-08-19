@@ -1707,6 +1707,9 @@ local function ApplyFollowPhysics()
         Humanoid.AutoRotate = false
     end
 
+    if FollowBodyVelocity then pcall(function() FollowBodyVelocity:Destroy() end) end
+    if FollowBodyGyro then pcall(function() FollowBodyGyro:Destroy() end) end
+
     FollowBodyVelocity = Instance.new("BodyVelocity")
     FollowBodyVelocity.Name = "IKAROFollowBoatVelocity"
     FollowBodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
@@ -1800,8 +1803,13 @@ local function GetBeastHunterPassengerSeats(boat)
             end
         end
     end
+    local boatPivot = boat:GetPivot()
     table.sort(seats, function(a, b)
-        return a:GetFullName() < b:GetFullName()
+        local ap = boatPivot:PointToObjectSpace(a.Position)
+        local bp = boatPivot:PointToObjectSpace(b.Position)
+        if math.abs(ap.X - bp.X) > 0.1 then return ap.X < bp.X end
+        if math.abs(ap.Z - bp.Z) > 0.1 then return ap.Z < bp.Z end
+        return ap.Y < bp.Y
     end)
     return seats
 end
@@ -1928,7 +1936,8 @@ local function StartFollowBeastHunter()
                 SetFollowNoclip()
                 nextNoclipRefresh = os.clock() + 0.10
             end
-            if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
+            if not FollowBodyVelocity or not FollowBodyVelocity.Parent
+            or not FollowBodyGyro or not FollowBodyGyro.Parent then
                 ApplyFollowPhysics()
             end
 
@@ -1936,6 +1945,20 @@ local function StartFollowBeastHunter()
             local seatDelta = seatTarget - HRP.Position
             local seatDistance = seatDelta.Magnitude
             local seatVelocity = passengerSeat.AssemblyLinearVelocity
+
+            if SeaHuntState.SeatApproachTarget ~= passengerSeat then
+                SeaHuntState.SeatApproachTarget = passengerSeat
+                SeaHuntState.SeatApproachBestDistance = seatDistance
+                SeaHuntState.SeatApproachLastProgress = os.clock()
+            elseif seatDistance + 2 < (SeaHuntState.SeatApproachBestDistance or math.huge) then
+                SeaHuntState.SeatApproachBestDistance = seatDistance
+                SeaHuntState.SeatApproachLastProgress = os.clock()
+            elseif os.clock() - (SeaHuntState.SeatApproachLastProgress or 0) > 2 then
+                ApplyFollowPhysics()
+                SeaHuntState.SeatApproachBestDistance = seatDistance
+                SeaHuntState.SeatApproachLastProgress = os.clock()
+                SetState("SEAT_FLIGHT_RECOVERY", "Reiniciando voo até o assento reservado.")
+            end
 
             if seatDistance > 5 then
                 local seatSpeed = seatDistance > 300 and FollowSpeedMid or FollowSpeedNear
@@ -1949,6 +1972,9 @@ local function StartFollowBeastHunter()
                 Humanoid.PlatformStand = false
                 pcall(function() passengerSeat:Sit(Humanoid) end)
                 if Humanoid.SeatPart == passengerSeat then
+                    SeaHuntState.SeatApproachTarget = nil
+                    SeaHuntState.SeatApproachBestDistance = nil
+                    SeaHuntState.SeatApproachLastProgress = nil
                     RestoreFollowPhysics()
                     SetState("SEATED_BEAST_HUNTER", "Sentado no Beast Hunter de " .. OwnerPlayer.Name)
                 end
