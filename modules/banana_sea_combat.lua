@@ -60,7 +60,9 @@ local function verifiedFastAttack(eventModel, playerRoot)
     if not primary or not playerRoot then return false end
     if (primary.Position - playerRoot.Position).Magnitude >= 60 then return false end
 
-    local secondary = {}
+    -- O pacote que o servidor aceitou nos rastreamentos inclui o proprio
+    -- alvo principal novamente como {Model, HitPart} no segundo argumento.
+    local secondary = {{eventModel, primary}}
     local enemies = Workspace:FindFirstChild("Enemies")
     for _, enemy in ipairs(enemies and enemies:GetChildren() or {}) do
         if enemy ~= eventModel and enemy.Name == eventModel.Name and not enemy:GetAttribute("IsBoat") then
