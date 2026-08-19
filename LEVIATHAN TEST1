@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=78"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=79"
     ))()
 end)
 
@@ -73,9 +73,9 @@ local FollowSpeed = 140
 local FollowHeight = 22
 local FollowBack = 8
 
-local FollowSpeedFar = 300
-local FollowSpeedMid = 250
-local FollowSpeedNear = 190
+local FollowSpeedFar = 560
+local FollowSpeedMid = 480
+local FollowSpeedNear = 390
 
 local WaterWalkEnabled = true
 local WaterPlatform = nil
@@ -3044,10 +3044,9 @@ task.spawn(function()
         and Running and HRP and Humanoid and Humanoid.Health > 0 then
             local threat = SeaHuntState.CurrentEvent
             local threatName = threat and string.lower(threat.Name) or ""
-            local terrorThreat = string.find(threatName, "terrorshark", 1, true)
-                or string.find(threatName, "terror shark", 1, true)
-            local dangerous = terrorThreat
-                or string.find(threatName, "sea beast", 1, true)
+            -- Q interfere no estado de arma/hover do Terrorshark. Mantemos
+            -- esquiva apenas nos bosses para os quais ela nao quebra o dano.
+            local dangerous = string.find(threatName, "sea beast", 1, true)
                 or string.find(threatName, "seabeast", 1, true)
 
             if not dangerous then
@@ -3062,9 +3061,6 @@ task.spawn(function()
                 local directionKey = dodgeRight and Enum.KeyCode.D or Enum.KeyCode.A
                 dodgeRight = not dodgeRight
                 pcall(function()
-                    if terrorThreat then
-                        getgenv().IKARO_TERROR_DODGE_UNTIL = os.clock() + 0.22
-                    end
                     SeaVIM:SendKeyEvent(true, directionKey, false, game)
                     SeaVIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
                     task.wait(0.10)

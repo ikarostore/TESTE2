@@ -203,14 +203,9 @@ function M.Combat(eventKey, eventModel, context)
                     creatureSafeY,
                     enemyRoot.Position.Z + horizontalOffset.Z
                 )
-                local terrorDodgeUntil = getgenv().IKARO_TERROR_DODGE_UNTIL or 0
-                local releasingForDodge = eventKey == "Terrorshark"
-                    and os.clock() < terrorDodgeUntil
-                if not releasingForDodge then
-                    root.CFrame = CFrame.lookAt(desired, enemyRoot.Position)
-                    root.AssemblyLinearVelocity = Vector3.zero
-                    root.AssemblyAngularVelocity = Vector3.zero
-                end
+                root.CFrame = CFrame.lookAt(desired, enemyRoot.Position)
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
 
                 local now = os.clock()
                 if now >= nextForcedPrepareAt or now - lastDamageAt > 4.5 then
