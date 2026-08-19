@@ -3,6 +3,7 @@ repeat task.wait() until game:IsLoaded() and game:GetService("Players").LocalPla
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local VIM = game:GetService("VirtualInputManager")
 local Player = Players.LocalPlayer
 
@@ -26,7 +27,10 @@ local Ships = {PirateGrandBrigade = true, PirateBrigade = true, FishBoat = true}
 local Creatures = {Terrorshark = true, Shark = true, Piranha = true}
 local Sea6Position = Vector3.new(-44718.37109375, 70, 150.4124755859375)
 local Sea6Direction = Vector3.new(-0.9999496936798096, 0, -0.010028315708041191)
-local ActiveBoat, BoatVelocity, BoatGyro = nil, nil, nil
+local ActiveBoat, BoatAttachment, BoatVelocity, BoatGyro = nil, nil, nil, nil
+local BoatCollisionCache, ObstacleCollisionCache = {}, {}
+local HadActiveBoat, Recovering = false, false
+local Status
 local Offsets = {
     CFrame.new(0, 40, 0), CFrame.new(-40, 40, 0), CFrame.new(40, 40, 0),
     CFrame.new(0, 40, 40), CFrame.new(0, 40, -40)
@@ -108,17 +112,104 @@ local function findMyBoat()
     end
 end
 
-local function stopBoat()
-    if BoatVelocity then BoatVelocity.Velocity = Vector3.zero end
+local function restoreCollisions()
+    for part, oldValue in pairs(BoatCollisionCache) do
+        if part and part.Parent then pcall(function() part.CanCollide = oldValue end) end
+    end
+    for part, oldValue in pairs(ObstacleCollisionCache) do
+        if part and part.Parent then pcall(function() part.CanCollide = oldValue end) end
+    end
+    BoatCollisionCache, ObstacleCollisionCache = {}, {}
+end
+
+local function stopBoat(restore)
+    if BoatVelocity then pcall(function() BoatVelocity:Destroy() end) end
+    if BoatGyro then pcall(function() BoatGyro:Destroy() end) end
+    if BoatAttachment then pcall(function() BoatAttachment:Destroy() end) end
+    BoatVelocity, BoatGyro, BoatAttachment = nil, nil, nil
     if ActiveBoat then
-        local seat = ActiveBoat:FindFirstChild("VehicleSeat", true) or ActiveBoat:FindFirstChildWhichIsA("VehicleSeat", true)
-        if seat then seat.AssemblyLinearVelocity = Vector3.zero end
+        local seat = ActiveBoat:FindFirstChild("VehicleSeat", true)
+        local drive = seat and (seat.AssemblyRootPart or seat)
+        if drive then
+            drive.AssemblyLinearVelocity = Vector3.zero
+            drive.AssemblyAngularVelocity = Vector3.zero
+        end
+    end
+    if restore then restoreCollisions() end
+end
+
+local function boatAlive(boat)
+    if not boat or not boat.Parent then return false end
+    local seat = boat:FindFirstChild("VehicleSeat", true)
+    if not seat then return false end
+    local health = boat:FindFirstChild("Health", true)
+    if health and (health:IsA("NumberValue") or health:IsA("IntValue")) and health.Value <= 0 then return false end
+    return true
+end
+
+local function flyCharacter(target)
+    local character, humanoid, root = characterParts()
+    if not character or not humanoid or not root then return false end
+    local distance = (root.Position - target.Position).Magnitude
+    if distance <= 8 then return true end
+    humanoid.PlatformStand, humanoid.AutoRotate = true, false
+    root.Anchored = true
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then part.CanCollide = false end
+    end
+    local tween = TweenService:Create(root, TweenInfo.new(distance / 400, Enum.EasingStyle.Linear), {CFrame = target})
+    tween:Play()
+    local state = tween.Completed:Wait()
+    root.Anchored = false
+    root.AssemblyLinearVelocity = Vector3.zero
+    humanoid.PlatformStand, humanoid.AutoRotate = false, true
+    humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    return state == Enum.PlaybackState.Completed
+end
+
+local function applyBoatNoclip(boat, drive, direction)
+    for _, part in ipairs(boat:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if BoatCollisionCache[part] == nil then BoatCollisionCache[part] = part.CanCollide end
+            part.CanCollide = false
+        end
+    end
+    local params = OverlapParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = Player.Character and {boat, Player.Character} or {boat}
+    params.MaxParts = 0
+    local center = drive.Position + direction * 55
+    local scan = CFrame.lookAt(center, center + direction)
+    local seen = {}
+    for _, part in ipairs(workspace:GetPartBoundsInBox(scan, Vector3.new(150, 150, 190), params)) do
+        if part:IsA("BasePart") and part.Anchored
+        and (part.CanCollide or ObstacleCollisionCache[part] ~= nil)
+        and not part:IsDescendantOf(boat) then
+            if ObstacleCollisionCache[part] == nil then ObstacleCollisionCache[part] = part.CanCollide end
+            seen[part] = true
+            part.CanCollide = false
+        end
+    end
+    for part, oldValue in pairs(ObstacleCollisionCache) do
+        if not part or not part.Parent then
+            ObstacleCollisionCache[part] = nil
+        elseif not seen[part] then
+            pcall(function() part.CanCollide = oldValue end)
+            ObstacleCollisionCache[part] = nil
+        end
     end
 end
 
 local function ensureBoat()
     local boat = findMyBoat()
+    if boat and not boatAlive(boat) then boat = nil end
     if not boat then
+        local _, _, root = characterParts()
+        local dealer = CFrame.new(-16917.154296875, 7.757596015930176, 511.8203125)
+        if root and (root.Position - dealer.Position).Magnitude > 80 then
+            flyCharacter(dealer)
+            return nil
+        end
         pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyBoat", "Beast Hunter") end)
         task.wait(1)
         boat = findMyBoat()
@@ -129,39 +220,58 @@ local function ensureBoat()
         boat = findMyBoat()
     end
     if not boat then return nil end
-
     ActiveBoat = boat
-    local seat = boat:FindFirstChild("VehicleSeat", true) or boat:FindFirstChildWhichIsA("VehicleSeat", true)
-    local drive = seat or boat.PrimaryPart or boat:FindFirstChildWhichIsA("BasePart", true)
+    local seat = boat:FindFirstChild("VehicleSeat", true)
+    local drive = seat and (seat.AssemblyRootPart or seat)
     if not seat or not drive then return nil end
-
-    local character, humanoid, root = characterParts()
+    local _, humanoid, root = characterParts()
     if humanoid and root and humanoid.SeatPart ~= seat then
-        root.CFrame = seat.CFrame + Vector3.new(0, 3, 0)
-        task.wait(0.15)
-        seat:Sit(humanoid)
+        flyCharacter(seat.CFrame * CFrame.new(0, 3, 0))
+        pcall(function() seat:Sit(humanoid) end)
+        task.wait(0.3)
     end
-
-    for _, part in ipairs(boat:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
-    end
-
-    if not BoatVelocity or BoatVelocity.Parent ~= drive then
-        if BoatVelocity then BoatVelocity:Destroy() end
-        if BoatGyro then BoatGyro:Destroy() end
-        BoatVelocity = Instance.new("BodyVelocity")
-        BoatVelocity.Name = "BananaSeaBoatVelocity"
-        BoatVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        BoatVelocity.P = 50000
-        BoatVelocity.Parent = drive
-        BoatGyro = Instance.new("BodyGyro")
-        BoatGyro.Name = "BananaSeaBoatGyro"
-        BoatGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        BoatGyro.P = 50000
-        BoatGyro.D = 1000
-        BoatGyro.Parent = drive
+    if not humanoid or humanoid.SeatPart ~= seat then return nil end
+    HadActiveBoat = true
+    if not BoatAttachment or BoatAttachment.Parent ~= drive then
+        stopBoat(false)
+        BoatAttachment = Instance.new("Attachment", drive)
+        BoatAttachment.Name = "BananaSeaFlightAttachment"
+        BoatVelocity = Instance.new("LinearVelocity", drive)
+        BoatVelocity.Attachment0 = BoatAttachment
+        BoatVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+        BoatVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+        BoatVelocity.MaxForce = math.huge
+        BoatGyro = Instance.new("AlignOrientation", drive)
+        BoatGyro.Attachment0 = BoatAttachment
+        BoatGyro.Mode = Enum.OrientationAlignmentMode.OneAttachment
+        BoatGyro.Responsiveness = 35
+        BoatGyro.MaxTorque = math.huge
     end
     return boat, drive
+end
+
+local function recoverAfterLoss(reason, resetCharacter)
+    if Recovering or not Config.Running then return end
+    Recovering = true
+    HadActiveBoat = false
+    stopBoat(true)
+    ActiveBoat = nil
+    if Status then Status.Text = reason .. " | resetando e retomando..." end
+    task.spawn(function()
+        local oldCharacter = Player.Character
+        local humanoid = oldCharacter and oldCharacter:FindFirstChildOfClass("Humanoid")
+        if resetCharacter and humanoid and humanoid.Health > 0 then
+            pcall(function() oldCharacter:BreakJoints() end)
+        end
+        repeat
+            task.wait(0.5)
+            local character = Player.Character
+            local newHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if character and character ~= oldCharacter and character:FindFirstChild("HumanoidRootPart")
+            and newHumanoid and newHumanoid.Health > 0 then break end
+        until not Config.Running
+        Recovering = false
+    end)
 end
 
 local function sailSea6()
@@ -169,10 +279,11 @@ local function sailSea6()
     if not boat or not drive then return false end
     local flatDelta = Vector3.new(Sea6Position.X - drive.Position.X, 0, Sea6Position.Z - drive.Position.Z)
     local direction = flatDelta.Magnitude > 1000 and flatDelta.Unit or Sea6Direction
+    applyBoatNoclip(boat, drive, direction)
+    pcall(function() sethiddenproperty(Player, "SimulationRadius", math.huge) end)
     local vertical = math.clamp((70 - drive.Position.Y) * 7, -140, 140)
-    BoatVelocity.Velocity = direction * Config.BoatSpeed + Vector3.new(0, vertical, 0)
+    BoatVelocity.VectorVelocity = direction * Config.BoatSpeed + Vector3.new(0, vertical, 0)
     BoatGyro.CFrame = CFrame.lookAt(Vector3.zero, direction, Vector3.yAxis)
-    drive.AssemblyLinearVelocity = BoatVelocity.Velocity
     return true
 end
 
@@ -234,7 +345,6 @@ local function useAllSkills(targetPart)
     end
 end
 
-local Status
 local function combat(key, model)
     stopBoat()
     while Config.Running and alive(model) do
@@ -324,8 +434,21 @@ for _, key in ipairs(Order) do
 end
 
 task.spawn(function()
+    while task.wait(0.25) do
+        if Config.Running and not Recovering then
+            local _, humanoid = characterParts()
+            if not humanoid or humanoid.Health <= 0 then
+                recoverAfterLoss("Personagem morreu", false)
+            elseif HadActiveBoat and not boatAlive(ActiveBoat) then
+                recoverAfterLoss("Barco destruido", true)
+            end
+        end
+    end
+end)
+
+task.spawn(function()
     while task.wait(0.1) do
-        if Config.Running then
+        if Config.Running and not Recovering then
             local key, model = findTarget()
             if model then
                 combat(key, model)
@@ -335,7 +458,11 @@ task.spawn(function()
                 Status.Text = "Procurando Sea Events..."
             end
         else
-            stopBoat()
+            if not Config.Running then
+                HadActiveBoat = false
+                ActiveBoat = nil
+                stopBoat(true)
+            end
         end
     end
 end)
