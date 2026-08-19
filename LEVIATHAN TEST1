@@ -1790,7 +1790,6 @@ local function GetBeastHunterPassengerSeats(boat)
             local full = string.lower(obj:GetFullName())
             local isHarpoon = string.find(full, "harpoon", 1, true)
                 or string.find(full, "gunseat", 1, true)
-                or string.find(full, "cannon", 1, true)
             if not isHarpoon then
                 seats[#seats + 1] = obj
             end
