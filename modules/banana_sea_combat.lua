@@ -119,6 +119,7 @@ function M.Combat(eventKey, eventModel, context)
     local nextCreatureAttack = 0
     local preparedTool = nil
     local weaponReadyAt = 0
+    local nextForcedPrepareAt = 0
     local lastTargetHealth = nil
     local lastDamageAt = os.clock()
     local shipSkillsBusy = false
@@ -141,9 +142,6 @@ function M.Combat(eventKey, eventModel, context)
 
             local panicFraction = context.PanicHealthFraction
                 and context.PanicHealthFraction() or 0.40
-            if eventKey == "Terrorshark" then
-                panicFraction = math.max(panicFraction, 0.65)
-            end
             if humanoid.Health / math.max(humanoid.MaxHealth, 1) <= panicFraction then
                 if context.EmergencyEscape then pcall(context.EmergencyEscape) end
                 break
@@ -160,6 +158,7 @@ function M.Combat(eventKey, eventModel, context)
                 if not preparedTool or not preparedTool.Parent then
                     preparedTool = equipWeapon(character, context)
                     weaponReadyAt = os.clock() + 1.75
+                    nextForcedPrepareAt = os.clock() + 10
                     lastDamageAt = weaponReadyAt
                     if preparedTool then
                         pcall(function()
@@ -204,12 +203,17 @@ function M.Combat(eventKey, eventModel, context)
                     creatureSafeY,
                     enemyRoot.Position.Z + horizontalOffset.Z
                 )
-                root.CFrame = CFrame.lookAt(desired, enemyRoot.Position)
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
+                local terrorDodgeUntil = getgenv().IKARO_TERROR_DODGE_UNTIL or 0
+                local releasingForDodge = eventKey == "Terrorshark"
+                    and os.clock() < terrorDodgeUntil
+                if not releasingForDodge then
+                    root.CFrame = CFrame.lookAt(desired, enemyRoot.Position)
+                    root.AssemblyLinearVelocity = Vector3.zero
+                    root.AssemblyAngularVelocity = Vector3.zero
+                end
 
                 local now = os.clock()
-                if now - lastDamageAt > 4.5 then
+                if now >= nextForcedPrepareAt or now - lastDamageAt > 4.5 then
                     preparedTool = nil
                     lastTargetHealth = enemyHumanoid.Health
                     lastDamageAt = now

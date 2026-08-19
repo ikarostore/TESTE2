@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=77"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=78"
     ))()
 end)
 
@@ -354,6 +354,8 @@ local function LoadConfig()
     CopyKnownValues(SeaConfig, saved.SeaConfig)
     CopyKnownValues(CombatConfig, saved.CombatConfig)
 
+    -- Sobrevivencia padronizada: foge somente ao atingir 40% de HP.
+    SeaConfig.PanicHealthPercent = 40
     EscapeStartHealthPercent = SeaConfig.PanicHealthPercent / 100
     EscapeReturnHealthPercent = SeaConfig.ReturnHealthPercent / 100
 
@@ -3042,9 +3044,10 @@ task.spawn(function()
         and Running and HRP and Humanoid and Humanoid.Health > 0 then
             local threat = SeaHuntState.CurrentEvent
             local threatName = threat and string.lower(threat.Name) or ""
-            -- Dash Q conflita com o hover do Terror Shark. Para ele usamos
-            -- altura fixa e Panic HP; a esquiva permanece nos outros bosses.
-            local dangerous = string.find(threatName, "sea beast", 1, true)
+            local terrorThreat = string.find(threatName, "terrorshark", 1, true)
+                or string.find(threatName, "terror shark", 1, true)
+            local dangerous = terrorThreat
+                or string.find(threatName, "sea beast", 1, true)
                 or string.find(threatName, "seabeast", 1, true)
 
             if not dangerous then
@@ -3059,6 +3062,9 @@ task.spawn(function()
                 local directionKey = dodgeRight and Enum.KeyCode.D or Enum.KeyCode.A
                 dodgeRight = not dodgeRight
                 pcall(function()
+                    if terrorThreat then
+                        getgenv().IKARO_TERROR_DODGE_UNTIL = os.clock() + 0.22
+                    end
                     SeaVIM:SendKeyEvent(true, directionKey, false, game)
                     SeaVIM:SendKeyEvent(true, Enum.KeyCode.Q, false, game)
                     task.wait(0.10)
