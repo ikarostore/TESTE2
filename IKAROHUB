@@ -1329,3 +1329,63 @@ pcall(function()
 		Fluent = Fluent
 	})
 end)
+
+-- Cada aba possui um ponto de entrada independente. A camada de compatibilidade
+-- acima preserva as funcoes atuais enquanto os proximos recursos podem ser
+-- alterados sem aumentar o arquivo principal ou afetar outras abas.
+local TabModules = {
+	{"Shop", "shop"},
+	{"Status And Server", "status_server"},
+	{"Localplayer", "localplayer"},
+	{"setting farm", "setting_farm"},
+	{"Hold and select Skill", "hold_select_skill"},
+	{"Farming", "farming"},
+	{"Stack farming", "stack_farming"},
+	{"Farming Other", "farming_other"},
+	{"Fruit and Raid", "fruit_raid"},
+	{"Dungeon", "dungeon"},
+	{"Sea event", "sea_event"},
+	{"upgrade Race", "upgrade_race"},
+	{"get and upgrade item", "upgrade_item"},
+	{"volcano event", "volcano_event"},
+	{"esp", "esp"},
+	{"PVP", "pvp"},
+	{"Tab webhook", "webhook"},
+	{"setting", "setting"}
+}
+
+getgenv().IKAROHUB.TabModules = {}
+local moduleContext = {
+	Tabs = Tabs,
+	Options = Options,
+	Fluent = Fluent,
+	Hub = getgenv().IKAROHUB,
+	States = {
+		["Status And Server"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
+		["Localplayer"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
+		["setting farm"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
+		["Hold and select Skill"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
+		["Farming"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
+		["Farming Other"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
+		["Sea event"] = getgenv().IKAROHUB.SeaEventState
+	},
+	Initializers = {}
+}
+
+for _, definition in ipairs(TabModules) do
+	local title, fileName = definition[1], definition[2]
+	local ok, result = pcall(function()
+		local module = loadstring(game:HttpGet(
+			"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_tabs/" .. fileName .. ".lua?v=1"
+		))()
+		getgenv().IKAROHUB.TabModules[title] = module
+		return module.Init(moduleContext)
+	end)
+	if not ok then
+		Fluent:Notify({
+			Title = "Erro no modulo " .. title,
+			Content = tostring(result),
+			Duration = 10
+		})
+	end
+end
