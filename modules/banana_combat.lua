@@ -38,7 +38,7 @@ function M.SeaCreatureAttack(eventModel, character, root)
     local enemies = Workspace:FindFirstChild("Enemies")
     if not registerAttack or not registerHit or not enemies then return false end
 
-    local targets, lastHitPart = {}, nil
+    local targets, lastHitPart, included = {}, nil, {}
     for _, enemy in ipairs(enemies:GetChildren()) do
         local enemyHumanoid = enemy:FindFirstChildOfClass("Humanoid")
         local head = enemy:FindFirstChild("Head")
@@ -48,6 +48,7 @@ function M.SeaCreatureAttack(eventModel, character, root)
         and enemyHumanoid and enemyHumanoid.Health > 0 and head
         and (root.Position - head.Position).Magnitude <= 60 then
             targets[#targets + 1] = {enemy, head}
+            included[enemy] = true
             -- FindEnemiesInRange do Banana sobrescreve o retorno a cada alvo;
             -- portanto RegisterHit recebe a última peça válida, não a primeira.
             lastHitPart = head
@@ -55,8 +56,11 @@ function M.SeaCreatureAttack(eventModel, character, root)
     end
 
     if eventModel and eventModel.Parent then
-        local eventRoot = eventModel:FindFirstChild("HumanoidRootPart")
-        local eventHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
+        local eventRoot = eventModel:FindFirstChild("HumanoidRootPart", true)
+        local eventHumanoid = eventModel:FindFirstChildWhichIsA("Humanoid", true)
+		local eventHitPart = eventModel:FindFirstChild("Head", true)
+			or eventRoot
+			or eventModel:FindFirstChildWhichIsA("BasePart", true)
         local lowerEventName = string.lower(eventModel.Name)
         local isTerror = string.find(lowerEventName, "terror", 1, true) ~= nil
         local isShark = string.find(lowerEventName, "shark", 1, true) ~= nil
@@ -65,6 +69,15 @@ function M.SeaCreatureAttack(eventModel, character, root)
             if not isTerror and not isShark then eventRoot.Size = Vector3.new(60, 60, 60) end
         end
         if eventHumanoid then eventHumanoid.WalkSpeed = 0 end
+		-- Shark/Terrorshark podem estar em um Model aninhado que não aparece em
+		-- Workspace.Enemies:GetChildren(). O Banana moderno mantém o alvo atual
+		-- no pacote mesmo nessa situação.
+		if eventHitPart and eventHumanoid and eventHumanoid.Health > 0
+		and not included[eventModel]
+		and (root.Position - eventHitPart.Position).Magnitude <= 65 then
+			targets[#targets + 1] = {eventModel, eventHitPart}
+			lastHitPart = eventHitPart
+		end
     end
 
     if not lastHitPart then return false end

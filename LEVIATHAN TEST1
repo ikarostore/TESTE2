@@ -4,7 +4,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 pcall(function()
     getgenv().IKARO_BANANA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua?v=57"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_combat.lua?v=58"
     ))()
 end)
 pcall(function()
