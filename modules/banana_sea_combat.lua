@@ -10,6 +10,54 @@ local POSITIONS = {
     CFrame.new(0, 40, 40), CFrame.new(0, 40, -40)
 }
 
+-- O M1 moderno gera RegisterHit(Head, {}, nil, token). O token é criado pelo
+-- próprio jogo e muda por sessão; chamadas montadas manualmente sem ele são
+-- registradas pelo tracer, mas não causam dano. O Banana envia o hit em pares,
+-- então repetimos uma vez somente o pacote legítimo que acabou de sair.
+local activeSharkModel = nil
+local replayingValidHit = false
+local hitMirrorInstalled = false
+
+local function installValidHitMirror()
+    if hitMirrorInstalled then return true end
+    if type(hookmetamethod) ~= "function"
+    or type(getnamecallmethod) ~= "function"
+    or type(newcclosure) ~= "function" then
+        return false
+    end
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        if not replayingValidHit
+        and activeSharkModel
+        and activeSharkModel.Parent
+        and method == "FireServer"
+        and typeof(self) == "Instance"
+        and self.Name == "RE/RegisterHit"
+        and typeof(args[1]) == "Instance"
+        and args[1]:IsDescendantOf(activeSharkModel)
+        and type(args[4]) == "string"
+        and args[4] ~= "" then
+            local remote = self
+            local packet = table.pack(...)
+            task.defer(function()
+                if activeSharkModel and activeSharkModel.Parent then
+                    replayingValidHit = true
+                    pcall(function()
+                        remote:FireServer(table.unpack(packet, 1, packet.n))
+                    end)
+                    replayingValidHit = false
+                end
+            end)
+        end
+        return oldNamecall(self, ...)
+    end))
+    hitMirrorInstalled = true
+    return true
+end
+
 local function alive(model)
     if not model or not model.Parent then return false end
     local humanoid = model:FindFirstChildOfClass("Humanoid")
@@ -71,6 +119,10 @@ function M.Combat(eventKey, eventModel, context)
     if not eventModel or not context then return false end
     local player = Players.LocalPlayer
     local started = os.clock()
+    local mirrorThisFight = eventKey == "Shark" or eventKey == "Terrorshark"
+    if mirrorThisFight and installValidHitMirror() then
+        activeSharkModel = eventModel
+    end
     local nextToolAttack = 0
     while context.Running() and alive(eventModel) and os.clock() - started < 180 do
         local character = player.Character
@@ -150,6 +202,9 @@ function M.Combat(eventKey, eventModel, context)
             if context.UseSkills then context.UseSkills(target) end
         end
         task.wait(CREATURES[eventKey] and 0.03 or 0.05)
+    end
+    if activeSharkModel == eventModel then
+        activeSharkModel = nil
     end
     return not alive(eventModel)
 end
