@@ -53,7 +53,7 @@ end
 -- O rastreamento do cliente que realmente causa dano usa um unico estado de
 -- ataque e Head como alvo primario. Disparar 0/1/2/3 em sequencia faz o
 -- servidor receber os remotes, mas rejeitar o golpe.
-local function verifiedFastAttack(eventModel, playerRoot)
+local function verifiedFastAttack(eventKey, eventModel, playerRoot)
     local primary = eventModel and (eventModel:FindFirstChild("Head", true)
         or eventModel:FindFirstChild("HumanoidRootPart", true))
     if not primary or not playerRoot then return false end
@@ -61,9 +61,12 @@ local function verifiedFastAttack(eventModel, playerRoot)
 
     -- O pacote que o servidor aceitou nos rastreamentos inclui o proprio
     -- alvo principal novamente como {Model, HitPart} no segundo argumento.
-    local secondary = {{eventModel, primary}}
+    -- O trace do Banana usa lista vazia no Terrorshark. Sharks/Piranhas usam
+    -- o alvo principal (e o grupo próximo) também no segundo argumento.
+    local secondary = eventKey == "Terrorshark" and {} or {{eventModel, primary}}
     local enemies = Workspace:FindFirstChild("Enemies")
-    for _, enemy in ipairs(enemies and enemies:GetChildren() or {}) do
+    for _, enemy in ipairs(eventKey ~= "Terrorshark"
+        and enemies and enemies:GetChildren() or {}) do
         if enemy ~= eventModel and enemy.Name == eventModel.Name and not enemy:GetAttribute("IsBoat") then
             local humanoid = enemy:FindFirstChildOfClass("Humanoid")
             local enemyHitPart = enemy:FindFirstChild("Head", true)
@@ -125,6 +128,7 @@ function M.Combat(eventKey, eventModel, context)
     local shipSlot = player.UserId % 5
     local shipAngle = math.rad(shipSlot * 72)
     local nextShipSkillAt = os.clock() + shipSlot * 0.30
+    local terrorAngle = math.rad((player.UserId % 5) * 72)
 
     local function cleanup()
         restoreCharacterNoclip(collisionCache)
@@ -150,6 +154,7 @@ function M.Combat(eventKey, eventModel, context)
 
             if CREATURES[eventKey] then
                 local enemyRoot = eventModel:FindFirstChild("HumanoidRootPart", true)
+                local enemyAimPart = eventModel:FindFirstChild("Head", true) or enemyRoot
                 local enemyHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
                 if not enemyRoot or not enemyHumanoid or enemyHumanoid.Health <= 0 then break end
                 if not preparedTool or not preparedTool.Parent then
@@ -172,7 +177,11 @@ function M.Combat(eventKey, eventModel, context)
 
                 -- Nox usa +60 no Terror. Usamos 55 para respeitar o filtro
                 -- estrito <60. Nos demais, Y fixo evita acompanhar mergulhos.
-                if not creatureSafeY then
+                if eventKey == "Terrorshark" then
+                    -- Mantém a distância real do Head abaixo de 60 mesmo
+                    -- durante mergulhos/subidas do boss.
+                    creatureSafeY = enemyAimPart.Position.Y + 42
+                elseif not creatureSafeY then
                     local desiredOffset = eventKey == "Terrorshark" and 42
                         or eventKey == "Shark" and 20
                         or 35
@@ -183,6 +192,14 @@ function M.Combat(eventKey, eventModel, context)
                     creatureSafeY = math.min(creatureSafeY, enemyRoot.Position.Y + 55)
                 end
                 local horizontalOffset = Vector3.zero
+                if eventKey == "Terrorshark" then
+                    -- Cinco contas não ocupam exatamente o mesmo CFrame.
+                    horizontalOffset = Vector3.new(
+                        math.cos(terrorAngle) * 12,
+                        0,
+                        math.sin(terrorAngle) * 12
+                    )
+                end
                 local boatPart, boatDistance = nearestBeastHunter(enemyRoot.Position)
                 if boatPart and boatDistance < 65 then
                     local away = Vector3.new(
@@ -193,7 +210,7 @@ function M.Combat(eventKey, eventModel, context)
                     if away.Magnitude < 0.1 then
                         away = Vector3.new(1, 0, 0)
                     end
-                    horizontalOffset = away.Unit * 20
+                    horizontalOffset = horizontalOffset + away.Unit * 20
                 end
                 local desired = Vector3.new(
                     enemyRoot.Position.X + horizontalOffset.X,
@@ -211,7 +228,7 @@ function M.Combat(eventKey, eventModel, context)
                     lastDamageAt = now
                 elseif now >= weaponReadyAt and now >= nextCreatureAttack then
                     nextCreatureAttack = now + 0.12
-                    verifiedFastAttack(eventModel, root)
+                    verifiedFastAttack(eventKey, eventModel, root)
                 end
                 task.wait(0.03)
 
