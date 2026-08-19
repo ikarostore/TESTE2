@@ -658,6 +658,10 @@ do
 	local player = Players.LocalPlayer
 	local activeTween
 	local movementEnabled = false
+	local fullyBoatName = "Guardian"
+	local fullyBoatSpeed = 350
+	local lastBoatPurchase = 0
+	local sailingSeat
 
 	local function notifyVolcano(content)
 		Fluent:Notify({Title = "Volcano Event", Content = content, Duration = 5})
@@ -727,6 +731,22 @@ do
 		Title = "Fully Event Prehistoric Island",
 		Description = "Executa automaticamente todas as etapas disponiveis",
 		Default = false
+	})
+	VolcanoTab:AddDropdown("VolcanoFullyBoat", {
+		Title = "Fully Volcano Boat",
+		Description = "Barco usado para procurar a ilha",
+		Values = {"Guardian", "Lantern", "Sleigh", "Miracle", "The Sentinel", "Dinghy"},
+		Multi = false,
+		Default = "Guardian",
+		Callback = function(value) fullyBoatName = value end
+	})
+	VolcanoTab:AddSlider("VolcanoFullyBoatSpeed", {
+		Title = "Boat Speed",
+		Default = 350,
+		Min = 100,
+		Max = 350,
+		Rounding = 0,
+		Callback = function(value) fullyBoatSpeed = value end
 	})
 
 	task.spawn(function()
@@ -941,12 +961,91 @@ do
 		end
 		return false
 	end
+	local function boatOwnerMatches(boat)
+		for _, valueName in ipairs({"BoatOwner", "Owner", "owner"}) do
+			local value = boat:FindFirstChild(valueName, true)
+			if value and value:IsA("StringValue") and value.Value == player.Name then return true end
+			if value and value:IsA("ObjectValue") and value.Value == player then return true end
+		end
+		return false
+	end
+	local function findMyBoatSeat()
+		local boats = workspace:FindFirstChild("Boats")
+		if not boats then return nil end
+		local fallback
+		local _, root = getCharacter()
+		for _, boat in ipairs(boats:GetChildren()) do
+			local seat = boat:FindFirstChild("VehicleSeat", true)
+			if seat and seat:IsA("VehicleSeat") then
+				if seat.Occupant and seat.Occupant.Parent == player.Character then return seat end
+				if not seat.Occupant and boatOwnerMatches(boat) then return seat end
+				if not fallback and not seat.Occupant and boat.Name == fullyBoatName and (seat.Position - root.Position).Magnitude <= 1200 then
+					fallback = seat
+				end
+			end
+		end
+		return fallback
+	end
+	local function buyFullyBoat()
+		local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+		local comm = remotes and remotes:FindFirstChild("CommF_")
+		if not comm then return end
+		pcall(function() comm:InvokeServer("BuyBoat", fullyBoatName) end)
+	end
+	local function releaseSailingControls()
+		pcall(function() VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.W, false, game) end)
+		if sailingSeat and sailingSeat.Parent then
+			pcall(function() sailingSeat.Throttle = 0 end)
+		end
+		sailingSeat = nil
+	end
+	local function sailForPrehistoricIsland()
+		local character, root = getCharacter()
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not humanoid then return end
+		local seat = findMyBoatSeat()
+		if not seat then
+			-- Luxury Boat Dealer de Tiki; o servidor atual valida proximidade
+			-- antes de aceitar BuyBoat.
+			local boatDealer = CFrame.new(-16917.154296875, 7.757596015930176, 511.8203125)
+			if (root.Position - boatDealer.Position).Magnitude > 80 then
+				moveTo(boatDealer)
+				return
+			end
+			if os.clock() - lastBoatPurchase >= 8 then
+				lastBoatPurchase = os.clock()
+				buyFullyBoat()
+				notifyVolcano("Comprando " .. fullyBoatName .. " para procurar a ilha.")
+			end
+			return
+		end
+		if seat.Occupant ~= humanoid then
+			moveTo(seat.CFrame * CFrame.new(0, 3, 0))
+			pcall(function() seat:Sit(humanoid) end)
+			task.wait(0.4)
+			return
+		end
+		sailingSeat = seat
+		seat.MaxSpeed = fullyBoatSpeed
+		local seaDirection = Vector3.new(-0.9999496936798096, 0, -0.010028315708041191)
+		local currentDirection = Vector3.new(seat.CFrame.LookVector.X, 0, seat.CFrame.LookVector.Z)
+		if currentDirection.Magnitude > 0 and currentDirection.Unit:Dot(seaDirection) < 0.96 then
+			local boat = seat:FindFirstAncestorOfClass("Model")
+			if boat then
+				local pivot = boat:GetPivot()
+				pcall(function() boat:PivotTo(CFrame.lookAt(pivot.Position, pivot.Position + seaDirection)) end)
+			end
+		end
+		pcall(function() seat.Throttle = 1 end)
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+	end
 
 	Options.VolcanoFullyEvent:OnChanged(function(value)
 		if value then
 			fullyIslandReached = false
 			notifyVolcano("Modo Fully iniciado.")
 		else
+			releaseSailingControls()
 			fullyIslandReached = false
 			Options.VolcanoFlyIsland:SetValue(false)
 			Options.VolcanoFlyTrialDoor:SetValue(false)
@@ -964,12 +1063,14 @@ do
 				local island = getIsland()
 				if not island then
 					fullyIslandReached = false
+					sailForPrehistoricIsland()
 					if not Options.VolcanoFullyIgnoreMagnet.Value and os.clock() - lastMagnetCraft >= 20 then
 						lastMagnetCraft = os.clock()
 						craftVolcanicMagnet()
 						notifyVolcano("Volcanic Magnet: pedido de craft enviado. Aguardando Prehistoric Island.")
 					end
 				else
+					releaseSailingControls()
 					if not fullyIslandReached then
 						local skull = island:FindFirstChild("Skull", true)
 						if skull and skull:IsA("BasePart") then
