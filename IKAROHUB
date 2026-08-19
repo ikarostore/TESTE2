@@ -1,257 +1,54 @@
--- IKAROHUB
--- Etapa 1: interface original do Banana Hub, sem automacoes.
+-- IKAROHUB modular Banana runtime
+-- Os blocos das 18 abas sao recompostos na ordem original e compilados uma vez.
 
-if not game:IsLoaded() then
-	game.Loaded:Wait()
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+local BASE = "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/"
+local MODULES = {
+	"shop", "status_server", "localplayer", "setting_farm",
+	"hold_select_skill", "farming", "stack_farming", "farming_other",
+	"fruit_raid", "dungeon", "sea_event", "upgrade_race",
+	"upgrade_item", "volcano_event", "esp", "pvp", "webhook", "setting"
+}
+
+local function fetch(path)
+	local ok, body = pcall(function() return game:HttpGet(BASE .. path) end)
+	if not ok or type(body) ~= "string" or body == "" then
+		error("Falha ao carregar " .. path .. ": " .. tostring(body), 0)
+	end
+	return body
 end
 
-getgenv().IKARO_BANANA_UI_ONLY = true
-local BananaUI = loadstring(game:HttpGet(
-	"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/IKAROHUBTESTE"
-))()
+local function loadModule(path)
+	local source = fetch(path)
+	local compiler, compileError = loadstring(source)
+	if not compiler then error("Falha ao compilar " .. path .. ": " .. tostring(compileError), 0) end
+	local ok, result = pcall(compiler)
+	if not ok then error("Falha ao abrir " .. path .. ": " .. tostring(result), 0) end
+	return result
+end
+
+local chunks = {}
+table.insert(chunks, loadModule("modules/ikarohub_core_source.lua?v=1"))
+for _, name in ipairs(MODULES) do
+	local module = loadModule("modules/ikarohub_tabs/" .. name .. ".lua?v=3")
+	if type(module) ~= "table" or type(module.Chunks) ~= "table" then
+		error("Modulo invalido: " .. name, 0)
+	end
+	for _, chunk in ipairs(module.Chunks) do table.insert(chunks, chunk) end
+end
+
+table.sort(chunks, function(a, b) return a.Order < b.Order end)
+local sourceParts = table.create(#chunks)
+for index, chunk in ipairs(chunks) do
+	if type(chunk.Code) ~= "string" then error("Bloco invalido: " .. tostring(chunk.Order), 0) end
+	sourceParts[index] = chunk.Code
+end
+
+local completeSource = table.concat(sourceParts, "")
+local runtime, compileError = loadstring(completeSource)
+if not runtime then error("IKAROHUB compile error: " .. tostring(compileError), 0) end
+
+getgenv().IKAROHUB_MODULES = MODULES
 getgenv().IKARO_BANANA_UI_ONLY = nil
-
-local UIAdapter = loadstring(game:HttpGet(
-	"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_banana_ui_adapter.lua"
-))()
-
-local Fluent, Window = UIAdapter.Create(BananaUI, {
-	Title = "IKAROHUB",
-	SubTitle = "by ikaro",
-	TabWidth = 180,
-	Size = UDim2.new(0, 620, 0, 420)
-})
-
-local Tabs = {
-	Shop = Window:AddTab({
-		Title = "Shop"
-	}),
-	Status = Window:AddTab({
-		Title = "Status And Server"
-	}),
-	LocalPlayer = Window:AddTab({
-		Title = "Localplayer"
-	}),
-	SettingFarm = Window:AddTab({
-		Title = "setting farm"
-	}),
-	Skills = Window:AddTab({
-		Title = "Hold and select Skill"
-	}),
-	Farming = Window:AddTab({
-		Title = "Farming"
-	}),
-	StackFarming = Window:AddTab({
-		Title = "Stack farming"
-	}),
-	FarmingOther = Window:AddTab({
-		Title = "Farming Other"
-	}),
-	FruitRaid = Window:AddTab({
-		Title = "Fruit and Raid"
-	}),
-	Dungeon = Window:AddTab({
-		Title = "Dungeon"
-	}),
-	SeaEvent = Window:AddTab({
-		Title = "Sea event"
-	}),
-	UpgradeRace = Window:AddTab({
-		Title = "upgrade Race"
-	}),
-	UpgradeItem = Window:AddTab({
-		Title = "get and upgrade item"
-	}),
-	VolcanoEvent = Window:AddTab({
-		Title = "volcano event"
-	}),
-	ESP = Window:AddTab({
-		Title = "esp"
-	}),
-	PVP = Window:AddTab({
-		Title = "PVP"
-	}),
-	Webhook = Window:AddTab({
-		Title = "Tab webhook"
-	}),
-	Setting = Window:AddTab({
-		Title = "setting"
-	})
-}
-
-local Options = Fluent.Options
-
-local function detectCurrentSea()
-	local seaByPlaceId = {
-		[2753915549] = 1,
-		[4442272183] = 2,
-		[7449423635] = 3,
-		-- ID observado no seu servidor atual; mantido como alias do Third Sea.
-		[100117331123089] = 3
-	}
-	return seaByPlaceId[game.PlaceId], "PlaceId"
-end
-
-local CurrentSea, SeaDetectionSource = detectCurrentSea()
-local SeaNames = {[0] = "Detectando...", [1] = "First Sea", [2] = "Second Sea", [3] = "Third Sea"}
-CurrentSea = CurrentSea or 0
-local function syncSeaFlags()
-	local isSea1 = CurrentSea == 1
-	local isSea2 = CurrentSea == 2
-	local isSea3 = CurrentSea == 3
-	Sea1, Sea2, Sea3 = isSea1, isSea2, isSea3
-	_G.Sea1, _G.Sea2, _G.Sea3 = isSea1, isSea2, isSea3
-	getgenv().Sea1, getgenv().Sea2, getgenv().Sea3 = isSea1, isSea2, isSea3
-	getgenv().World1, getgenv().World2, getgenv().World3 = isSea1, isSea2, isSea3
-end
-syncSeaFlags()
-
--- As abas Banana são carregadas antes das extensões de Shop/Volcano para
--- preservar a ordem visual original de cada opção.
-do
-	local okTabs, tabState = pcall(function()
-		getgenv().IKAROHUB_BANANA_TABS = loadstring(game:HttpGet(
-			"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_banana_tabs.lua?v=1"
-		))()
-		return getgenv().IKAROHUB_BANANA_TABS.Init({
-			Tabs = Tabs,
-			Options = Options,
-			Fluent = Fluent
-		})
-	end)
-	if okTabs then
-		getgenv().IKAROHUB_BANANA_TABS_STATE = tabState
-	else
-		Fluent:Notify({Title="IKAROHUB LOAD ERROR",Content=tostring(tabState),Duration=12})
-	end
-end
-
--- Shop agora vive em modulo proprio.
-do
-	local okShop, shopError = pcall(function()
-		local module = loadstring(game:HttpGet(
-			'https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_tabs/shop.lua?v=2'
-		))()
-		getgenv().IKAROHUB_SHOP_MODULE = module
-		return module.Init({
-			Tabs=Tabs, Options=Options, Fluent=Fluent, CurrentSea=CurrentSea,
-			SeaDetectionSource=SeaDetectionSource, SeaNames=SeaNames,
-			detectCurrentSea=detectCurrentSea, syncSeaFlags=syncSeaFlags
-		})
-	end)
-	if not okShop then Fluent:Notify({Title='Shop module error',Content=tostring(shopError),Duration=12}) end
-end
-
--- Volcano Event agora vive em modulo proprio.
-do
-	local okVolcano, volcanoError = pcall(function()
-		local module = loadstring(game:HttpGet(
-			'https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_tabs/volcano_event.lua?v=2'
-		))()
-		getgenv().IKAROHUB_VOLCANO_MODULE = module
-		return module.Init({Tabs=Tabs, Options=Options, Fluent=Fluent})
-	end)
-	if not okVolcano then Fluent:Notify({Title='Volcano module error',Content=tostring(volcanoError),Duration=12}) end
-end
-
-Window:SelectTab(1)
-
-Fluent:Notify({
-	Title = "IKAROHUB",
-	Content = "Interface carregada.",
-	Duration = 5
-})
-
-getgenv().IKAROHUB = {
-	Library = Fluent,
-	Window = Window,
-	Tabs = Tabs,
-	Options = Options,
-	Sea = CurrentSea,
-	SeaDetectionSource = SeaDetectionSource,
-	BananaTabsState = getgenv().IKAROHUB_BANANA_TABS_STATE
-}
-
--- Sea Event permanece em módulo próprio para preservar o limite de registros
--- do arquivo principal e manter este projeto independente do LEVIATHAN TEST1.
-pcall(function()
-	getgenv().IKAROHUB_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=83"
-	))()
-	getgenv().IKAROHUB_SEA_EVENT = loadstring(game:HttpGet(
-		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_sea_event.lua?v=3"
-	))()
-	getgenv().IKAROHUB.SeaEventState = getgenv().IKAROHUB_SEA_EVENT.Init({
-		Tabs = Tabs,
-		Options = Options,
-		Fluent = Fluent
-	})
-end)
-
--- Cada aba possui um ponto de entrada independente. A camada de compatibilidade
--- acima preserva as funcoes atuais enquanto os proximos recursos podem ser
--- alterados sem aumentar o arquivo principal ou afetar outras abas.
-local TabModules = {
-	{"Shop", "shop"},
-	{"Status And Server", "status_server"},
-	{"Localplayer", "localplayer"},
-	{"setting farm", "setting_farm"},
-	{"Hold and select Skill", "hold_select_skill"},
-	{"Farming", "farming"},
-	{"Stack farming", "stack_farming"},
-	{"Farming Other", "farming_other"},
-	{"Fruit and Raid", "fruit_raid"},
-	{"Dungeon", "dungeon"},
-	{"Sea event", "sea_event"},
-	{"upgrade Race", "upgrade_race"},
-	{"get and upgrade item", "upgrade_item"},
-	{"volcano event", "volcano_event"},
-	{"esp", "esp"},
-	{"PVP", "pvp"},
-	{"Tab webhook", "webhook"},
-	{"setting", "setting"}
-}
-
-getgenv().IKAROHUB.TabModules = {}
-local moduleContext = {
-	Tabs = Tabs,
-	Options = Options,
-	Fluent = Fluent,
-	Hub = getgenv().IKAROHUB,
-	States = {
-		["Status And Server"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
-		["Localplayer"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
-		["setting farm"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
-		["Hold and select Skill"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
-		["Farming"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
-		["Farming Other"] = getgenv().IKAROHUB_BANANA_TABS_STATE,
-		["Sea event"] = getgenv().IKAROHUB.SeaEventState
-	},
-	Initializers = {}
-}
-
-for _, definition in ipairs(TabModules) do
-	local title, fileName = definition[1], definition[2]
-	local ok, result = pcall(function()
-		if title == "Shop" and getgenv().IKAROHUB_SHOP_MODULE then
-			getgenv().IKAROHUB.TabModules[title] = getgenv().IKAROHUB_SHOP_MODULE
-			return
-		end
-		if title == "volcano event" and getgenv().IKAROHUB_VOLCANO_MODULE then
-			getgenv().IKAROHUB.TabModules[title] = getgenv().IKAROHUB_VOLCANO_MODULE
-			return
-		end
-		local module = loadstring(game:HttpGet(
-			"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_tabs/" .. fileName .. ".lua?v=1"
-		))()
-		getgenv().IKAROHUB.TabModules[title] = module
-		return module.Init(moduleContext)
-	end)
-	if not ok then
-		Fluent:Notify({
-			Title = "Erro no modulo " .. title,
-			Content = tostring(result),
-			Duration = 10
-		})
-	end
-end
+return runtime()
