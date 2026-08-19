@@ -139,9 +139,12 @@ function M.Combat(eventKey, eventModel, context)
                 -- Nox usa +60 no Terror. Usamos 55 para respeitar o filtro
                 -- estrito <60. Nos demais, Y fixo evita acompanhar mergulhos.
                 if not creatureSafeY then
-                    local terror = eventKey == "Terrorshark"
-                    local desiredOffset = terror and 54 or 35
-                    local minimumY = terror and 45 or 35
+                    local desiredOffset = eventKey == "Terrorshark" and 42
+                        or eventKey == "Shark" and 20
+                        or 35
+                    local minimumY = eventKey == "Terrorshark" and 38
+                        or eventKey == "Shark" and 18
+                        or 35
                     creatureSafeY = math.max(enemyRoot.Position.Y + desiredOffset, minimumY)
                     creatureSafeY = math.min(creatureSafeY, enemyRoot.Position.Y + 55)
                 end
