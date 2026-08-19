@@ -103,6 +103,26 @@ local function syncSeaFlags()
 end
 syncSeaFlags()
 
+-- As abas Banana são carregadas antes das extensões de Shop/Volcano para
+-- preservar a ordem visual original de cada opção.
+do
+	local okTabs, tabState = pcall(function()
+		getgenv().IKAROHUB_BANANA_TABS = loadstring(game:HttpGet(
+			"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_banana_tabs.lua?v=1"
+		))()
+		return getgenv().IKAROHUB_BANANA_TABS.Init({
+			Tabs = Tabs,
+			Options = Options,
+			Fluent = Fluent
+		})
+	end)
+	if okTabs then
+		getgenv().IKAROHUB_BANANA_TABS_STATE = tabState
+	else
+		Fluent:Notify({Title="IKAROHUB LOAD ERROR",Content=tostring(tabState),Duration=12})
+	end
+end
+
 -- Shop: portado do codigo-fonte do Banana Hub.
 do
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -672,6 +692,7 @@ do
 	local fullyIslandReached = false
 	local hadActiveBoat = false
 	local recoveryInProgress = false
+	local recoverFullyVolcano
 
 	local function notifyVolcano(content)
 		Fluent:Notify({Title = "Volcano Event", Content = content, Duration = 5})
@@ -949,7 +970,15 @@ do
 			if Options.VolcanoCollectBone.Value then
 				local island = getIsland()
 				local bone = island and island:FindFirstChild("DinoBone", true)
-				if bone and bone:IsA("BasePart") then moveTo(bone.CFrame) end
+				if bone and bone:IsA("BasePart") then
+					local collectedBone = bone
+					if moveTo(bone.CFrame) then
+						task.wait(0.5)
+						if not collectedBone.Parent and recoverFullyVolcano then
+							recoverFullyVolcano("Dinosaur Bone coletado; iniciando novo ciclo.", true)
+						end
+					end
+				end
 			end
 			if Options.VolcanoCollectEgg.Value then
 				local island = getIsland()
@@ -962,6 +991,10 @@ do
 						pcall(fireproximityprompt, prompt)
 					else
 						pcall(pressKey, "E")
+					end
+					task.wait(0.5)
+					if (not egg.Parent or (prompt and not prompt.Enabled)) and recoverFullyVolcano then
+						recoverFullyVolcano("Dragon Egg coletado; iniciando novo ciclo.", true)
 					end
 				end
 			end
@@ -1045,7 +1078,7 @@ do
 		sailingObstacleCache = {}
 		sailingSeat = nil
 	end
-	local function recoverFullyVolcano(reason, forceReset)
+	recoverFullyVolcano = function(reason, forceReset)
 		if recoveryInProgress or not Options.VolcanoFullyEvent.Value then return end
 		recoveryInProgress = true
 		hadActiveBoat = false
@@ -1274,7 +1307,8 @@ getgenv().IKAROHUB = {
 	Tabs = Tabs,
 	Options = Options,
 	Sea = CurrentSea,
-	SeaDetectionSource = SeaDetectionSource
+	SeaDetectionSource = SeaDetectionSource,
+	BananaTabsState = getgenv().IKAROHUB_BANANA_TABS_STATE
 }
 
 -- Sea Event permanece em módulo próprio para preservar o limite de registros
@@ -1284,7 +1318,7 @@ pcall(function()
 		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=83"
 	))()
 	getgenv().IKAROHUB_SEA_EVENT = loadstring(game:HttpGet(
-		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_sea_event.lua?v=1"
+		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_sea_event.lua?v=3"
 	))()
 	getgenv().IKAROHUB.SeaEventState = getgenv().IKAROHUB_SEA_EVENT.Init({
 		Tabs = Tabs,

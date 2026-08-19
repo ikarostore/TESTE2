@@ -10,12 +10,15 @@ function M.Init(ctx)
     local VIM = game:GetService("VirtualInputManager")
     local player = Players.LocalPlayer
     local tab = Tabs.SeaEvent
+    local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+    local registerAttack = net:WaitForChild("RE/RegisterAttack")
+    local registerHit = net:WaitForChild("RE/RegisterHit")
     local state = {
-        Boat = "Guardian", Zone = "Zone 5", Speed = 300, Sail = false,
+        Boat = "Guardian", Zone = "Zone 5", Speed = 300, Sail = false, AutoSeaEvents=false,
         AutoMirage = false, AutoLeviathan = false, LeviathanAttack = false,
         WithFriend = false, Friend = "None", Lightning = false,
         SpeedBoat = false, NoclipRock = false, DodgeSeaBeast = true,
-        DodgeTerror = true, CombatBusy = false, Drive = nil,
+        DodgeTerror = true, CombatBusy = false, CurrentCombat=nil, CurrentCombatKey=nil, Drive = nil,
         Events = {Shark=true, Piranha=true, FishCrew=true, FishBoat=true,
             PirateBrigade=true, PirateGrandBrigade=true, Terrorshark=true, SeaBeast=true},
         Skills = {Fruit=true, Melee=true, Sword=true, Gun=true,
@@ -35,11 +38,14 @@ function M.Init(ctx)
     if type(readfile) == "function" and type(isfile) == "function" and isfile(configName) then
         pcall(function() merge(state, HttpService:JSONDecode(readfile(configName))) end)
     end
+    -- Auto Sail é um detalhe interno do Auto Sea Events, não uma opção
+    -- independente exposta ao usuário.
+    state.Sail=state.AutoSeaEvents
     local function save()
         if type(writefile) == "function" then
             pcall(function()
                 local stored = {
-                    Boat=state.Boat, Zone=state.Zone, Speed=state.Speed, Sail=state.Sail,
+                    Boat=state.Boat, Zone=state.Zone, Speed=state.Speed, Sail=state.Sail, AutoSeaEvents=state.AutoSeaEvents,
                     AutoMirage=state.AutoMirage, AutoLeviathan=state.AutoLeviathan,
                     LeviathanAttack=state.LeviathanAttack, WithFriend=state.WithFriend,
                     Friend=state.Friend, Lightning=state.Lightning, SpeedBoat=state.SpeedBoat,
@@ -82,10 +88,21 @@ function M.Init(ctx)
             pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso") end)
         end
     end
+    local function basicAttack(model)
+        local _,root=character()
+        local hit=model and (model:FindFirstChild("Head",true) or model:FindFirstChild("HumanoidRootPart",true))
+        if not root or not hit or (root.Position-hit.Position).Magnitude>=60 then return end
+        pcall(function()
+            registerAttack:FireServer(1e-9)
+            registerHit:FireServer(hit,{{model,hit}})
+        end)
+    end
     local function press(key)
         pcall(function()
             VIM:SendKeyEvent(true, Enum.KeyCode[key], false, game)
-            task.wait(0.06)
+            local holds=getgenv().IKAROHUB_HOLDS
+            local duration=holds and tonumber(holds["Sea"..key]) or 0
+            task.wait(duration and duration>0 and duration or 0.06)
             VIM:SendKeyEvent(false, Enum.KeyCode[key], false, game)
         end)
     end
@@ -220,7 +237,7 @@ function M.Init(ctx)
         local y=math.clamp((70-drive.Position.Y)*7,-140,140)
         state.Drive.Velocity.VectorVelocity=dir*state.Speed+Vector3.new(0,y,0)
         state.Drive.Orientation.CFrame=CFrame.lookAt(Vector3.zero,dir,Vector3.yAxis)
-        if state.NoclipRock or state.Sail or state.AutoMirage or state.AutoLeviathan then
+        if state.NoclipRock or state.Sail or state.AutoSeaEvents or state.AutoMirage or state.AutoLeviathan then
             setNoclip(completeBoat(seat))
         end
         if state.SpeedBoat then seat.MaxSpeed=350 end
@@ -234,14 +251,63 @@ function M.Init(ctx)
         else seat:Sit(hum) end
     end
     local function buyBoat()
+        local char,root=character()
+        if not char or not root then return end
+        local dealer=Vector3.new(-16927.451171875,9.0863618850708,433.8642883300781)
+        setNoclip(char)
+        if (root.Position-dealer).Magnitude>12 then
+            root.CFrame=CFrame.lookAt(root.Position:Lerp(dealer,0.10),dealer)
+            root.AssemblyLinearVelocity=Vector3.zero
+            return
+        end
         pcall(function() ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyBoat",state.Boat) end)
+    end
+    local function seaBeastDodging(model)
+        if not state.DodgeSeaBeast then return false end
+        local hum=model and model:FindFirstChildOfClass("Humanoid")
+        local animator=hum and (hum:FindFirstChildOfClass("Animator") or hum)
+        for _,track in ipairs(animator and animator:GetPlayingAnimationTracks() or {}) do
+            local id=track.Animation and track.Animation.AnimationId or ""
+            if id=="rbxassetid://8708221792" or id=="rbxassetid://8708222556"
+            or id=="rbxassetid://8708223619" or id=="rbxassetid://8708225668" then return true end
+        end
+        return false
+    end
+    local function combatSeaBeast(model)
+        while state.CombatBusy and alive(model) do
+            local char,root,hum=character()
+            local target=partOf(model)
+            if not char or not root or not hum or not target or hum.Health<=0 then break end
+            enableHaki() setNoclip(char)
+            local side=seaBeastDodging(model) and Vector3.new(math.random(-250,250),400,math.random(-250,250)) or Vector3.new(0,400,0)
+            root.CFrame=CFrame.lookAt(target.Position+side,target.Position)
+            root.AssemblyLinearVelocity=Vector3.zero
+            useSkills(target)
+            task.wait(0.05)
+        end
+    end
+    local function combatFishCrew(model)
+        while state.CombatBusy and alive(model) do
+            local char,root,hum=character()
+            local target=partOf(model)
+            if not char or not root or not hum or not target or hum.Health<=0 then break end
+            enableHaki() setNoclip(char)
+            root.CFrame=CFrame.lookAt(target.Position+Vector3.new(0,25,0),target.Position)
+            root.AssemblyLinearVelocity=Vector3.zero
+            basicAttack(model)
+            task.wait(0.08)
+        end
     end
     local function combat(key,model)
         if state.CombatBusy then return end
-        state.CombatBusy=true stopDrive()
+        state.CombatBusy=true state.CurrentCombat=model state.CurrentCombatKey=key stopDrive()
         task.spawn(function()
             local module=getgenv().IKAROHUB_BANANA_SEA_COMBAT
-            if module and module.Combat then
+            if key=="SeaBeast" then
+                combatSeaBeast(model)
+            elseif key=="FishCrew" then
+                combatFishCrew(model)
+            elseif module and module.Combat then
                 pcall(module.Combat,key,model,{
                     Running=function() return state.CombatBusy and alive(model) end,
                     EquipWeapon=function()
@@ -263,7 +329,7 @@ function M.Init(ctx)
                     useSkills(target) task.wait(0.1)
                 end
             end
-            state.CombatBusy=false
+            state.CombatBusy=false state.CurrentCombat=nil state.CurrentCombatKey=nil
         end)
     end
 
@@ -273,10 +339,20 @@ function M.Init(ctx)
     tab:AddSlider("IKSeaSpeed",{Title="Boat Tween Speed",Min=100,Max=350,Default=state.Speed,Rounding=0,Callback=function(v) state.Speed=v save() end})
     local function toggle(id,title,path)
         local control=tab:AddToggle(id,{Title=title,Default=path[1][path[2]]})
-        control:OnChanged(function(v) path[1][path[2]]=v save() if not v and id=="IKSeaSail" then stopDrive() end end)
+        control:OnChanged(function(v)
+            path[1][path[2]]=v save()
+            if not v and (id=="IKSeaSail" or id=="IKAutoSeaEvents")
+            and not state.Sail and not state.AutoSeaEvents then stopDrive() end
+        end)
         return control
     end
-    toggle("IKSeaSail","Auto Sail Boat",{state,"Sail"})
+    local autoSeaEvents=tab:AddToggle("IKAutoSeaEvents",{Title="Auto Sea Events",Default=state.AutoSeaEvents})
+    autoSeaEvents:OnChanged(function(v)
+        state.AutoSeaEvents=v
+        state.Sail=v
+        save()
+        if not v then state.CombatBusy=false stopDrive() end
+    end)
     tab:AddSection("Sea Event Targets")
     toggle("IKSeaShark","Auto Farm Shark",{state.Events,"Shark"})
     toggle("IKSeaPiranha","Auto Farm Piranha",{state.Events,"Piranha"})
@@ -319,26 +395,47 @@ function M.Init(ctx)
         end
     end
 
-    Tabs.Status:AddSection("Sea Status")
-    local mirageStatus=Tabs.Status:AddParagraph({Title="Mirage Island",Content="Not spawned"})
-    local leviStatus=Tabs.Status:AddParagraph({Title="Leviathan",Content="Not detected"})
+    task.spawn(function()
+        local nextDodge=0
+        while task.wait(0.03) do
+            if state.DodgeTerror and state.CurrentCombatKey=="Terrorshark"
+            and state.CurrentCombat and os.clock()>=nextDodge then
+                local hum=state.CurrentCombat:FindFirstChildOfClass("Humanoid")
+                local animator=hum and hum:FindFirstChildOfClass("Animator")
+                local attacking=false
+                for _,track in ipairs(animator and animator:GetPlayingAnimationTracks() or {}) do
+                    if track.IsPlaying and track.Speed>0 then attacking=true break end
+                end
+                if attacking then
+                    nextDodge=os.clock()+1.2
+                    local char,root=character()
+                    local target=partOf(state.CurrentCombat)
+                    if char and root and target then
+                        setNoclip(char)
+                        local side=(player.UserId%2==0 and 35 or -35)
+                        root.CFrame=CFrame.lookAt(target.Position+target.CFrame.RightVector*side+Vector3.new(0,35,0),target.Position)
+                        root.AssemblyLinearVelocity=Vector3.zero
+                    end
+                end
+            end
+        end
+    end)
+
     task.spawn(function()
         while task.wait(0.15) do
             local mirage=findMirage()
             local levi=findLeviathan()
-            pcall(function() mirageStatus:SetDesc(mirage and "SPAWNED: "..mirage:GetFullName() or "Not spawned") end)
-            pcall(function() leviStatus:SetDesc(levi and "DETECTED: "..levi:GetFullName() or "Not detected") end)
             if state.Lightning then Lighting.ClockTime=12 end
             if not state.CombatBusy then
                 local key,event=findEvent()
-                if event and (state.Sail or state.WithFriend) then combat(key,event)
+                if event and (state.AutoSeaEvents or state.WithFriend) then combat(key,event)
                 elseif levi and state.LeviathanAttack then combat("Leviathan",levi)
                 elseif levi and state.AutoLeviathan then
                     stopDrive()
                 else
                     local boat,seat=friendBoat()
                     if not boat then boat,seat=myBoat() end
-                    if state.Sail or state.AutoMirage or state.AutoLeviathan or state.WithFriend then
+                    if state.Sail or state.AutoSeaEvents or state.AutoMirage or state.AutoLeviathan or state.WithFriend then
                         if not seat then buyBoat()
                         else
                             local _,_,hum=character()
