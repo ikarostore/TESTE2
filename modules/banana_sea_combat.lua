@@ -2,6 +2,7 @@
 local M = {}
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local CREATURES = {Terrorshark = true, Piranha = true, Shark = true}
 local SHIPS = {PirateBrigade = true, PirateGrandBrigade = true, FishBoat = true}
 local POSITIONS = {
@@ -24,17 +25,29 @@ local function autoHaki(character)
 end
 
 local function equipBananaWeapon(character, context)
+    local requested
     if context.EquipWeapon then
         local ok, tool = pcall(context.EquipWeapon)
-        if ok and tool then return tool end
+        if ok and typeof(tool) == "Instance" and tool:IsA("Tool") then
+            requested = tool
+        end
     end
     local player = Players.LocalPlayer
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    -- EquipTool replica de forma assíncrona. Só devolvemos a ferramenta que já
+    -- está no Character, pois Tool:Activate em uma Tool no Backpack não ataca.
+    local equipped = character and character:FindFirstChildOfClass("Tool")
+    if equipped then return equipped end
+    if requested and requested.Parent ~= character and humanoid then
+        pcall(function() humanoid:EquipTool(requested) end)
+    end
+    equipped = character and character:FindFirstChildOfClass("Tool")
+    if equipped then return equipped end
     for _, container in ipairs({character, player:FindFirstChild("Backpack")}) do
         for _, tool in ipairs(container and container:GetChildren() or {}) do
             if tool:IsA("Tool") and tool.ToolTip == "Melee" then
                 if humanoid and tool.Parent ~= character then humanoid:EquipTool(tool) end
-                return tool
+                return character:FindFirstChildOfClass("Tool")
             end
         end
     end
@@ -59,9 +72,6 @@ function M.Combat(eventKey, eventModel, context)
     local player = Players.LocalPlayer
     local started = os.clock()
     local nextToolAttack = 0
-    local nextFallbackHit = 0
-    local lastHealth = nil
-    local lastDamageAt = started
     while context.Running() and alive(eventModel) and os.clock() - started < 180 do
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -81,7 +91,11 @@ function M.Combat(eventKey, eventModel, context)
             if isShark then
                 -- O rastreamento do Banana fica parado e perto do Head. Trocar
                 -- offsets invalidava o alcance 3D e fazia o servidor descartar hits.
-                local desired = hitPart.Position + Vector3.new(0, 16, 0)
+                local desired = Vector3.new(
+                    hitPart.Position.X,
+                    math.max(hitPart.Position.Y + 16, 18),
+                    hitPart.Position.Z
+                )
                 root.CFrame = CFrame.lookAt(desired, hitPart.Position)
             else
                 -- Mantém o comportamento já validado para grupos de Piranhas.
@@ -96,24 +110,22 @@ function M.Combat(eventKey, eventModel, context)
 
             local now = os.clock()
             if isShark then
-                if lastHealth == nil or enemyHumanoid.Health < lastHealth then
-                    lastDamageAt = now
-                end
-                lastHealth = enemyHumanoid.Health
-
                 -- Cria primeiro o estado legítimo de M1; o próprio jogo gera o
                 -- RegisterHit observado no Banana.
                 if tool and now >= nextToolAttack then
                     nextToolAttack = now + 0.12
-                    pcall(function() tool:Activate() end)
+                    pcall(function()
+                        tool:Activate()
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                        task.delay(0.035, function()
+                            pcall(function()
+                                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                            end)
+                        end)
+                    end)
                 end
-
-                -- Só reproduz Head + {} quando o ataque real ficou mais de um
-                -- segundo sem causar dano, com cadência limitada.
-                if now - lastDamageAt >= 1.10 and now >= nextFallbackHit then
-                    nextFallbackHit = now + 0.24
-                    attackNoCooldown(eventModel, character, root)
-                end
+                -- Sem fallback manual neste teste: o rastreador deve mostrar
+                -- somente os pacotes realmente produzidos pelo M1 equipado.
             else
                 attackNoCooldown(eventModel, character, root)
             end
