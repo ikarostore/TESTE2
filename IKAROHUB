@@ -664,6 +664,11 @@ do
 	local fullyBoatSpeed = 350
 	local lastBoatPurchase = 0
 	local sailingSeat
+	local sailingAttachment
+	local sailingVelocity
+	local sailingOrientation
+	local sailingCollisionCache = {}
+	local sailingObstacleCache = {}
 
 	local function notifyVolcano(content)
 		Fluent:Notify({Title = "Volcano Event", Content = content, Duration = 5})
@@ -1024,7 +1029,77 @@ do
 		if sailingSeat and sailingSeat.Parent then
 			pcall(function() sailingSeat.Throttle = 0 end)
 		end
+		for _, actuator in pairs({sailingVelocity, sailingOrientation, sailingAttachment}) do
+			if actuator then pcall(function() actuator:Destroy() end) end
+		end
+		sailingVelocity, sailingOrientation, sailingAttachment = nil, nil, nil
+		for part, oldValue in pairs(sailingCollisionCache) do
+			if part and part.Parent then pcall(function() part.CanCollide = oldValue end) end
+		end
+		for part, oldValue in pairs(sailingObstacleCache) do
+			if part and part.Parent then pcall(function() part.CanCollide = oldValue end) end
+		end
+		sailingCollisionCache = {}
+		sailingObstacleCache = {}
 		sailingSeat = nil
+	end
+	local function applyFlyingBoatNoclip(boat, drivePart, direction)
+		for _, object in ipairs(boat:GetDescendants()) do
+			if object:IsA("BasePart") then
+				if sailingCollisionCache[object] == nil then sailingCollisionCache[object] = object.CanCollide end
+				object.CanCollide = false
+			end
+		end
+		local params = OverlapParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = player.Character and {boat, player.Character} or {boat}
+		params.MaxParts = 0
+		local center = drivePart.Position + direction * 100
+		local scan = CFrame.lookAt(center, center + direction)
+		local seen = {}
+		for _, part in ipairs(workspace:GetPartBoundsInBox(scan, Vector3.new(180, 180, 320), params)) do
+			if part:IsA("BasePart") and part.Anchored and (part.CanCollide or sailingObstacleCache[part] ~= nil) and not part:IsDescendantOf(boat) then
+				if sailingObstacleCache[part] == nil then sailingObstacleCache[part] = part.CanCollide end
+				seen[part] = true
+				part.CanCollide = false
+			end
+		end
+		for part, oldValue in pairs(sailingObstacleCache) do
+			if not part or not part.Parent then
+				sailingObstacleCache[part] = nil
+			elseif not seen[part] then
+				pcall(function() part.CanCollide = oldValue end)
+				sailingObstacleCache[part] = nil
+			end
+		end
+	end
+	local function ensureFlyingBoatPhysics(seat, direction)
+		local drivePart = seat.AssemblyRootPart or seat
+		local boat = seat:FindFirstAncestorOfClass("Model")
+		if not boat then return nil end
+		if not sailingAttachment or sailingAttachment.Parent ~= drivePart then
+			for _, actuator in pairs({sailingVelocity, sailingOrientation, sailingAttachment}) do
+				if actuator then pcall(function() actuator:Destroy() end) end
+			end
+			sailingAttachment = Instance.new("Attachment")
+			sailingAttachment.Name = "IKARO_VolcanoBoatFlightAttachment"
+			sailingAttachment.Parent = drivePart
+			sailingVelocity = Instance.new("LinearVelocity")
+			sailingVelocity.Attachment0 = sailingAttachment
+			sailingVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+			sailingVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+			sailingVelocity.MaxForce = math.huge
+			sailingVelocity.Parent = drivePart
+			sailingOrientation = Instance.new("AlignOrientation")
+			sailingOrientation.Attachment0 = sailingAttachment
+			sailingOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
+			sailingOrientation.RigidityEnabled = false
+			sailingOrientation.Responsiveness = 35
+			sailingOrientation.MaxTorque = math.huge
+			sailingOrientation.Parent = drivePart
+		end
+		applyFlyingBoatNoclip(boat, drivePart, direction)
+		return drivePart
 	end
 	local function sailForPrehistoricIsland()
 		local character, root = getCharacter()
@@ -1055,14 +1130,12 @@ do
 		sailingSeat = seat
 		seat.MaxSpeed = fullyBoatSpeed
 		local seaDirection = Vector3.new(-0.9999496936798096, 0, -0.010028315708041191)
-		local currentDirection = Vector3.new(seat.CFrame.LookVector.X, 0, seat.CFrame.LookVector.Z)
-		if currentDirection.Magnitude > 0 and currentDirection.Unit:Dot(seaDirection) < 0.96 then
-			local boat = seat:FindFirstAncestorOfClass("Model")
-			if boat then
-				local pivot = boat:GetPivot()
-				pcall(function() boat:PivotTo(CFrame.lookAt(pivot.Position, pivot.Position + seaDirection)) end)
-			end
-		end
+		local drivePart = ensureFlyingBoatPhysics(seat, seaDirection)
+		if not drivePart then return end
+		local flightHeight = 70
+		local verticalSpeed = math.clamp((flightHeight - drivePart.Position.Y) * 7, -140, 140)
+		sailingVelocity.VectorVelocity = seaDirection * fullyBoatSpeed + Vector3.new(0, verticalSpeed, 0)
+		sailingOrientation.CFrame = CFrame.lookAt(Vector3.zero, seaDirection, Vector3.yAxis)
 		pcall(function() seat.Throttle = 1 end)
 		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.W, false, game)
 	end
@@ -1085,7 +1158,7 @@ do
 	end)
 
 	task.spawn(function()
-		while task.wait(0.75) do
+		while task.wait(0.2) do
 			if Options.VolcanoFullyEvent.Value then
 				local island = getIsland()
 				if not island then
