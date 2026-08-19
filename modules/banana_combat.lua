@@ -55,6 +55,7 @@ function M.SeaCreatureAttack(eventModel, character, root)
         end
     end
 
+    local directSeaHead
     if eventModel and eventModel.Parent then
         local eventRoot = eventModel:FindFirstChild("HumanoidRootPart", true)
         local eventHumanoid = eventModel:FindFirstChildWhichIsA("Humanoid", true)
@@ -64,6 +65,7 @@ function M.SeaCreatureAttack(eventModel, character, root)
         local lowerEventName = string.lower(eventModel.Name)
         local isTerror = string.find(lowerEventName, "terror", 1, true) ~= nil
         local isShark = string.find(lowerEventName, "shark", 1, true) ~= nil
+		directSeaHead = (isTerror or isShark) and eventModel:FindFirstChild("Head", true) or nil
         if eventRoot then
             eventRoot.CanCollide = false
             if not isTerror and not isShark then eventRoot.Size = Vector3.new(60, 60, 60) end
@@ -78,6 +80,15 @@ function M.SeaCreatureAttack(eventModel, character, root)
 			targets[#targets + 1] = {eventModel, eventHitPart}
 			lastHitPart = eventHitPart
 		end
+    end
+
+    -- Captura real do Banana: Shark e Terrorshark não enviam RegisterAttack
+    -- nem a lista preenchida. São dois RegisterHit consecutivos em Head + {}.
+    if directSeaHead then
+        return pcall(function()
+            registerHit:FireServer(directSeaHead, {})
+            registerHit:FireServer(directSeaHead, {})
+        end)
     end
 
     if not lastHitPart then return false end
