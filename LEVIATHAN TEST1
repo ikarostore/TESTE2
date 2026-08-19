@@ -9,7 +9,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_SEA_EVENTS = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_events.lua?v=82"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_events.lua?v=83"
     ))()
 end)
 pcall(function()
@@ -2054,18 +2054,14 @@ end
 
 local function FindLeviathanThreat()
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            local lower = string.lower(obj.Name)
+        if getgenv().IKARO_SEA_EVENTS.IsLeviathanModel(obj, workspace) then
+            local part =
+                obj:FindFirstChild("HumanoidRootPart")
+                or obj.PrimaryPart
+                or obj:FindFirstChildWhichIsA("BasePart", true)
 
-            if string.find(lower, "leviathan", 1, true) then
-                local part =
-                    obj:FindFirstChild("HumanoidRootPart")
-                    or obj.PrimaryPart
-                    or obj:FindFirstChildWhichIsA("BasePart", true)
-
-                if part then
-                    return obj, part
-                end
+            if part then
+                return obj, part
             end
         end
     end
@@ -3222,19 +3218,17 @@ end
 -- =========================================================
 
 local function FindLeviathan()
-    if SeaHuntState.CachedLeviathan and SeaHuntState.CachedLeviathan.Parent then
+    if SeaHuntState.CachedLeviathan
+    and getgenv().IKARO_SEA_EVENTS.IsLeviathanModel(SeaHuntState.CachedLeviathan, workspace) then
         return SeaHuntState.CachedLeviathan
     end
     if os.clock() < SeaHuntState.NextLeviathanScan then return nil end
     SeaHuntState.NextLeviathanScan = os.clock() + 3
 
     for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            local n = string.lower(obj.Name)
-            if string.find(n, "leviathan", 1, true) then
-                SeaHuntState.CachedLeviathan = obj
-                return obj
-            end
+        if getgenv().IKARO_SEA_EVENTS.IsLeviathanModel(obj, workspace) then
+            SeaHuntState.CachedLeviathan = obj
+            return obj
         end
     end
     return nil

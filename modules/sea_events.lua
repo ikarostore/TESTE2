@@ -9,6 +9,21 @@ M.Names = {
 }
 M.Order = {"Terrorshark", "SeaBeast", "PirateGrandBrigade", "PirateBrigade", "FishBoat", "Shark", "Piranha"}
 
+function M.IsLeviathanModel(model, workspace)
+    if not model or not model:IsA("Model") or not model.Parent then return false end
+    local name = string.lower(model.Name)
+    if name ~= "leviathan"
+    and name ~= "leviathan segment"
+    and name ~= "leviathan tail" then
+        return false
+    end
+
+    -- O Leviathan real e seus segmentos são replicados em SeaBeasts.
+    -- Isso exclui LeviathanShield, ferramentas, VFX e modelos de jogadores.
+    local seaBeasts = workspace and workspace:FindFirstChild("SeaBeasts")
+    return seaBeasts ~= nil and model:IsDescendantOf(seaBeasts)
+end
+
 local function matches(name, variants, key)
     local lower = string.lower(name)
     if key == "Shark" and string.find(lower, "terrorshark", 1, true) then return false end
