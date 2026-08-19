@@ -51,10 +51,12 @@ local function restoreCharacterNoclip(cache)
     end
 end
 
--- Nox moderno: prepara quatro estados do combo e usa HumanoidRootPart.
--- O evento atual é o alvo principal; mobs próximos entram no mesmo pacote.
-local function noxFastAttack(eventModel, playerRoot)
-    local primary = eventModel and eventModel:FindFirstChild("HumanoidRootPart", true)
+-- O rastreamento do cliente que realmente causa dano usa um unico estado de
+-- ataque e Head como alvo primario. Disparar 0/1/2/3 em sequencia faz o
+-- servidor receber os remotes, mas rejeitar o golpe.
+local function verifiedFastAttack(eventModel, playerRoot)
+    local primary = eventModel and (eventModel:FindFirstChild("Head", true)
+        or eventModel:FindFirstChild("HumanoidRootPart", true))
     if not primary or not playerRoot then return false end
     if (primary.Position - playerRoot.Position).Magnitude >= 60 then return false end
 
@@ -63,19 +65,17 @@ local function noxFastAttack(eventModel, playerRoot)
     for _, enemy in ipairs(enemies and enemies:GetChildren() or {}) do
         if enemy ~= eventModel and enemy.Name == eventModel.Name and not enemy:GetAttribute("IsBoat") then
             local humanoid = enemy:FindFirstChildOfClass("Humanoid")
-            local enemyRoot = enemy:FindFirstChild("HumanoidRootPart", true)
-            if humanoid and humanoid.Health > 0 and enemyRoot
-            and (enemyRoot.Position - playerRoot.Position).Magnitude < 60 then
-                secondary[#secondary + 1] = {enemy, enemyRoot}
+            local enemyHitPart = enemy:FindFirstChild("Head", true)
+                or enemy:FindFirstChild("HumanoidRootPart", true)
+            if humanoid and humanoid.Health > 0 and enemyHitPart
+            and (enemyHitPart.Position - playerRoot.Position).Magnitude < 60 then
+                secondary[#secondary + 1] = {enemy, enemyHitPart}
             end
         end
     end
 
     return pcall(function()
-        registerAttack:FireServer(0)
-        registerAttack:FireServer(1)
-        registerAttack:FireServer(2)
-        registerAttack:FireServer(3)
+        registerAttack:FireServer(1e-9)
         registerHit:FireServer(primary, secondary)
     end)
 end
@@ -151,7 +151,7 @@ function M.Combat(eventKey, eventModel, context)
                 local now = os.clock()
                 if now >= nextCreatureAttack then
                     nextCreatureAttack = now + 0.12
-                    noxFastAttack(eventModel, root)
+                    verifiedFastAttack(eventModel, root)
                 end
                 task.wait(0.03)
 
