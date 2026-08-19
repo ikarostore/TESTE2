@@ -89,12 +89,16 @@ function M.Combat(eventKey, eventModel, context)
             local hitPart = eventModel:FindFirstChild("Head", true) or enemyRoot
 
             if isShark then
-                -- O rastreamento do Banana fica parado e perto do Head. Trocar
-                -- offsets invalidava o alcance 3D e fazia o servidor descartar hits.
+                -- Método validado no Tyrant: centro a 40 studs e HRP 50x50x50.
+                -- A metade da hitbox (25) deixa a superfície a ~15 studs do
+                -- personagem, dentro do alcance em que o M1 real registra dano.
+                enemyRoot.CanCollide = false
+                enemyRoot.Size = Vector3.new(50, 50, 50)
+                hitPart.CanCollide = false
                 local desired = Vector3.new(
-                    hitPart.Position.X,
-                    math.max(hitPart.Position.Y + 16, 18),
-                    hitPart.Position.Z
+                    enemyRoot.Position.X,
+                    math.max(enemyRoot.Position.Y + 40, 18),
+                    enemyRoot.Position.Z
                 )
                 root.CFrame = CFrame.lookAt(desired, hitPart.Position)
             else
