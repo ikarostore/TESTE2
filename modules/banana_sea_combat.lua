@@ -119,6 +119,8 @@ function M.Combat(eventKey, eventModel, context)
     if not eventModel or not context then return false end
     local player = Players.LocalPlayer
     local started = os.clock()
+    local terrorAttackUntil = 0
+    local nextTerrorAttack = started
     local mirrorThisFight = eventKey == "Shark" or eventKey == "Terrorshark"
     if mirrorThisFight and installValidHitMirror() then
         activeSharkModel = eventModel
@@ -138,6 +140,7 @@ function M.Combat(eventKey, eventModel, context)
             if not enemyRoot or not enemyHumanoid then break end
             local tool = equipBananaWeapon(character, context)
             local isShark = eventKey == "Shark" or eventKey == "Terrorshark"
+            local isTerror = eventKey == "Terrorshark"
             local hitPart = eventModel:FindFirstChild("Head", true) or enemyRoot
 
             if isShark then
@@ -146,11 +149,25 @@ function M.Combat(eventKey, eventModel, context)
                 -- M1 precisa tocar a peça real; não usamos hitbox artificial.
                 enemyRoot.CanCollide = false
                 hitPart.CanCollide = false
-                local desired = Vector3.new(
-                    hitPart.Position.X,
-                    hitPart.Position.Y + 8,
-                    hitPart.Position.Z
-                )
+                local now = os.clock()
+                if isTerror and now >= nextTerrorAttack then
+                    -- O contato do M1 é instantâneo. Uma janela curta mantém o
+                    -- hit válido sem deixar a conta dentro das skills do boss.
+                    terrorAttackUntil = now + 0.16
+                    nextTerrorAttack = now + 0.58
+                end
+                local inTerrorAttackWindow = not isTerror or now < terrorAttackUntil
+                local desired = inTerrorAttackWindow
+                    and Vector3.new(
+                        hitPart.Position.X,
+                        hitPart.Position.Y + 8,
+                        hitPart.Position.Z
+                    )
+                    or Vector3.new(
+                        hitPart.Position.X,
+                        math.max(hitPart.Position.Y + 70, 70),
+                        hitPart.Position.Z
+                    )
                 root.CFrame = CFrame.lookAt(desired, hitPart.Position)
             else
                 -- Mantém o comportamento já validado para grupos de Piranhas.
@@ -167,7 +184,8 @@ function M.Combat(eventKey, eventModel, context)
             if isShark then
                 -- Cria primeiro o estado legítimo de M1; o próprio jogo gera o
                 -- RegisterHit observado no Banana.
-                if tool and now >= nextToolAttack then
+                local canM1 = eventKey ~= "Terrorshark" or now < terrorAttackUntil
+                if tool and canM1 and now >= nextToolAttack then
                     nextToolAttack = now + 0.12
                     pcall(function()
                         tool:Activate()

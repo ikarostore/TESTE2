@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=64"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=65"
     ))()
 end)
 
