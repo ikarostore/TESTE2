@@ -1,9 +1,553 @@
 local Module = {Name = "Shop"}
 
-function Module.Init(context)
-	local initializer = context.Initializers and context.Initializers[Module.Name]
-	if initializer then return initializer(context) end
-	return context.States and context.States[Module.Name]
+-- Shop: modulo independente do IKAROHUB.
+function Module.Init(ctx)
+	local Tabs, Options, Fluent = ctx.Tabs, ctx.Options, ctx.Fluent
+	local CurrentSea = ctx.CurrentSea or 0
+	local SeaDetectionSource = ctx.SeaDetectionSource or 'PlaceId'
+	local SeaNames = ctx.SeaNames or {[0]='Detectando...', [1]='First Sea', [2]='Second Sea', [3]='Third Sea'}
+	local detectCurrentSea = ctx.detectCurrentSea
+	local syncSeaFlags = ctx.syncSeaFlags
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local Players = game:GetService("Players")
+	local TweenService = game:GetService("TweenService")
+	local RunService = game:GetService("RunService")
+	local CommF = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+	local Shop = Tabs.Shop
+	local shopMovementActive = false
+	local activeShopTween = nil
+	local movementToken = 0
+	local SeaStatus = Shop:AddParagraph({
+		Title = "Sea atual",
+		Content = SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. ")"
+	})
+	task.spawn(function()
+		while task.wait(1) do
+			local detectedSea, source = detectCurrentSea()
+			if detectedSea then
+				CurrentSea = detectedSea
+				SeaDetectionSource = source
+				syncSeaFlags()
+			end
+			if getgenv().IKAROHUB then
+				getgenv().IKAROHUB.Sea = CurrentSea
+				getgenv().IKAROHUB.SeaDetectionSource = SeaDetectionSource
+			end
+			pcall(function()
+				SeaStatus:SetDesc(SeaNames[CurrentSea] .. " (" .. SeaDetectionSource .. ") | Sea3 flag: " .. tostring(getgenv().Sea3) .. " | PlaceId: " .. tostring(game.PlaceId))
+			end)
+		end
+	end)
+
+	local function notify(title, content)
+		Fluent:Notify({
+			Title = title,
+			Content = tostring(content or ""),
+			Duration = 5
+		})
+	end
+
+	local function invoke(...)
+		local ok, result = pcall(function(...)
+			return CommF:InvokeServer(...)
+		end, ...)
+		if not ok then
+			notify("Shop - erro", result)
+		end
+		return ok, result
+	end
+
+	local function addButton(title, callback)
+		Shop:AddButton({
+			Title = title,
+			Description = "",
+			Callback = function()
+				local ok, err = pcall(callback)
+				if not ok then
+					notify(title .. " - erro", err)
+				end
+			end
+		})
+	end
+
+	RunService.Stepped:Connect(function()
+		if not shopMovementActive then return end
+		local character = Players.LocalPlayer.Character
+		if not character then return end
+		for _, part in ipairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end
+	end)
+
+	local function stopShopMovement()
+		movementToken += 1
+		shopMovementActive = false
+		if activeShopTween then
+			pcall(function() activeShopTween:Cancel() end)
+			activeShopTween = nil
+		end
+		local character = Players.LocalPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root then
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+		end
+		if humanoid then
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+	end
+
+	local function tweenTo(targetCFrame)
+		stopShopMovement()
+		movementToken += 1
+		local myToken = movementToken
+		local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		local root = character:WaitForChild("HumanoidRootPart")
+		local distance = (targetCFrame.Position - root.Position).Magnitude
+		if distance <= 8 then return true end
+		shopMovementActive = true
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+		activeShopTween = TweenService:Create(
+			root,
+			TweenInfo.new(distance / 260, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+			{CFrame = targetCFrame}
+		)
+		activeShopTween:Play()
+		local playbackState = activeShopTween.Completed:Wait()
+		if myToken == movementToken then
+			shopMovementActive = false
+			activeShopTween = nil
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.GettingUp) end
+		end
+		return playbackState == Enum.PlaybackState.Completed
+	end
+
+	Shop:AddSection("Haki")
+	addButton("Geppo", function()
+		invoke("BuyHaki", "Geppo")
+	end)
+	addButton("Buso", function()
+		invoke("BuyHaki", "Buso")
+	end)
+	addButton("Soru", function()
+		invoke("BuyHaki", "Soru")
+	end)
+	addButton("Ken", function()
+		invoke("KenTalk", "Buy")
+	end)
+
+	Shop:AddSection("Kiếm")
+	local swords = {
+		"Cutlass",
+		"Katana",
+		"Iron Mace",
+		"Duel Katana",
+		"Triple Katana",
+		"Pipe",
+		"Dual-Headed Blade",
+		"Bisento",
+		"Soul Cane"
+	}
+	for _, sword in ipairs(swords) do
+		local swordName = sword
+		addButton(swordName, function()
+			invoke("BuyItem", swordName)
+		end)
+	end
+	addButton("Pole V2", function()
+		invoke("ThunderGodTalk")
+	end)
+
+	Shop:AddSection("Fighting Shop")
+	local selectedStyles = {}
+	local lastMissingNotice = {}
+	local teleportToShopNpc
+	local styleDefinitions = {
+		{
+			id = "FightingBlackLeg", title = "Black Leg", tool = "Dark Step", sea = "First/Second/Third Sea",
+			npcs = {"Dark Step Teacher", "Dark Step"},
+			fallbackBySea = {[1] = CFrame.new(-987.873047, 13.7778397, 3989.4978), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function() return invoke("BuyBlackLeg") end
+		},
+		{
+			id = "FightingFishmanKarate", title = "Fishman Karate", tool = "Water Kung Fu", sea = "First/Second/Third Sea",
+			npcs = {"Water Kung Fu Teacher", "Water Kung Fu"},
+			fallbackBySea = {[1] = CFrame.new(61581.8047, 18.8965912, 987.832703), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function() return invoke("BuyFishmanKarate") end
+		},
+		{
+			id = "FightingElectro", title = "Electro", tool = "Electric", sea = "First Sea",
+			npcs = {"Mad Scientist"},
+			fallbackBySea = {[1] = CFrame.new(-5389.49561, 13.283, -2149.80151), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function() return invoke("BuyElectro") end
+		},
+		{
+			id = "FightingDragonBreath", title = "Dragon Breath", tool = "Dragon Breath", sea = "Second/Third Sea",
+			npcs = {"Sabi"},
+			fallbackBySea = {[2] = CFrame.new(703.372986, 186.985519, 654.522034), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function()
+				invoke("BlackbeardReward", "DragonClaw", "1")
+				return invoke("BlackbeardReward", "DragonClaw", "2")
+			end
+		},
+		{
+			id = "FightingSuperhuman", title = "Superhuman", tool = "Superhuman", sea = "Second/Third Sea",
+			npcs = {"Martial Arts Master"},
+			fallbackBySea = {[2] = CFrame.new(-3350, 282, -10527), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function() return invoke("BuySuperhuman") end
+		},
+		{
+			id = "FightingDeathStep", title = "Death Step", tool = "Death Step", sea = "Second/Third Sea",
+			npcs = {"Phoeyu, the Reformed", "Phoeyu"},
+			fallbackBySea = {[2] = CFrame.new(5400, 28, -6236), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function() return invoke("BuyDeathStep") end
+		},
+		{
+			id = "FightingSharkman", title = "Sharkman Karate", tool = "Sharkman Karate", sea = "Second/Third Sea",
+			npcs = {"Sharkman Teacher", "Daigrock, the Sharkman", "Daigrock"},
+			fallbackBySea = {[2] = CFrame.new(-3043, 239, -10191), [3] = CFrame.new(-5074, 315, -2991)},
+			buy = function()
+				invoke("BuySharkmanKarate", true)
+				return invoke("BuySharkmanKarate")
+			end
+		},
+		{
+			id = "FightingElectricClaw", title = "Electric Claw", tool = "Electric Claw", sea = "Third Sea",
+			npcs = {"Previous Hero"},
+			fallbackBySea = {[3] = CFrame.new(-10368, 332, -10128)},
+			buy = function() return invoke("BuyElectricClaw") end
+		},
+		{
+			id = "FightingDragonTalon", title = "Dragon Talon", tool = "Dragon Talon", sea = "Third Sea",
+			npcs = {"Uzoth"},
+			fallbackBySea = {[3] = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938)},
+			buy = function() return invoke("BuyDragonTalon") end
+		},
+		{
+			id = "FightingGodhuman", title = "Godhuman", tool = "Godhuman", sea = "Third Sea",
+			npcs = {"Ancient Monk", "Godhuman Teacher"},
+			-- O ponto Y=531 e apenas a entrada/galho da arvore. O Ancient Monk
+			-- fica na camara inferior do tronco; por isso a rota termina abaixo.
+			fallbackBySea = {[3] = CFrame.new(-13274.528320313, 429, -7579.22265625)},
+			approachBySea = {[3] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625)},
+			buy = function() return invoke("BuyGodhuman") end
+		},
+		{
+			id = "FightingSanguine", title = "Sanguine Art", tool = "Sanguine Art", sea = "Third Sea",
+			npcs = {"Shafi"},
+			fallbackBySea = {[3] = CFrame.new(-16218.6826, 9.08636189, 445.618408)},
+			buy = function() return invoke("BuySanguineArt") end
+		}
+	}
+
+	local function normalizeName(value)
+		return string.lower(tostring(value)):gsub("[^%w]", "")
+	end
+
+	local function findTrainer(style)
+		local npcs = workspace:FindFirstChild("NPCs")
+		if not npcs then
+			return nil
+		end
+		for _, npc in ipairs(npcs:GetDescendants()) do
+			if not npc:IsA("Model") then
+				continue
+			end
+			local npcName = normalizeName(npc.Name)
+			for _, alias in ipairs(style.npcs) do
+				local aliasName = normalizeName(alias)
+				if npcName == aliasName or string.find(npcName, aliasName, 1, true) then
+					return npc
+				end
+			end
+		end
+		return nil
+	end
+
+	local function findRoot(model)
+		if not model then return nil end
+		return model:FindFirstChild("HumanoidRootPart")
+			or model:FindFirstChild("Head")
+			or model.PrimaryPart
+	end
+
+	local function ownsStyle(style)
+		local character = Players.LocalPlayer.Character
+		local backpack = Players.LocalPlayer:FindFirstChild("Backpack")
+		return (character and character:FindFirstChild(style.tool) ~= nil)
+			or (backpack and backpack:FindFirstChild(style.tool) ~= nil)
+	end
+
+	for _, style in ipairs(styleDefinitions) do
+		local styleDefinition = style
+		local toggle = Shop:AddToggle(styleDefinition.id, {
+			Title = styleDefinition.title,
+			Description = "Ir ao treinador e comprar",
+			Default = false
+		})
+		toggle:OnChanged(function(value)
+			if value then
+				-- Fighting Shop executa uma compra por vez. Isso impede um estilo
+				-- anteriormente marcado de sequestrar a rota do estilo mais recente.
+				for _, otherStyle in ipairs(styleDefinitions) do
+					if otherStyle.id ~= styleDefinition.id and selectedStyles[otherStyle.id] then
+						selectedStyles[otherStyle.id] = false
+						if Options[otherStyle.id] then
+							Options[otherStyle.id]:SetValue(false)
+						end
+					end
+				end
+				stopShopMovement()
+			end
+			selectedStyles[styleDefinition.id] = value
+			if not value then
+				stopShopMovement()
+			end
+		end)
+		Options[styleDefinition.id]:SetValue(false)
+	end
+
+	task.spawn(function()
+		while task.wait(0.35) do
+			for _, style in ipairs(styleDefinitions) do
+				if selectedStyles[style.id] then
+					if ownsStyle(style) then
+						selectedStyles[style.id] = false
+						Options[style.id]:SetValue(false)
+						notify("Fighting Shop", style.title .. " ja esta disponivel.")
+					else
+						local npcName = style.npcs[1]
+						local arrived = teleportToShopNpc and teleportToShopNpc(npcName)
+						if not arrived then
+							local now = os.clock()
+							if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
+								lastMissingNotice[style.id] = now
+								notify(style.title, "NPC Teleport ainda nao encontrou " .. npcName .. " no " .. SeaNames[CurrentSea] .. ".")
+							end
+						else
+							style.buy()
+							task.wait(1)
+							if ownsStyle(style) then
+								selectedStyles[style.id] = false
+								Options[style.id]:SetValue(false)
+								notify("Fighting Shop", style.title .. " comprado com sucesso.")
+							else
+								local now = os.clock()
+								if not lastMissingNotice[style.id] or now - lastMissingNotice[style.id] >= 8 then
+									lastMissingNotice[style.id] = now
+									notify(style.title, "Compra enviada no NPC. Confira dinheiro, fragmentos e requisitos.")
+								end
+							end
+						end
+					end
+					break
+				end
+			end
+		end
+	end)
+
+	local NPCTab = Tabs.LocalPlayer
+	NPCTab:AddSection("NPC Teleport")
+	local npcPositionsBySea = {
+		[1] = {
+			["Random Devil Fruit"] = CFrame.new(-1436.19727, 61.8777695, 4.75247526),
+			["Blox Fruits Dealer"] = CFrame.new(-923.255066, 7.67800522, 1608.61011),
+			["Remove Devil Fruit"] = CFrame.new(5664.80469, 64.677681, 867.85907),
+			["Ability Teacher"] = CFrame.new(-1057.67822, 9.65220833, 1799.49146),
+			["Dark Step"] = CFrame.new(-987.873047, 13.7778397, 3989.4978),
+			["Electro"] = CFrame.new(-5389.49561, 13.283, -2149.80151),
+			["Fishman Karate"] = CFrame.new(61581.8047, 18.8965912, 987.832703)
+		},
+		[2] = {
+			["Dragon Breath"] = CFrame.new(703.372986, 186.985519, 654.522034),
+			["Mysterious Man"] = CFrame.new(-2574.43335, 1627.92371, -3739.35767),
+			["Mysterious Scientist"] = CFrame.new(-6437.87793, 250.645355, -4498.92773),
+			["Awakening Expert"] = CFrame.new(-408.098846, 16.0459061, 247.432846),
+			["Nerd"] = CFrame.new(-401.783722, 73.0859299, 262.306702),
+			["Bar Manager"] = CFrame.new(-385.84726, 73.0458984, 316.088806),
+			["Blox Fruits Dealer"] = CFrame.new(-450.725464, 73.0458984, 355.636902),
+			["Trevor"] = CFrame.new(-341.498322, 331.886444, 643.024963),
+			["Plokster"] = CFrame.new(-1885.16016, 88.3838196, -1912.28723),
+			["Enhancement Editor"] = CFrame.new(-346.820221, 72.9856339, 1194.36218),
+			["Pirate Recruiter"] = CFrame.new(-428.072998, 72.9495239, 1445.32422),
+			["Marines Recruiter"] = CFrame.new(-1349.77295, 72.9853363, -1045.12964),
+			["Chemist"] = CFrame.new(-2777.45288, 72.9919434, -3572.25732),
+			["Ghoul Mark"] = CFrame.new(635.172546, 125.976357, 33219.832),
+			["Cyborg"] = CFrame.new(629.146851, 312.307373, -531.624146),
+			["Guashiem"] = CFrame.new(937.953003, 181.083359, 33277.9297),
+			["El Admin"] = CFrame.new(1322.80835, 126.345039, 33135.8789),
+			["El Rodolfo"] = CFrame.new(941.228699, 40.4686775, 32778.9922),
+			["Arowe"] = CFrame.new(-1994.51038, 125.519142, -72.2622986)
+		},
+		[3] = {
+			["Blox Fruits Dealer"] = CFrame.new(-12511, 337, -7448),
+			["Remove Devil Fruit"] = CFrame.new(-5571, 1089, -2661),
+			["Horned Man"] = CFrame.new(-11890, 931, -8760),
+			["Hungry Man"] = CFrame.new(-10919, 624, -10268),
+			["Previous Hero"] = CFrame.new(-10368, 332, -10128),
+			["Butler"] = CFrame.new(-5125, 316, -3130),
+			["Lunoven"] = CFrame.new(-5117, 316, -3093),
+			["Trevor"] = CFrame.new(-5084, 316, -3145),
+			["Elite Hunter"] = CFrame.new(-5420, 314, -2828),
+			["Player Hunter"] = CFrame.new(-5559, 314, -2840),
+			["Uzoth"] = CFrame.new(-9785, 852, 6667),
+			["Ancient Monk"] = CFrame.new(-13274.528320313, 531.82073974609, -7579.22265625),
+			["Tacomura"] = CFrame.new(-5074, 315, -2991),
+			["Plokster"] = CFrame.new(-5074, 315, -2991),
+			["Aura Editor"] = CFrame.new(-5074, 315, -2991),
+			["Erin"] = CFrame.new(-5074, 315, -2991),
+			["Mysterious Scientist"] = CFrame.new(-5074, 315, -2991),
+			["Mad Scientist"] = CFrame.new(-5074, 315, -2991),
+			["Phoeyu, the Reformed"] = CFrame.new(-5074, 315, -2991),
+			["Dark Step Teacher"] = CFrame.new(-5074, 315, -2991),
+			["Sharkman Teacher"] = CFrame.new(-5074, 315, -2991),
+			["Water Kung Fu Teacher"] = CFrame.new(-5074, 315, -2991),
+			["Sabi"] = CFrame.new(-5074, 315, -2991),
+			["Martial Arts Master"] = CFrame.new(-5074, 315, -2991),
+			["Boat Dealer"] = CFrame.new(-5074, 315, -2991),
+			["Luxury Boat Dealer"] = CFrame.new(-5074, 315, -2991),
+			["Dragon Wizard"] = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938),
+			["Dojo Trainer"] = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938)
+		}
+	}
+	local currentNpcPositions = npcPositionsBySea[CurrentSea] or {}
+	local function mergeLoadedNPCs()
+		local npcs = workspace:FindFirstChild("NPCs")
+		if not npcs then return end
+		for _, npc in ipairs(npcs:GetDescendants()) do
+			if npc:IsA("Model") then
+				local root = findRoot(npc)
+				if root then
+					currentNpcPositions[npc.Name] = root.CFrame
+				end
+			end
+		end
+	end
+	teleportToShopNpc = function(npcName)
+		mergeLoadedNPCs()
+		local destination = currentNpcPositions[npcName]
+		if not destination then return false end
+		local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		local root = character:WaitForChild("HumanoidRootPart")
+		if (root.Position - destination.Position).Magnitude > 8 then
+			local moved = false
+			pcall(function() moved = tweenTo(destination) end)
+			if not moved then return false end
+		end
+		return (root.Position - destination.Position).Magnitude <= 12
+	end
+	mergeLoadedNPCs()
+	local npcNames = {}
+	for name in pairs(currentNpcPositions) do
+		table.insert(npcNames, name)
+	end
+	table.sort(npcNames)
+	if #npcNames == 0 then
+		table.insert(npcNames, "Sea nao reconhecido")
+	end
+	local selectedNpc = npcNames[1]
+	local npcDropdown = NPCTab:AddDropdown("SelectedShopNPC", {
+		Title = "Select NPC",
+		Values = npcNames,
+		Multi = false,
+		Default = 1
+	})
+	npcDropdown:OnChanged(function(value)
+		selectedNpc = value
+	end)
+	NPCTab:AddButton({
+		Title = "Refresh NPC List",
+		Description = "Adiciona todos os NPCs carregados no mapa",
+		Callback = function()
+			mergeLoadedNPCs()
+			local refreshedNames = {}
+			for name in pairs(currentNpcPositions) do table.insert(refreshedNames, name) end
+			table.sort(refreshedNames)
+			pcall(function() npcDropdown:SetValues(refreshedNames) end)
+			notify("NPC Teleport", tostring(#refreshedNames) .. " NPCs listados.")
+		end
+	})
+	local npcTeleportToggle = NPCTab:AddToggle("TeleportShopNPC", {
+		Title = "Auto Teleporter NPC",
+		Description = "Usa a coordenada fixa do NPC no Sea atual",
+		Default = false
+	})
+	npcTeleportToggle:OnChanged(function(value)
+		if not value then stopShopMovement() end
+	end)
+	task.spawn(function()
+		while task.wait(0.25) do
+			if Options.TeleportShopNPC.Value then
+				local destination = currentNpcPositions[selectedNpc]
+				if not destination then
+					Options.TeleportShopNPC:SetValue(false)
+					notify("NPC Teleport", "Sea nao reconhecido pelo game.PlaceId: " .. tostring(game.PlaceId))
+				else
+					if teleportToShopNpc(selectedNpc) then
+						Options.TeleportShopNPC:SetValue(false)
+						notify("NPC Teleport", "Chegou em " .. selectedNpc)
+					end
+				end
+			end
+		end
+	end)
+
+	Shop:AddSection("Other")
+	addButton("Reset Stats", function()
+		invoke("BlackbeardReward", "Refund", "1")
+		invoke("BlackbeardReward", "Refund", "2")
+	end)
+	addButton("Random Race", function()
+		invoke("BlackbeardReward", "Reroll", "1")
+		invoke("BlackbeardReward", "Reroll", "2")
+	end)
+	addButton("Change To Ghoul Race", function()
+		invoke("Ectoplasm", "Change", 4)
+	end)
+	addButton("Change To Cyborg Race", function()
+		invoke("CyborgTrainer", "Buy")
+	end)
+	addButton("Change to Draco", function()
+		invoke("requestEntrance", Vector3.new(5661.5322265625, 1013.0907592773438, -334.9649963378906))
+		local dojo = CFrame.new(5814.42724609375, 1208.3267822265625, 884.5785522460938)
+		tweenTo(dojo)
+
+		local character = Players.LocalPlayer.Character or Players.LocalPlayer.CharacterAdded:Wait()
+		local root = character:WaitForChild("HumanoidRootPart")
+		local deadline = os.clock() + 10
+		while (root.Position - dojo.Position).Magnitude >= 3 and os.clock() < deadline do
+			task.wait(0.1)
+		end
+
+		if (root.Position - dojo.Position).Magnitude >= 3 then
+			notify("Change to Draco", "Nao foi possivel chegar ao Dragon Wizard.")
+			return
+		end
+
+		local dragonRemote = ReplicatedStorage
+			:WaitForChild("Modules")
+			:WaitForChild("Net")
+			:FindFirstChild("RF/InteractDragonQuest")
+		if not dragonRemote then
+			notify("Change to Draco", "Remote InteractDragonQuest nao encontrado.")
+			return
+		end
+		dragonRemote:InvokeServer({
+			NPC = "Dragon Wizard",
+			Command = "DragonRace"
+		})
+	end)
 end
 
 return Module
