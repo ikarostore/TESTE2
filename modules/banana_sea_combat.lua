@@ -70,6 +70,7 @@ function M.Combat(eventKey, eventModel, context)
     if not eventModel or not context then return false end
     local player = Players.LocalPlayer
     local started = os.clock()
+    local shipCollisionCache = {}
     while context.Running() and alive(eventModel) and os.clock() - started < 180 do
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -110,6 +111,16 @@ function M.Combat(eventKey, eventModel, context)
             local engine = eventModel:FindFirstChild("Engine", true)
                 or eventModel:FindFirstChild("VehicleSeat", true) or eventModel.PrimaryPart
             if not engine then break end
+            -- Banana mantém noclip global durante _G.Ship. Sem isso, partes do
+            -- corpo/acessórios encostam no casco e transferem força ao barco.
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if shipCollisionCache[part] == nil then
+                        shipCollisionCache[part] = part.CanCollide
+                    end
+                    part.CanCollide = false
+                end
+            end
             root.CFrame = engine.CFrame * CFrame.new(0, -20, 0)
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
@@ -124,6 +135,13 @@ function M.Combat(eventKey, eventModel, context)
             if context.UseSkills then context.UseSkills(target) end
         end
         task.wait(CREATURES[eventKey] and 1e-9 or 0.05)
+    end
+    for part, oldCanCollide in pairs(shipCollisionCache) do
+        if part and part.Parent then
+            pcall(function()
+                part.CanCollide = oldCanCollide
+            end)
+        end
     end
     return not alive(eventModel)
 end
