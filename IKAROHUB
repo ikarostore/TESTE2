@@ -1276,3 +1276,19 @@ getgenv().IKAROHUB = {
 	Sea = CurrentSea,
 	SeaDetectionSource = SeaDetectionSource
 }
+
+-- Sea Event permanece em módulo próprio para preservar o limite de registros
+-- do arquivo principal e manter este projeto independente do LEVIATHAN TEST1.
+pcall(function()
+	getgenv().IKAROHUB_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
+		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=83"
+	))()
+	getgenv().IKAROHUB_SEA_EVENT = loadstring(game:HttpGet(
+		"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_sea_event.lua?v=1"
+	))()
+	getgenv().IKAROHUB.SeaEventState = getgenv().IKAROHUB_SEA_EVENT.Init({
+		Tabs = Tabs,
+		Options = Options,
+		Fluent = Fluent
+	})
+end)
