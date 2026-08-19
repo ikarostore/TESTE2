@@ -2,6 +2,7 @@
 local M = {}
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local CREATURES = {Terrorshark = true, Piranha = true, Shark = true}
 local SHIPS = {PirateBrigade = true, PirateGrandBrigade = true, FishBoat = true}
 local POSITIONS = {
@@ -71,6 +72,7 @@ function M.Combat(eventKey, eventModel, context)
     local player = Players.LocalPlayer
     local started = os.clock()
     local shipCollisionCache = {}
+    local nextSharkM1 = 0
     while context.Running() and alive(eventModel) and os.clock() - started < 180 do
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -98,16 +100,17 @@ function M.Combat(eventKey, eventModel, context)
             local enemyRoot = eventModel:FindFirstChild("HumanoidRootPart")
             local enemyHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
             if not enemyRoot or not enemyHumanoid then break end
-            equipBananaWeapon(character, context)
+            local equippedTool = equipBananaWeapon(character, context)
             enemyRoot.CanCollide = false
             enemyRoot.Size = Vector3.new(60, 60, 60)
             enemyHumanoid.WalkSpeed = 0
             if eventKey == "Shark" then
-                -- O pacote Banana é válido, mas os offsets diagonais de 40+40
-                -- deixam o Shark a 56,6 studs e o servidor descarta o dano.
+                -- O FastAttack de lista é rejeitado especificamente pelo Shark.
+                -- M1 real a curta distância gera o token moderno aceito.
+                local sharkHead = eventModel:FindFirstChild("Head", true) or enemyRoot
                 root.CFrame = CFrame.lookAt(
-                    enemyRoot.Position + Vector3.new(0, 20, 0),
-                    enemyRoot.Position
+                    sharkHead.Position + Vector3.new(0, 8, 0),
+                    sharkHead.Position
                 )
             elseif eventKey == "Piranha" then
                 -- Ataca o grupo sem Bring Mob: prepara todas as Piranhas do
@@ -143,7 +146,24 @@ function M.Combat(eventKey, eventModel, context)
             end
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
-            attackNoCooldown(eventModel, character, root)
+            if eventKey == "Shark" then
+                local now = os.clock()
+                if equippedTool and equippedTool.Parent == character
+                and now >= nextSharkM1 then
+                    nextSharkM1 = now + 0.12
+                    pcall(function()
+                        equippedTool:Activate()
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                        task.delay(0.035, function()
+                            pcall(function()
+                                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                            end)
+                        end)
+                    end)
+                end
+            else
+                attackNoCooldown(eventModel, character, root)
+            end
         elseif SHIPS[eventKey] then
             local engine = eventModel:FindFirstChild("Engine", true)
                 or eventModel:FindFirstChild("VehicleSeat", true) or eventModel.PrimaryPart
@@ -171,7 +191,7 @@ function M.Combat(eventKey, eventModel, context)
             if context.AimAt then context.AimAt(target) end
             if context.UseSkills then context.UseSkills(target) end
         end
-        task.wait(eventKey == "Shark" and 0.05
+        task.wait(eventKey == "Shark" and 0.03
             or eventKey == "Piranha" and 0.03
             or CREATURES[eventKey] and 1e-9
             or 0.05)
