@@ -13,6 +13,11 @@ pcall(function()
     ))()
 end)
 pcall(function()
+    getgenv().IKARO_SEA_RUNTIME = loadstring(game:HttpGet(
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=1"
+    ))()
+end)
+pcall(function()
     getgenv().IKARO_NAVIGATION = loadstring(game:HttpGet(
         "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/navigation.lua"
     ))()
@@ -3143,22 +3148,6 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
     return defeated or not IsEventAlive(eventModel)
 end
 
-local function ResetSeaCombatAttempt()
-    local env = getgenv()
-    env.IKARO_SEA_SKILL_AIM_ACTIVE = false
-    SeaHuntState.BMPreparedEvent = nil
-    SeaHuntState.BMPreparedTool = nil
-    SeaHuntState.BMEquipReadyAt = 0
-    if SeaVIM then
-        for _, keyCode in ipairs({
-            Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C,
-            Enum.KeyCode.V, Enum.KeyCode.F, Enum.KeyCode.Q
-        }) do
-            pcall(function() SeaVIM:SendKeyEvent(false, keyCode, false, game) end)
-        end
-    end
-end
-
 -- =========================================================
 -- LEVIATHAN DETECTOR
 -- =========================================================
@@ -4234,15 +4223,13 @@ local function StartBoatDrive(forceStart)
 
             -- Ao sair de Tiki, sobe acima das muralhas. Depois de limpar a ilha,
             -- retorna sozinho à altura normal configurada para o Sea 6.
-            local tikiDelta = Vector3.new(
-                drivePart.Position.X - Navigation.Tiki.X,
-                0,
-                drivePart.Position.Z - Navigation.Tiki.Z
+            local desiredHeight = getgenv().IKARO_SEA_RUNTIME.DepartureHeight(
+                drivePart.Position,
+                Navigation.Tiki,
+                BoatFlightConfig.HeightY,
+                SeaHuntState.ReturningHeart,
+                SeaHuntState.AtSea6
             )
-            local departingTiki = not SeaHuntState.ReturningHeart
-                and not SeaHuntState.AtSea6
-                and tikiDelta.Magnitude <= 2200
-            local desiredHeight = departingTiki and 200 or BoatFlightConfig.HeightY
             local heightError = desiredHeight - drivePart.Position.Y
             local verticalVelocity = math.clamp(heightError * 7, -140, 140)
 
@@ -4447,7 +4434,7 @@ local function StartHunt()
                                 -- Reinicia o estado que antes só era limpo ao
                                 -- desligar/ligar Start Hunt e tenta o mesmo mob.
                                 if not defeated and IsEventAlive(nextModel) and not EscapeActive then
-                                    ResetSeaCombatAttempt()
+                                    getgenv().IKARO_SEA_RUNTIME.ResetCombatAttempt(SeaHuntState, SeaVIM)
                                     SetState(
                                         "SEA_EVENT_RETRY",
                                         SeaEventDisplayName(nextKey) .. " ainda ativo; reiniciando ataque."
@@ -4478,7 +4465,7 @@ local function StartHunt()
 
                         SeaHuntState.CurrentEvent = nil
                         SeaHuntState.CombatBatchActive = false
-                        ResetSeaCombatAttempt()
+                        getgenv().IKARO_SEA_RUNTIME.ResetCombatAttempt(SeaHuntState, SeaVIM)
 
                         -- Sair e voltar ao barco após um evento é normal. Dá
                         -- tempo para streaming/assento reencontrarem a instância
