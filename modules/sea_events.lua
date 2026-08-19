@@ -35,34 +35,60 @@ local function nearby(model, root)
 end
 
 function M.FindSelected(workspace, selected, root, state)
+    -- Mantém todas as contas no mesmo alvo. A ordem de GetChildren varia entre
+    -- clientes; ordenar pela prioridade e pela posição evita cada conta escolher
+    -- um Sea Event diferente no mesmo grupo.
+    local candidates = {}
+    local seen = {}
+
+    local function addCandidate(model, onlyKey)
+        if not model or seen[model] or not model:IsA("Model")
+        or excluded(model) or not nearby(model, root) or not M.Alive(model) then
+            return
+        end
+        for priority, key in ipairs(M.Order) do
+            if selected[key] and (not onlyKey or key == onlyKey)
+            and matches(model.Name, M.Names[key], key) then
+                local ok, pivot = pcall(function() return model:GetPivot() end)
+                if ok then
+                    seen[model] = true
+                    table.insert(candidates, {
+                        key = key, model = model, priority = priority,
+                        x = math.floor(pivot.Position.X * 10 + 0.5),
+                        y = math.floor(pivot.Position.Y * 10 + 0.5),
+                        z = math.floor(pivot.Position.Z * 10 + 0.5)
+                    })
+                end
+                return
+            end
+        end
+    end
+
     local function scan(container, onlyKey)
         if not container then return end
         for _, model in ipairs(container:GetChildren()) do
-            if model:IsA("Model") and not excluded(model) and nearby(model, root) then
-                for _, key in ipairs(M.Order) do
-                    if selected[key] and (not onlyKey or key == onlyKey)
-                    and matches(model.Name, M.Names[key], key) then return key, model end
-                end
-            end
+            addCandidate(model, onlyKey)
         end
     end
-    local key, model = scan(workspace:FindFirstChild("Enemies"))
-    if key then return key, model end
-    key, model = scan(workspace:FindFirstChild("SeaBeasts"), "SeaBeast")
-    if key then return key, model end
-    if os.clock() < (state.NextGlobalEventScan or 0) then return nil, nil end
-    state.NextGlobalEventScan = os.clock() + 3
-    for _, candidate in ipairs(workspace:GetDescendants()) do
-        if candidate:IsA("Model") and not excluded(candidate) and nearby(candidate, root) then
-            for _, eventKey in ipairs(M.Order) do
-                if selected[eventKey] and eventKey ~= "SeaBeast"
-                and matches(candidate.Name, M.Names[eventKey], eventKey) then
-                    return eventKey, candidate
-                end
-            end
+
+    scan(workspace:FindFirstChild("Enemies"))
+    scan(workspace:FindFirstChild("SeaBeasts"), "SeaBeast")
+    if #candidates == 0 and os.clock() >= (state.NextGlobalEventScan or 0) then
+        state.NextGlobalEventScan = os.clock() + 3
+        for _, candidate in ipairs(workspace:GetDescendants()) do
+            addCandidate(candidate)
         end
     end
-    return nil, nil
+
+    table.sort(candidates, function(a, b)
+        if a.priority ~= b.priority then return a.priority < b.priority end
+        if a.x ~= b.x then return a.x < b.x end
+        if a.z ~= b.z then return a.z < b.z end
+        if a.y ~= b.y then return a.y < b.y end
+        return a.model.Name < b.model.Name
+    end)
+    local chosen = candidates[1]
+    return chosen and chosen.key or nil, chosen and chosen.model or nil
 end
 
 function M.TargetPart(model)

@@ -9,7 +9,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_SEA_EVENTS = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_events.lua"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_events.lua?v=82"
     ))()
 end)
 pcall(function()
@@ -3105,20 +3105,18 @@ local function StartSeaEventFocus(eventKey, eventModel, useBasicClick)
 end
 
 local function CombatSelectedSeaEvent(eventKey, eventModel)
-    if not eventModel then return end
+    if not eventModel then return false end
     SeaHuntState.CurrentEvent = eventModel
     StopFollow()
     local target = GetModelTargetPart(eventModel)
     if not target then
-        SeaHuntState.CurrentEvent = nil
-        return
+        return false
     end
     SetState("SEA_EVENT_BANANA", SeaEventDisplayName(eventKey))
     ForceExitBoatForCombat()
     EnsureSeaCombatHaki()
     local bananaSea = getgenv().IKARO_BANANA_SEA_COMBAT
     if not bananaSea or type(bananaSea.Combat) ~= "function" then
-        SeaHuntState.CurrentEvent = nil
         error("Módulo Banana Sea Combat não carregado")
     end
     local okCombat, defeated = pcall(bananaSea.Combat, eventKey, eventModel, {
@@ -3136,14 +3134,29 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         end
     })
     if not okCombat then
-        SeaHuntState.CurrentEvent = nil
         error(defeated)
     end
     if defeated or not IsEventAlive(eventModel) then
         SeaHuntState.EventKills = SeaHuntState.EventKills + 1
         SetState("SEA_EVENT_DEFEATED", SeaEventDisplayName(eventKey) .. " | Total: " .. tostring(SeaHuntState.EventKills))
     end
-    SeaHuntState.CurrentEvent = nil
+    return defeated or not IsEventAlive(eventModel)
+end
+
+local function ResetSeaCombatAttempt()
+    local env = getgenv()
+    env.IKARO_SEA_SKILL_AIM_ACTIVE = false
+    SeaHuntState.BMPreparedEvent = nil
+    SeaHuntState.BMPreparedTool = nil
+    SeaHuntState.BMEquipReadyAt = 0
+    if SeaVIM then
+        for _, keyCode in ipairs({
+            Enum.KeyCode.Z, Enum.KeyCode.X, Enum.KeyCode.C,
+            Enum.KeyCode.V, Enum.KeyCode.F, Enum.KeyCode.Q
+        }) do
+            pcall(function() SeaVIM:SendKeyEvent(false, keyCode, false, game) end)
+        end
+    end
 end
 
 -- =========================================================
@@ -4219,7 +4232,18 @@ local function StartBoatDrive(forceStart)
                 SeaHuntState.AtSea6 = true
             end
 
-            local heightError = BoatFlightConfig.HeightY - drivePart.Position.Y
+            -- Ao sair de Tiki, sobe acima das muralhas. Depois de limpar a ilha,
+            -- retorna sozinho à altura normal configurada para o Sea 6.
+            local tikiDelta = Vector3.new(
+                drivePart.Position.X - Navigation.Tiki.X,
+                0,
+                drivePart.Position.Z - Navigation.Tiki.Z
+            )
+            local departingTiki = not SeaHuntState.ReturningHeart
+                and not SeaHuntState.AtSea6
+                and tikiDelta.Magnitude <= 2200
+            local desiredHeight = departingTiki and 200 or BoatFlightConfig.HeightY
+            local heightError = desiredHeight - drivePart.Position.Y
             local verticalVelocity = math.clamp(heightError * 7, -140, 140)
 
             -- Limite separado para evitar os rollbacks vistos no trace.
@@ -4413,10 +4437,23 @@ local function StartHunt()
                                     "SEA_EVENT_PRIORITY",
                                     SeaEventDisplayName(nextKey) .. " • " .. nextModel:GetFullName()
                                 )
-                                CombatSelectedSeaEvent(nextKey, nextModel)
+                                local defeated = CombatSelectedSeaEvent(nextKey, nextModel)
 
                                 if not Running or (RecoveryState and RecoveryState.Resetting) then
                                     break
+                                end
+
+                                -- Não troca de alvo enquanto o atual ainda vive.
+                                -- Reinicia o estado que antes só era limpo ao
+                                -- desligar/ligar Start Hunt e tenta o mesmo mob.
+                                if not defeated and IsEventAlive(nextModel) and not EscapeActive then
+                                    ResetSeaCombatAttempt()
+                                    SetState(
+                                        "SEA_EVENT_RETRY",
+                                        SeaEventDisplayName(nextKey) .. " ainda ativo; reiniciando ataque."
+                                    )
+                                    task.wait(0.6)
+                                    continue
                                 end
 
                                 -- Só libera o barco depois de cinco segundos
@@ -4441,6 +4478,7 @@ local function StartHunt()
 
                         SeaHuntState.CurrentEvent = nil
                         SeaHuntState.CombatBatchActive = false
+                        ResetSeaCombatAttempt()
 
                         -- Sair e voltar ao barco após um evento é normal. Dá
                         -- tempo para streaming/assento reencontrarem a instância
