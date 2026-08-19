@@ -1682,6 +1682,10 @@ end;
 return Update;
 
 end)();
+if getgenv().IKARO_BANANA_UI_ONLY then
+	getgenv().IKARO_BANANA_UI_LIBRARY = Update;
+	return Update;
+end;
 if Update:LoadAnimation() then
 	Update:StartLoad();
 end;

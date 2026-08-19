@@ -5,18 +5,21 @@ if not game:IsLoaded() then
 	game.Loaded:Wait()
 end
 
-local Fluent = loadstring(game:HttpGet(
-	"https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+getgenv().IKARO_BANANA_UI_ONLY = true
+local BananaUI = loadstring(game:HttpGet(
+	"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/IKAROHUBTESTE"
+))()
+getgenv().IKARO_BANANA_UI_ONLY = nil
+
+local UIAdapter = loadstring(game:HttpGet(
+	"https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/ikarohub_banana_ui_adapter.lua"
 ))()
 
-local Window = Fluent:CreateWindow({
+local Fluent, Window = UIAdapter.Create(BananaUI, {
 	Title = "IKAROHUB",
 	SubTitle = "by ikaro",
-	TabWidth = 160,
-	Theme = "Dark",
-	Acrylic = false,
-	Size = UDim2.fromOffset(500, 320),
-	MinimizeKey = Enum.KeyCode.End
+	TabWidth = 180,
+	Size = UDim2.new(0, 620, 0, 420)
 })
 
 local Tabs = {
