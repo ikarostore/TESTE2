@@ -58,15 +58,6 @@ local v16 = {
 };
 local v17 = v14.Options;
 local v18 = game.PlaceId;
-if (v18 == 2753915549) then
-    Sea1 = true;
-elseif (v18 == 4442272183) then
-    Sea2 = true;
-elseif (v18 == 7449423635) then
-    Sea3 = true;
-else
-    game:Shutdown();
-end
 game:GetService("Players").LocalPlayer.Idled:connect(function()
     game:GetService("VirtualUser"):Button2Down(Vector2.new(0, 0), 
 workspace.CurrentCamera.CFrame);
@@ -82,8 +73,23 @@ if (v19 == 2753915549) then
     Sea1 = true;
 elseif (v19 == 4442272183) then
     Sea2 = true;
-elseif (v19 == 7449423635) then
+elseif (v19 == 7449423635) or (v19 == 10011733123089) then
     Sea3 = true;
+else
+    local map = workspace:FindFirstChild("Map")
+    local data = game:GetService("Players").LocalPlayer:FindFirstChild("Data")
+    local level = data and data:FindFirstChild("Level") and data.Level.Value or 0
+    if map and (map:FindFirstChild("Tiki Outpost") or map:FindFirstChild("Haunted Castle") or map:FindFirstChild("Hydra Island")) then
+        Sea3 = true
+    elseif map and (map:FindFirstChild("Cafe") or map:FindFirstChild("Kingdom of Rose")) then
+        Sea2 = true
+    elseif level >= 1500 then
+        Sea3 = true
+    elseif level >= 700 then
+        Sea2 = true
+    else
+        Sea1 = true
+    end
 end
 function CheckLevel()
     local v197 = game:GetService("Players").LocalPlayer.Data.Level.Value;
