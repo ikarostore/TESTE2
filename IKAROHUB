@@ -658,6 +658,8 @@ do
 	local player = Players.LocalPlayer
 	local activeTween
 	local movementEnabled = false
+	local movementRoot
+	local movementHumanoid
 	local fullyBoatName = "Guardian"
 	local fullyBoatSpeed = 350
 	local lastBoatPurchase = 0
@@ -683,6 +685,18 @@ do
 			pcall(function() activeTween:Cancel() end)
 			activeTween = nil
 		end
+		if movementRoot and movementRoot.Parent then
+			movementRoot.Anchored = false
+			movementRoot.AssemblyLinearVelocity = Vector3.zero
+			movementRoot.AssemblyAngularVelocity = Vector3.zero
+		end
+		if movementHumanoid and movementHumanoid.Parent then
+			movementHumanoid.PlatformStand = false
+			movementHumanoid.AutoRotate = true
+			movementHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end
+		movementRoot = nil
+		movementHumanoid = nil
 	end
 
 	RunService.Stepped:Connect(function()
@@ -692,22 +706,35 @@ do
 		for _, part in ipairs(character:GetDescendants()) do
 			if part:IsA("BasePart") then part.CanCollide = false end
 		end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Physics) end
 	end)
 
 	local function moveTo(target)
 		if not target then return false end
 		stopVolcanoMovement()
-		local _, root = getCharacter()
+		local character, root = getCharacter()
 		local distance = (root.Position - target.Position).Magnitude
 		if distance <= 7 then return true end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		movementEnabled = true
+		movementRoot = root
+		movementHumanoid = humanoid
+		if humanoid then
+			humanoid.AutoRotate = false
+			humanoid.PlatformStand = true
+			humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+		end
+		for _, part in ipairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then part.CanCollide = false end
+		end
 		root.AssemblyLinearVelocity = Vector3.zero
-		activeTween = TweenService:Create(root, TweenInfo.new(math.max(distance / 260, 0.1), Enum.EasingStyle.Linear), {CFrame = target})
+		root.AssemblyAngularVelocity = Vector3.zero
+		root.Anchored = true
+		activeTween = TweenService:Create(root, TweenInfo.new(math.max(distance / 400, 0.1), Enum.EasingStyle.Linear), {CFrame = target})
 		activeTween:Play()
 		local state = activeTween.Completed:Wait()
-		movementEnabled = false
-		activeTween = nil
-		root.AssemblyLinearVelocity = Vector3.zero
+		stopVolcanoMovement()
 		return state == Enum.PlaybackState.Completed
 	end
 
