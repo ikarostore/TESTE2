@@ -661,7 +661,7 @@ do
 	local movementRoot
 	local movementHumanoid
 	local fullyBoatName = "Guardian"
-	local fullyBoatSpeed = 220
+	local fullyBoatSpeed = 330
 	local lastBoatPurchase = 0
 	local sailingSeat
 	local sailingAttachment
@@ -774,9 +774,9 @@ do
 	})
 	VolcanoTab:AddSlider("VolcanoFullyBoatSpeed", {
 		Title = "Boat Speed",
-		Default = 220,
+		Default = 330,
 		Min = 100,
-		Max = 280,
+		Max = 350,
 		Rounding = 0,
 		Callback = function(value) fullyBoatSpeed = value end
 	})
@@ -1054,10 +1054,10 @@ do
 		params.FilterType = Enum.RaycastFilterType.Exclude
 		params.FilterDescendantsInstances = player.Character and {boat, player.Character} or {boat}
 		params.MaxParts = 0
-		local center = drivePart.Position + direction * 100
+		local center = drivePart.Position + direction * 55
 		local scan = CFrame.lookAt(center, center + direction)
 		local seen = {}
-		for _, part in ipairs(workspace:GetPartBoundsInBox(scan, Vector3.new(180, 180, 320), params)) do
+		for _, part in ipairs(workspace:GetPartBoundsInBox(scan, Vector3.new(150, 150, 190), params)) do
 			if part:IsA("BasePart") and part.Anchored and (part.CanCollide or sailingObstacleCache[part] ~= nil) and not part:IsDescendantOf(boat) then
 				if sailingObstacleCache[part] == nil then sailingObstacleCache[part] = part.CanCollide end
 				seen[part] = true
@@ -1073,9 +1073,16 @@ do
 			end
 		end
 	end
+	local function getCompleteBoatFromSeat(seat)
+		local boats = workspace:FindFirstChild("Boats")
+		if not boats then return seat:FindFirstAncestorOfClass("Model") end
+		local current = seat
+		while current and current.Parent ~= boats do current = current.Parent end
+		return current and current:IsA("Model") and current or seat:FindFirstAncestorOfClass("Model")
+	end
 	local function ensureFlyingBoatPhysics(seat, direction)
 		local drivePart = seat.AssemblyRootPart or seat
-		local boat = seat:FindFirstAncestorOfClass("Model")
+		local boat = getCompleteBoatFromSeat(seat)
 		if not boat then return nil end
 		if not sailingAttachment or sailingAttachment.Parent ~= drivePart then
 			for _, actuator in pairs({sailingVelocity, sailingOrientation, sailingAttachment}) do
@@ -1163,7 +1170,7 @@ do
 	end)
 
 	task.spawn(function()
-		while task.wait(0.2) do
+		while task.wait(0.10) do
 			if Options.VolcanoFullyEvent.Value then
 				local island = getIsland()
 				if not island then
