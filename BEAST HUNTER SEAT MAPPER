@@ -1,0 +1,182 @@
+-- IKARO - Beast Hunter Seat Mapper
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local guiParent = LocalPlayer:WaitForChild("PlayerGui")
+pcall(function()
+    guiParent = type(gethui) == "function" and gethui() or game:GetService("CoreGui")
+end)
+
+local previous = guiParent:FindFirstChild("IKARO_BeastHunterSeatMapper")
+if previous then previous:Destroy() end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "IKARO_BeastHunterSeatMapper"
+gui.ResetOnSpawn = false
+gui.Parent = guiParent
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.fromOffset(720, 470)
+frame.Position = UDim2.new(0.5, -360, 0.05, 0)
+frame.BackgroundColor3 = Color3.fromRGB(24, 25, 29)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 36)
+title.Position = UDim2.fromOffset(10, 4)
+title.BackgroundTransparency = 1
+title.Text = "IKARO - Beast Hunter Seat Mapper"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = frame
+
+local output = Instance.new("TextBox")
+output.Size = UDim2.new(1, -20, 1, -105)
+output.Position = UDim2.fromOffset(10, 42)
+output.BackgroundColor3 = Color3.fromRGB(34, 35, 40)
+output.BorderSizePixel = 0
+output.ClearTextOnFocus = false
+output.MultiLine = true
+output.TextEditable = false
+output.Text = "Clique em MAPEAR ASSENTOS depois que o Beast Hunter aparecer."
+output.TextColor3 = Color3.fromRGB(225, 230, 235)
+output.Font = Enum.Font.Code
+output.TextSize = 12
+output.TextWrapped = false
+output.TextXAlignment = Enum.TextXAlignment.Left
+output.TextYAlignment = Enum.TextYAlignment.Top
+output.Parent = frame
+
+local function makeButton(text, x, width)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.fromOffset(width, 40)
+    button.Position = UDim2.new(0, x, 1, -50)
+    button.BackgroundColor3 = Color3.fromRGB(61, 108, 84)
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 14
+    button.Parent = frame
+    return button
+end
+
+local mapButton = makeButton("MAPEAR ASSENTOS", 10, 220)
+local copyButton = makeButton("COPIAR RELATORIO", 240, 220)
+local closeButton = makeButton("FECHAR", 470, 240)
+local report = ""
+
+local function fullName(instance)
+    local ok, value = pcall(function() return instance:GetFullName() end)
+    return ok and value or instance.Name
+end
+
+local function findBoat()
+    local boats = workspace:FindFirstChild("Boats")
+    if not boats then return nil end
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local best, bestDistance = nil, math.huge
+    for _, boat in ipairs(boats:GetChildren()) do
+        if string.find(string.lower(boat.Name), "beast hunter", 1, true) then
+            local part = boat:FindFirstChild("VehicleSeat", true)
+                or boat.PrimaryPart
+                or boat:FindFirstChildWhichIsA("BasePart", true)
+            local distance = root and part and (part.Position - root.Position).Magnitude or 0
+            if distance < bestDistance then
+                best, bestDistance = boat, distance
+            end
+        end
+    end
+    return best, bestDistance
+end
+
+local function isCandidate(object)
+    if object:IsA("Seat") or object:IsA("VehicleSeat") then return true end
+    local lower = string.lower(object.Name)
+    return string.find(lower, "seat", 1, true)
+        or string.find(lower, "chair", 1, true)
+        or string.find(lower, "harpoon", 1, true)
+        or string.find(lower, "gun", 1, true)
+        or string.find(lower, "cannon", 1, true)
+end
+
+local function mapSeats()
+    local boat, boatDistance = findBoat()
+    if not boat then
+        report = "ERRO: Beast Hunter nao encontrado em Workspace.Boats."
+        output.Text = report
+        return
+    end
+
+    local mainSeat = boat:FindFirstChild("VehicleSeat", true)
+    local lines = {
+        "=== IKARO BEAST HUNTER SEAT MAP ===",
+        "Boat=" .. fullName(boat),
+        string.format("DistanciaDoJogador=%.1f", boatDistance or -1),
+        "MainSeat=" .. (mainSeat and fullName(mainSeat) or "nil"),
+        ""
+    }
+
+    local candidates = {}
+    for _, object in ipairs(boat:GetDescendants()) do
+        if isCandidate(object) then candidates[#candidates + 1] = object end
+    end
+    table.sort(candidates, function(a, b) return fullName(a) < fullName(b) end)
+
+    for index, object in ipairs(candidates) do
+        local fields = {
+            string.format("[%02d] Name=%s", index, object.Name),
+            "Class=" .. object.ClassName,
+            "Path=" .. fullName(object)
+        }
+        if object:IsA("BasePart") then
+            fields[#fields + 1] = string.format(
+                "Pos=Vector3.new(%.3f, %.3f, %.3f)",
+                object.Position.X, object.Position.Y, object.Position.Z
+            )
+            fields[#fields + 1] = string.format(
+                "Size=Vector3.new(%.3f, %.3f, %.3f)",
+                object.Size.X, object.Size.Y, object.Size.Z
+            )
+            if mainSeat then
+                fields[#fields + 1] = string.format(
+                    "DistMain=%.2f",
+                    (object.Position - mainSeat.Position).Magnitude
+                )
+            end
+        end
+        if object:IsA("Seat") or object:IsA("VehicleSeat") then
+            local occupant = object.Occupant
+            fields[#fields + 1] = "Occupant=" .. (
+                occupant and occupant.Parent and occupant.Parent.Name or "nil"
+            )
+            fields[#fields + 1] = "Disabled=" .. tostring(object.Disabled)
+        end
+        lines[#lines + 1] = table.concat(fields, " | ")
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "TotalCandidatos=" .. tostring(#candidates)
+    report = table.concat(lines, "\n")
+    output.Text = report
+end
+
+mapButton.MouseButton1Click:Connect(mapSeats)
+copyButton.MouseButton1Click:Connect(function()
+    if report == "" then mapSeats() end
+    if type(setclipboard) == "function" then
+        setclipboard(report)
+        copyButton.Text = "COPIADO!"
+        task.delay(1, function()
+            if copyButton.Parent then copyButton.Text = "COPIAR RELATORIO" end
+        end)
+    end
+end)
+closeButton.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+mapSeats()
