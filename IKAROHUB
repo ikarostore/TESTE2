@@ -661,7 +661,7 @@ do
 	local movementRoot
 	local movementHumanoid
 	local fullyBoatName = "Guardian"
-	local fullyBoatSpeed = 350
+	local fullyBoatSpeed = 220
 	local lastBoatPurchase = 0
 	local sailingSeat
 	local sailingAttachment
@@ -774,9 +774,9 @@ do
 	})
 	VolcanoTab:AddSlider("VolcanoFullyBoatSpeed", {
 		Title = "Boat Speed",
-		Default = 350,
+		Default = 220,
 		Min = 100,
-		Max = 350,
+		Max = 280,
 		Rounding = 0,
 		Callback = function(value) fullyBoatSpeed = value end
 	})
@@ -1129,6 +1129,7 @@ do
 		end
 		sailingSeat = seat
 		seat.MaxSpeed = fullyBoatSpeed
+		pcall(function() sethiddenproperty(player, "SimulationRadius", math.huge) end)
 		local seaDirection = Vector3.new(-0.9999496936798096, 0, -0.010028315708041191)
 		local drivePart = ensureFlyingBoatPhysics(seat, seaDirection)
 		if not drivePart then return end
@@ -1136,8 +1137,12 @@ do
 		local verticalSpeed = math.clamp((flightHeight - drivePart.Position.Y) * 7, -140, 140)
 		sailingVelocity.VectorVelocity = seaDirection * fullyBoatSpeed + Vector3.new(0, verticalSpeed, 0)
 		sailingOrientation.CFrame = CFrame.lookAt(Vector3.zero, seaDirection, Vector3.yAxis)
-		pcall(function() seat.Throttle = 1 end)
-		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+		-- LinearVelocity e o motor nativo nao podem disputar a mesma assembly;
+		-- essa disputa causava rollback (barco indo e voltando).
+		pcall(function()
+			seat.Throttle = 0
+			seat.Steer = 0
+		end)
 	end
 
 	Options.VolcanoFullyEvent:OnChanged(function(value)
