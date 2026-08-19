@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=57"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=58"
     ))()
 end)
 
@@ -2965,124 +2965,37 @@ end
 
 local function CombatSelectedSeaEvent(eventKey, eventModel)
     if not eventModel then return end
-
     SeaHuntState.CurrentEvent = eventModel
     StopFollow()
-
     local target = GetModelTargetPart(eventModel)
     if not target then
         SeaHuntState.CurrentEvent = nil
         return
     end
-
-    local useBasicClick = ClickSeaEvents[eventKey] == true
-
-    local combatState = useBasicClick and "SEA_EVENT_BM_FAST_ATTACK" or "SEA_EVENT_SKILLS"
-
-    SetState(combatState, SeaEventDisplayName(eventKey))
-
-    -- Sea Event selecionado tem prioridade total sobre barco/follow.
-    StopFollow()
+    SetState("SEA_EVENT_BANANA", SeaEventDisplayName(eventKey))
     ForceExitBoatForCombat()
     EnsureSeaCombatHaki()
-
-    -- Controlador Banana substitui integralmente o foco/hover anterior.
     local bananaSea = getgenv().IKARO_BANANA_SEA_COMBAT
-    if bananaSea then
-        bananaSea.Combat(eventKey, eventModel, {
-            Running = function() return Running and not EscapeActive end,
-            UseSkills = UseConfiguredSeaSkills,
-            TargetPart = GetModelTargetPart
-        })
+    if not bananaSea or type(bananaSea.Combat) ~= "function" then
         SeaHuntState.CurrentEvent = nil
-        return
+        error("Módulo Banana Sea Combat não carregado")
     end
-
-    local stopFocus = StartSeaEventFocus(eventKey, eventModel, useBasicClick)
-    if not stopFocus then
-        SeaHuntState.CurrentEvent = nil
-        error("Não foi possível iniciar o foco físico no Sea Event")
-    end
-
-    local started = os.clock()
-    local okCombat, combatError = pcall(function()
-        while Running
-        and SeaHuntState.CurrentEvent == eventModel
-        and IsEventAlive(eventModel)
-        and os.clock() - started < 180 do
-            if eventKey == "Terrorshark" and Humanoid
-            and Humanoid.Health / math.max(Humanoid.MaxHealth, 1) <= 0.65
-            and not EscapeActive then
-                -- O burst do Terror Shark exige sobrevivencia antes do ataque.
-                StartEscape()
-            end
-            if EscapeActive then
-                task.wait(0.25)
-                continue
-            end
-
-            target = GetModelTargetPart(eventModel)
-            if not target then break end
-
-            local distance = HRP and (target.Position - HRP.Position).Magnitude or math.huge
-            local isShipEvent = eventKey == "PirateBrigade"
-                or eventKey == "PirateGrandBrigade"
-                or eventKey == "FishBoat"
-            local attackRange = eventKey == "Leviathan" and 460
-                or eventKey == "SeaBeast" and 340
-                or eventKey == "Terrorshark" and 300
-                or useBasicClick and 120
-                or isShipEvent and 180
-                or 140
-
-            if distance <= attackRange then
-                AimAtSeaTarget(target)
-
-                if eventKey == "Terrorshark" then
-                    -- Mesmo método de hit que já mata as Piranhas.
-                    local banana = getgenv().IKARO_BANANA_COMBAT
-                    if banana then banana.SeaCreatureAttack(eventModel, Character, HRP) end
-                elseif useBasicClick then
-                    -- Mesmo AttackNoCoolDown do Banana para Shark/Piranha:
-                    -- Head, raio 60 e pacote moderno sem atraso de equip.
-                    local banana = getgenv().IKARO_BANANA_COMBAT
-                    if banana then
-                        banana.SeaCreatureAttack(eventModel, Character, HRP)
-                    else
-                        BMFastAttack(target, eventModel, eventKey)
-                    end
-                elseif isShipEvent then
-                    -- Ships no Banana não recebem RegisterHit: mira o Engine
-                    -- e usa somente skills, sem criar outra função no chunk.
-                    local banana = getgenv().IKARO_BANANA_COMBAT
-                    local engine = banana and banana.GetShipAim(eventModel, target) or target
-                    if engine and engine:IsA("BasePart") then
-                        AimAtSeaTarget(engine)
-                        UseConfiguredSeaSkills(engine)
-                    end
-                else
-                    -- Pirate Brigade, Pirate Grand Brigade e Fish Boat usam
-                    -- o perfil de skills configurado, com mira mantida no alvo.
-                    UseConfiguredSeaSkills(target)
-                end
-            end
-
-            task.wait(useBasicClick and 0.05 or 0.12)
-        end
-    end)
-
-    stopFocus()
-
+    local okCombat, defeated = pcall(bananaSea.Combat, eventKey, eventModel, {
+        Running = function()
+            return Running and SeaHuntState.CurrentEvent == eventModel and not EscapeActive
+        end,
+        EquipWeapon = function() return EquipSeaCombatType("Melee") end,
+        UseSkills = UseConfiguredSeaSkills,
+        AimAt = AimAtSeaTarget
+    })
     if not okCombat then
         SeaHuntState.CurrentEvent = nil
-        error(combatError)
+        error(defeated)
     end
-
-    if not IsEventAlive(eventModel) then
+    if defeated or not IsEventAlive(eventModel) then
         SeaHuntState.EventKills = SeaHuntState.EventKills + 1
         SetState("SEA_EVENT_DEFEATED", SeaEventDisplayName(eventKey) .. " | Total: " .. tostring(SeaHuntState.EventKills))
     end
-
     SeaHuntState.CurrentEvent = nil
 end
 
