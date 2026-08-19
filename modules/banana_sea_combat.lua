@@ -128,7 +128,7 @@ function M.Combat(eventKey, eventModel, context)
     local shipSlot = player.UserId % 5
     local shipAngle = math.rad(shipSlot * 72)
     local nextShipSkillAt = os.clock() + shipSlot * 0.30
-    local terrorAngle = math.rad((player.UserId % 5) * 72)
+    local creatureAngle = math.rad((player.UserId % 5) * 72)
 
     local function cleanup()
         restoreCharacterNoclip(collisionCache)
@@ -181,6 +181,10 @@ function M.Combat(eventKey, eventModel, context)
                     -- Mantém a distância real do Head abaixo de 60 mesmo
                     -- durante mergulhos/subidas do boss.
                     creatureSafeY = enemyAimPart.Position.Y + 42
+                elseif eventKey == "Shark" then
+                    -- Shark também muda de altura durante a animação. Usar
+                    -- um Y congelado podia deixar o Head fora do hit válido.
+                    creatureSafeY = enemyAimPart.Position.Y + 24
                 elseif not creatureSafeY then
                     local desiredOffset = eventKey == "Terrorshark" and 42
                         or eventKey == "Shark" and 20
@@ -195,9 +199,15 @@ function M.Combat(eventKey, eventModel, context)
                 if eventKey == "Terrorshark" then
                     -- Cinco contas não ocupam exatamente o mesmo CFrame.
                     horizontalOffset = Vector3.new(
-                        math.cos(terrorAngle) * 12,
+                        math.cos(creatureAngle) * 12,
                         0,
-                        math.sin(terrorAngle) * 12
+                        math.sin(creatureAngle) * 12
+                    )
+                elseif eventKey == "Shark" then
+                    horizontalOffset = Vector3.new(
+                        math.cos(creatureAngle) * 10,
+                        0,
+                        math.sin(creatureAngle) * 10
                     )
                 end
                 local boatPart, boatDistance = nearestBeastHunter(enemyRoot.Position)
