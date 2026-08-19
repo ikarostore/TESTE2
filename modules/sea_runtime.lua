@@ -20,7 +20,7 @@ function M.ResetCombatAttempt(state, virtualInputManager)
 end
 
 function M.DepartureHeight(position, tikiPosition, normalHeight, returningHeart, atSea6)
-    if returningHeart or atSea6 or not position or not tikiPosition then
+    if returningHeart or not position or not tikiPosition then
         return normalHeight
     end
 
@@ -29,7 +29,9 @@ function M.DepartureHeight(position, tikiPosition, normalHeight, returningHeart,
     local horizontalDistance = math.sqrt(deltaX * deltaX + deltaZ * deltaZ)
     -- Tiki possui muralhas e estruturas altas ao redor do cais. Mantém a
     -- altitude de liberação até o barco estar completamente fora da ilha.
-    return horizontalDistance <= 3000 and 400 or normalHeight
+    -- Baseado somente na posição: também funciona após morte, reset, recompra
+    -- ou quando AtSea6 ainda pertence à viagem anterior.
+    return horizontalDistance <= 3000 and 500 or normalHeight
 end
 
 return M

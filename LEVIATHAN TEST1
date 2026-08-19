@@ -14,7 +14,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_SEA_RUNTIME = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=3"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/sea_runtime.lua?v=4"
     ))()
 end)
 pcall(function()
@@ -3458,6 +3458,9 @@ local function BuyBeastHunter(forcePurchase)
         local current = GetBeastHunter()
         if current and (not forcePurchase or current ~= existing) then
             existing = current
+            -- Barco novo inicia uma nova saída de Tiki, mesmo que o anterior
+            -- já tivesse alcançado o Sea 6 antes de ser destruído.
+            SeaHuntState.AtSea6 = false
             break
         end
     until os.clock() >= deadline
@@ -4297,6 +4300,12 @@ local function StartBoatDrive(forceStart)
             local horizontalSpeed = (SeaHuntState.ReturningHeart or navigatingFrozen)
                 and math.min(SeaConfig.BoatSpeed, 180)
                 or SeaConfig.BoatSpeed
+
+            -- Primeiro ganha altura para limpar o castelo de Tiki; depois
+            -- retoma a velocidade de cruzeiro sem teleportar a assembly.
+            if desiredHeight == 500 and drivePart.Position.Y < 440 then
+                horizontalSpeed = math.min(horizontalSpeed, 60)
+            end
 
             -- desacelera um pouco quando chega perto do ponto mapeado
             if not SeaHuntState.AtSea6 and flatDelta.Magnitude < 1500 then
