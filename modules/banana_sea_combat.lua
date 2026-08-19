@@ -58,6 +58,10 @@ function M.Combat(eventKey, eventModel, context)
     if not eventModel or not context then return false end
     local player = Players.LocalPlayer
     local started = os.clock()
+    local nextToolAttack = 0
+    local nextFallbackHit = 0
+    local lastHealth = nil
+    local lastDamageAt = started
     while context.Running() and alive(eventModel) and os.clock() - started < 180 do
         local character = player.Character
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -70,15 +74,49 @@ function M.Combat(eventKey, eventModel, context)
             local enemyRoot = eventModel:FindFirstChild("HumanoidRootPart")
             local enemyHumanoid = eventModel:FindFirstChildOfClass("Humanoid")
             if not enemyRoot or not enemyHumanoid then break end
-            equipBananaWeapon(character, context)
-            enemyRoot.CanCollide = false
-            enemyRoot.Size = Vector3.new(60, 60, 60)
-            enemyHumanoid.WalkSpeed = 0
-            local index = math.floor((os.clock() - started) / 0.2) % #POSITIONS + 1
-            root.CFrame = enemyRoot.CFrame * POSITIONS[index]
+            local tool = equipBananaWeapon(character, context)
+            local isShark = eventKey == "Shark" or eventKey == "Terrorshark"
+            local hitPart = eventModel:FindFirstChild("Head", true) or enemyRoot
+
+            if isShark then
+                -- O rastreamento do Banana fica parado e perto do Head. Trocar
+                -- offsets invalidava o alcance 3D e fazia o servidor descartar hits.
+                local desired = hitPart.Position + Vector3.new(0, 16, 0)
+                root.CFrame = CFrame.lookAt(desired, hitPart.Position)
+            else
+                -- Mantém o comportamento já validado para grupos de Piranhas.
+                enemyRoot.CanCollide = false
+                enemyRoot.Size = Vector3.new(60, 60, 60)
+                enemyHumanoid.WalkSpeed = 0
+                local index = math.floor((os.clock() - started) / 0.2) % #POSITIONS + 1
+                root.CFrame = enemyRoot.CFrame * POSITIONS[index]
+            end
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
-            attackNoCooldown(eventModel, character, root)
+
+            local now = os.clock()
+            if isShark then
+                if lastHealth == nil or enemyHumanoid.Health < lastHealth then
+                    lastDamageAt = now
+                end
+                lastHealth = enemyHumanoid.Health
+
+                -- Cria primeiro o estado legítimo de M1; o próprio jogo gera o
+                -- RegisterHit observado no Banana.
+                if tool and now >= nextToolAttack then
+                    nextToolAttack = now + 0.12
+                    pcall(function() tool:Activate() end)
+                end
+
+                -- Só reproduz Head + {} quando o ataque real ficou mais de um
+                -- segundo sem causar dano, com cadência limitada.
+                if now - lastDamageAt >= 1.10 and now >= nextFallbackHit then
+                    nextFallbackHit = now + 0.24
+                    attackNoCooldown(eventModel, character, root)
+                end
+            else
+                attackNoCooldown(eventModel, character, root)
+            end
         elseif SHIPS[eventKey] then
             local engine = eventModel:FindFirstChild("Engine", true)
                 or eventModel:FindFirstChild("VehicleSeat", true) or eventModel.PrimaryPart
@@ -96,7 +134,7 @@ function M.Combat(eventKey, eventModel, context)
             if context.AimAt then context.AimAt(target) end
             if context.UseSkills then context.UseSkills(target) end
         end
-        task.wait(1e-9)
+        task.wait(CREATURES[eventKey] and 0.03 or 0.05)
     end
     return not alive(eventModel)
 end
