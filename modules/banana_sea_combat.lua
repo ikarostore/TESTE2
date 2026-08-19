@@ -102,8 +102,45 @@ function M.Combat(eventKey, eventModel, context)
             enemyRoot.CanCollide = false
             enemyRoot.Size = Vector3.new(60, 60, 60)
             enemyHumanoid.WalkSpeed = 0
-            local index = math.floor((os.clock() - started) / 0.2) % #POSITIONS + 1
-            root.CFrame = enemyRoot.CFrame * POSITIONS[index]
+            if eventKey == "Shark" then
+                -- O pacote Banana é válido, mas os offsets diagonais de 40+40
+                -- deixam o Shark a 56,6 studs e o servidor descarta o dano.
+                root.CFrame = CFrame.lookAt(
+                    enemyRoot.Position + Vector3.new(0, 20, 0),
+                    enemyRoot.Position
+                )
+            elseif eventKey == "Piranha" then
+                -- Ataca o grupo sem Bring Mob: prepara todas as Piranhas do
+                -- mesmo spawn e posiciona a conta sobre o centro geométrico.
+                -- AttackNoCoolDown inclui todas que ficarem no raio de 60.
+                local enemies = workspace:FindFirstChild("Enemies")
+                local group, center = {}, Vector3.zero
+                for _, mob in ipairs(enemies and enemies:GetChildren() or {}) do
+                    local mobHumanoid = mob:FindFirstChildOfClass("Humanoid")
+                    local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+                    if mob.Name == "Piranha" and mobHumanoid and mobRoot
+                    and mobHumanoid.Health > 0
+                    and (mobRoot.Position - enemyRoot.Position).Magnitude <= 140 then
+                        group[#group + 1] = mob
+                        center = center + mobRoot.Position
+                        mobRoot.CanCollide = false
+                        mobRoot.Size = Vector3.new(60, 60, 60)
+                        mobHumanoid.WalkSpeed = 0
+                    end
+                end
+                if #group > 0 then
+                    center = center / #group
+                    root.CFrame = CFrame.lookAt(
+                        center + Vector3.new(0, 20, 0),
+                        center
+                    )
+                else
+                    root.CFrame = enemyRoot.CFrame * CFrame.new(0, 20, 0)
+                end
+            else
+                local index = math.floor((os.clock() - started) / 0.2) % #POSITIONS + 1
+                root.CFrame = enemyRoot.CFrame * POSITIONS[index]
+            end
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
             attackNoCooldown(eventModel, character, root)
@@ -134,7 +171,10 @@ function M.Combat(eventKey, eventModel, context)
             if context.AimAt then context.AimAt(target) end
             if context.UseSkills then context.UseSkills(target) end
         end
-        task.wait(CREATURES[eventKey] and 1e-9 or 0.05)
+        task.wait(eventKey == "Shark" and 0.05
+            or eventKey == "Piranha" and 0.03
+            or CREATURES[eventKey] and 1e-9
+            or 0.05)
     end
     for part, oldCanCollide in pairs(shipCollisionCache) do
         if part and part.Parent then
