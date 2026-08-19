@@ -1,3 +1,4 @@
+repeat task.wait() until game:IsLoaded() and game:GetService("Players").LocalPlayer
 local v14 = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))();
 local v15 = v14:CreateWindow({
     Title = "IKAROHUB",
@@ -2443,7 +2444,7 @@ function CancelTween(v216)
     if not v216 then
         _G.StopTween = true;
         wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
         wait();
         _G.StopTween = false;
     end
@@ -2546,11 +2547,15 @@ pairs(game:GetService("Players").LocalPlayer.Character:GetDescendants()) do
     end);
 end);
 task.spawn(function()
-    if game.Players.LocalPlayer.Character:FindFirstChild("Stun") then
-        game.Players.LocalPlayer.Character.Stun.Changed:connect(function()
+    local character = game.Players.LocalPlayer.Character
+    local stun = character and character:FindFirstChild("Stun")
+    if stun then
+        stun.Changed:Connect(function()
             pcall(function()
-                if game.Players.LocalPlayer.Character:FindFirstChild("Stun") then
-                    game.Players.LocalPlayer.Character.Stun.Value = 0;
+                local currentCharacter = game.Players.LocalPlayer.Character
+                local currentStun = currentCharacter and currentCharacter:FindFirstChild("Stun")
+                if currentStun then
+                    currentStun.Value = 0;
                 end
             end);
         end);
@@ -2816,13 +2821,15 @@ Enum.EasingDirection.Out), {
         v483:Play()
     end
 end)-- xoá effect mặc định
-if game:GetService("ReplicatedStorage").Effect.Container:FindFirstChild("Death") 
-then
-    game:GetService("ReplicatedStorage").Effect.Container.Death:Destroy();
-end
-if game:GetService("ReplicatedStorage").Effect.Container:FindFirstChild("Respawn") 
-then
-    game:GetService("ReplicatedStorage").Effect.Container.Respawn:Destroy();
+do
+    local effect = game:GetService("ReplicatedStorage"):FindFirstChild("Effect")
+    local container = effect and effect:FindFirstChild("Container")
+    if container then
+        local death = container:FindFirstChild("Death")
+        local respawn = container:FindFirstChild("Respawn")
+        if death then death:Destroy() end
+        if respawn then respawn:Destroy() end
+    end
 end
 v16.Home:AddButton({
     Title = "Tik Tok",
@@ -2918,7 +2925,9 @@ v49:OnChanged(function(v237)
     _G.AutoLevel = v237;
     if (v237 == false) then
         wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+        local character = game:GetService("Players").LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then Tween(root.CFrame) end
         wait();
     end
 end);
@@ -2995,7 +3004,7 @@ v50:OnChanged(function(v238)
     _G.AutoNear = v238;
     if (v238 == false) then
         wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
         wait();
     end
 end);
@@ -3336,7 +3345,7 @@ game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("Bones", "Check
         _G.AutoBone = v571;
         if (v571 == false) then
             wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
             wait();
         end
     end);
@@ -3518,7 +3527,7 @@ string.sub(game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("Cak
         else
             v493 = true;
             wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
             wait();
         end
     end);
@@ -3597,7 +3606,7 @@ v1755:FindFirstChild("HumanoidRootPart") and (v1755.Humanoid.Health > 0)) then
         _G.DoughKing = v576;
         if (v576 == false) then
             wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
             wait();
         end
     end);
@@ -3866,7 +3875,7 @@ v65:OnChanged(function(v256)
     _G.AutoMaterial = v256;
     if (v256 == false) then
         wait();
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
         wait();
     end
 end);
@@ -5172,7 +5181,7 @@ spawn(function()
 0.37091279, 3.071715e-9, - 0.928667724, 3.970995e-8, 1, 1.9167935e-8, 0.928667724, - 4.398698e-8, 0.37091279).Position - 
 game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude <= 100) 
 then
-Tween(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+do local c=game:GetService("Players").LocalPlayer.Character; local r=c and c:FindFirstChild("HumanoidRootPart"); if r then Tween(r.CFrame) end end
                             wait(1);
 game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = 
 game:GetService("Workspace").Map.Jungle.QuestPlates.Plate1.Button.CFrame;
@@ -7520,8 +7529,9 @@ v114:OnChanged(function(v311)
     _G.TeleportPly = v311;
     if (v311 == false) then
         wait();
-        AutoHaki();
-Tween2(game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.CFrame);
+        local character = game:GetService("Players").LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        if root then Tween2(root.CFrame) end
         wait();
     end
 end);
