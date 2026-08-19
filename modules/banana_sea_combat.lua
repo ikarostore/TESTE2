@@ -75,6 +75,21 @@ function M.Combat(eventKey, eventModel, context)
         local humanoid = character and character:FindFirstChildOfClass("Humanoid")
         local root = character and character:FindFirstChild("HumanoidRootPart")
         if not character or not humanoid or not root or humanoid.Health <= 0 then break end
+
+        -- Sobrevivência tem prioridade absoluta. O Terrorshark causa dano em
+        -- rajadas; esperar apenas HealthChanged pode permitir que o loop de
+        -- FastAttack execute novamente antes do Teleport Y assumir controle.
+        local panicFraction = context.PanicHealthFraction
+            and context.PanicHealthFraction() or 0.40
+        if eventKey == "Terrorshark" then
+            panicFraction = math.max(panicFraction, 0.65)
+        end
+        if humanoid.Health / math.max(humanoid.MaxHealth, 1) <= panicFraction then
+            if context.EmergencyEscape then
+                pcall(context.EmergencyEscape)
+            end
+            break
+        end
         humanoid.Sit = false
         autoHaki(character)
 

@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=67"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=69"
     ))()
 end)
 
@@ -2986,7 +2986,13 @@ local function CombatSelectedSeaEvent(eventKey, eventModel)
         end,
         EquipWeapon = function() return EquipSeaCombatType("Melee") end,
         UseSkills = UseConfiguredSeaSkills,
-        AimAt = AimAtSeaTarget
+        AimAt = AimAtSeaTarget,
+        PanicHealthFraction = function()
+            return EscapeStartHealthPercent
+        end,
+        EmergencyEscape = function()
+            StartEscape()
+        end
     })
     if not okCombat then
         SeaHuntState.CurrentEvent = nil
