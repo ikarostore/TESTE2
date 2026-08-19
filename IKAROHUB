@@ -7278,21 +7278,36 @@ end);
 v17.ToggleF:SetValue(true);
 local v99 = v16.Status:AddParagraph({
     Title = "Information",
-    Content = "━━━━━━━━━━━━━━━━━━━━━\n" .. "Name : " .. 
-game.Players.LocalPlayer.DisplayName .. " (@" .. game.Players.LocalPlayer.Name .. 
-")\n" .. "Level : " .. game:GetService("Players").LocalPlayer.Data.Level.Value .. 
-"\n" .. "Beli : " .. game:GetService("Players").LocalPlayer.Data.Beli.Value .. "\n"
-.. "Fragments : " .. game:GetService("Players").LocalPlayer.Data.Fragments.Value ..
-"\n" .. "Wanted Beli : " .. 
-game:GetService("Players").LocalPlayer.leaderstats["Bounty/Honor"].Value .. "\n" ..
-"HP: " .. game.Players.LocalPlayer.Character.Humanoid.Health .. "/" .. 
-game.Players.LocalPlayer.Character.Humanoid.MaxHealth .. "\n" .. "Energy : " .. 
-game.Players.LocalPlayer.Character.Energy.Value .. "/" .. 
-game.Players.LocalPlayer.Character.Energy.MaxValue .. "\n" .. "Race : " .. 
-game:GetService("Players").LocalPlayer.Data.Race.Value .. "\n" .. "Fruit : " .. 
-game:GetService("Players").LocalPlayer.Data.DevilFruit.Value .. "\n" .. 
-"━━━━━━━━━━━━━━━━━━━━━"
+    Content = "Loading player information..."
 });
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            local player = game:GetService("Players").LocalPlayer
+            local character = player.Character
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            local energy = character and character:FindFirstChild("Energy")
+            local data = player:FindFirstChild("Data")
+            local leaderstats = player:FindFirstChild("leaderstats")
+            local bounty = leaderstats and leaderstats:FindFirstChild("Bounty/Honor")
+            local function valueOf(parent, name, fallback)
+                local object = parent and parent:FindFirstChild(name)
+                return object and object.Value or fallback
+            end
+            v99:SetDesc("━━━━━━━━━━━━━━━━━━━━━\n" ..
+                "Name : " .. player.DisplayName .. " (@" .. player.Name .. ")\n" ..
+                "Level : " .. tostring(valueOf(data, "Level", 0)) .. "\n" ..
+                "Beli : " .. tostring(valueOf(data, "Beli", 0)) .. "\n" ..
+                "Fragments : " .. tostring(valueOf(data, "Fragments", 0)) .. "\n" ..
+                "Wanted Beli : " .. tostring(bounty and bounty.Value or 0) .. "\n" ..
+                "HP: " .. tostring(humanoid and math.floor(humanoid.Health) or 0) .. "/" .. tostring(humanoid and math.floor(humanoid.MaxHealth) or 0) .. "\n" ..
+                "Energy : " .. tostring(energy and math.floor(energy.Value) or 0) .. "/" .. tostring(energy and math.floor(energy.MaxValue) or 0) .. "\n" ..
+                "Race : " .. tostring(valueOf(data, "Race", "Unknown")) .. "\n" ..
+                "Fruit : " .. tostring(valueOf(data, "DevilFruit", "None")) .. "\n" ..
+                "━━━━━━━━━━━━━━━━━━━━━")
+        end)
+    end
+end)
 local v100 = v16.Status:AddParagraph({
     Title = "Time",
     Content = ""
@@ -7304,23 +7319,11 @@ local function v101()
     local v288 = string.format("%02i:%02i:%02i %s", ((v286 - 1) % 12) + 1, 
 v285.min, v285.sec, v287);
     local v289 = string.format("%02d/%02d/%04d", v285.day, v285.month, v285.year);
-    local v290 = game:GetService("LocalizationService");
-    local v291 = game:GetService("Players");
-    local v292 = v291.LocalPlayer;
-    local v293 = v292.Name;
-    local v294 = "Unknown";
-    local v295, v296 = pcall(function()
-        return v290:GetCountryRegionForPlayerAsync(v292);
-    end);
-    if v295 then
-        v294 = v296;
-    end
-    v100:SetDesc(v289 .. "-" .. v288 .. " [ " .. v294 .. " ]");
+    v100:SetDesc(v289 .. "-" .. v288);
 end
 spawn(function()
-    while true do
+    while task.wait(1) do
         v101();
-        game:GetService("RunService").RenderStepped:Wait();
     end
 end);
 local v102 = v16.Status:AddParagraph({
