@@ -19,7 +19,7 @@ pcall(function()
 end)
 pcall(function()
     getgenv().IKARO_BANANA_SEA_COMBAT = loadstring(game:HttpGet(
-        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=79"
+        "https://raw.githubusercontent.com/ikarostore/TESTE2/refs/heads/main/modules/banana_sea_combat.lua?v=81"
     ))()
 end)
 
@@ -2118,6 +2118,55 @@ pcall(function()
     SeaVIM = game:GetService("VirtualInputManager")
 end)
 
+-- Mira de skills usada somente durante o pressionamento de Z/X/C/V/F.
+-- Girar camera/HRP nao altera Mouse.Hit nem o Vector3 enviado por varias
+-- armas; por isso os projeteis passavam ao lado dos ships.
+local SeaSkillAimEnv = getgenv and getgenv() or _G
+local SeaSkillMouse = LocalPlayer:GetMouse()
+if not SeaSkillAimEnv.IKARO_SEA_SKILL_HOOKED
+and type(hookmetamethod) == "function"
+and type(newcclosure) == "function" then
+    SeaSkillAimEnv.IKARO_SEA_SKILL_HOOKED = true
+
+    pcall(function()
+        local oldIndex
+        oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, key)
+            if SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_ACTIVE and self == SeaSkillMouse then
+                if key == "Hit" and SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_POSITION then
+                    return CFrame.new(SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_POSITION)
+                elseif key == "Target" and SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_TARGET then
+                    return SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_TARGET
+                end
+            end
+            return oldIndex(self, key)
+        end))
+    end)
+
+    pcall(function()
+        local oldNamecall
+        oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+            local method = getnamecallmethod and getnamecallmethod() or ""
+            if SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_ACTIVE
+            and method == "FireServer"
+            and typeof(self) == "Instance"
+            and SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_POSITION then
+                local args = table.pack(...)
+                for index = 1, args.n do
+                    local kind = typeof(args[index])
+                    if kind == "Vector3" then
+                        args[index] = SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_POSITION
+                        return oldNamecall(self, table.unpack(args, 1, args.n))
+                    elseif kind == "CFrame" then
+                        args[index] = CFrame.new(SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_POSITION)
+                        return oldNamecall(self, table.unpack(args, 1, args.n))
+                    end
+                end
+            end
+            return oldNamecall(self, ...)
+        end))
+    end)
+end
+
 local function EquipSeaCombatType(category)
     if not Humanoid then return nil end
 
@@ -2441,6 +2490,11 @@ local function UseConfiguredSeaSkills(liveTarget)
                 if cfg.Selected[keyName] then
                     local key = Enum.KeyCode[keyName]
                     if key then
+                        if liveTarget and liveTarget.Parent then
+                            SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_POSITION = liveTarget.Position
+                            SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_TARGET = liveTarget
+                            SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_ACTIVE = true
+                        end
                         pcall(function()
                             -- Ships continuam se deslocando durante troca de
                             -- arma/hold. Recalcula a mira para cada habilidade.
@@ -2453,6 +2507,7 @@ local function UseConfiguredSeaSkills(liveTarget)
                             SeaVIM:SendKeyEvent(false, key, false, game)
                             used = true
                         end)
+                        SeaSkillAimEnv.IKARO_SEA_SKILL_AIM_ACTIVE = false
                     end
                 end
             end

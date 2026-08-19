@@ -3,7 +3,6 @@ local M = {}
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local CREATURES = {Terrorshark = true, Piranha = true, Shark = true}
@@ -123,13 +122,11 @@ function M.Combat(eventKey, eventModel, context)
     local lastTargetHealth = nil
     local lastDamageAt = os.clock()
     local shipSkillsBusy = false
-    local shipAimPart = nil
-    local shipAimConnection = nil
-    local activeShipEngine = nil
+    local shipSlot = player.UserId % 5
+    local shipAngle = math.rad(shipSlot * 72)
+    local nextShipSkillAt = os.clock() + shipSlot * 0.30
 
     local function cleanup()
-        if shipAimConnection then shipAimConnection:Disconnect() end
-        if shipAimPart then pcall(function() shipAimPart:Destroy() end) end
         restoreCharacterNoclip(collisionCache)
     end
 
@@ -223,38 +220,22 @@ function M.Combat(eventKey, eventModel, context)
                     or eventModel:FindFirstChild("VehicleSeat", true)
                     or eventModel.PrimaryPart
                 if not engine then break end
-                activeShipEngine = engine
-
-                if not shipAimPart then
-                    shipAimPart = Instance.new("Part")
-                    shipAimPart.Name = "IKARO_NoxShipAim"
-                    shipAimPart.Anchored = true
-                    shipAimPart.CanCollide = false
-                    shipAimPart.CanTouch = false
-                    shipAimPart.CanQuery = false
-                    shipAimPart.Transparency = 1
-                    shipAimPart.Size = Vector3.new(1, 1, 1)
-                    shipAimPart.Parent = Workspace
-                    shipAimConnection = RunService.Heartbeat:Connect(function()
-                        if shipAimPart and shipAimPart.Parent
-                        and activeShipEngine and activeShipEngine.Parent then
-                            shipAimPart.CFrame = activeShipEngine.CFrame * CFrame.new(0, -15, 0)
-                        end
-                    end)
-                end
-
-                -- Nox fica no Engine e mira 15 studs abaixo. O noclip integral
-                -- impede o corpo de transferir força ao casco.
-                root.CFrame = engine.CFrame
+                -- Cada conta ocupa um setor diferente ao redor do ship. Isso
+                -- evita cinco personagens sobrepostos dentro do mesmo Engine.
+                local radial = engine.CFrame.RightVector * (math.cos(shipAngle) * 30)
+                    + engine.CFrame.LookVector * (math.sin(shipAngle) * 30)
+                local shipPosition = engine.Position + radial + Vector3.new(0, 24, 0)
+                root.CFrame = CFrame.lookAt(shipPosition, engine.Position)
                 root.AssemblyLinearVelocity = Vector3.zero
                 root.AssemblyAngularVelocity = Vector3.zero
-                shipAimPart.CFrame = engine.CFrame * CFrame.new(0, -15, 0)
-                if context.AimAt then context.AimAt(shipAimPart) end
-                if context.UseSkills and not shipSkillsBusy then
+                if context.AimAt then context.AimAt(engine) end
+                if context.UseSkills and not shipSkillsBusy
+                and os.clock() >= nextShipSkillAt then
                     shipSkillsBusy = true
                     task.spawn(function()
-                        pcall(context.UseSkills, shipAimPart)
+                        pcall(context.UseSkills, engine)
                         shipSkillsBusy = false
+                        nextShipSkillAt = os.clock() + 0.35 + shipSlot * 0.05
                     end)
                 end
                 task.wait(0.03)
