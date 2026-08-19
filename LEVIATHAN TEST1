@@ -1783,6 +1783,59 @@ local function GetOwnerBeastHunter()
     return nearestBoat
 end
 
+local function GetBeastHunterPassengerSeats(boat)
+    local seats = {}
+    for _, obj in ipairs(boat and boat:GetDescendants() or {}) do
+        if obj:IsA("Seat") and not obj:IsA("VehicleSeat") then
+            local full = string.lower(obj:GetFullName())
+            local isHarpoon = string.find(full, "harpoon", 1, true)
+                or string.find(full, "gunseat", 1, true)
+                or string.find(full, "cannon", 1, true)
+            if not isHarpoon then
+                seats[#seats + 1] = obj
+            end
+        end
+    end
+    table.sort(seats, function(a, b)
+        return a:GetFullName() < b:GetFullName()
+    end)
+    return seats
+end
+
+local function CountBeastHunterPassengers(boat)
+    local count = 0
+    for _, seat in ipairs(GetBeastHunterPassengerSeats(boat)) do
+        if seat.Occupant then count = count + 1 end
+    end
+    return count
+end
+
+local function GetFollowerPassengerSeat(boat)
+    local seats = GetBeastHunterPassengerSeats(boat)
+    if #seats == 0 then return nil end
+
+    for _, seat in ipairs(seats) do
+        if seat.Occupant == Humanoid then return seat end
+    end
+
+    local followers = {}
+    for _, candidate in ipairs(Players:GetPlayers()) do
+        if candidate ~= OwnerPlayer then followers[#followers + 1] = candidate end
+    end
+    table.sort(followers, function(a, b)
+        if a.UserId == b.UserId then return a.Name < b.Name end
+        return a.UserId < b.UserId
+    end)
+
+    local rank = table.find(followers, LocalPlayer) or 1
+    local preferred = seats[((rank - 1) % #seats) + 1]
+    if preferred and not preferred.Occupant then return preferred end
+    for _, seat in ipairs(seats) do
+        if not seat.Occupant then return seat end
+    end
+    return nil
+end
+
 local function StartFollowBeastHunter()
     StopFollow()
 
@@ -1832,6 +1885,33 @@ local function StartFollowBeastHunter()
                 FollowBodyVelocity.Velocity = Vector3.new(0, 0, 0)
             end
             return
+        end
+
+        -- Até quatro seguidores ocupam assentos comuns. VehicleSeat pertence
+        -- ao capitão e Harpoon/GunSeat ficam reservados para o coração.
+        local passengerSeat = GetFollowerPassengerSeat(boat)
+        if passengerSeat then
+            if Humanoid.SeatPart == passengerSeat then
+                if State ~= "SEATED_BEAST_HUNTER" then
+                    SetState("SEATED_BEAST_HUNTER", "Sentado no Beast Hunter de " .. OwnerPlayer.Name)
+                end
+                return
+            end
+            RestoreFollowPhysics()
+            CacheFollowParts()
+            SetFollowNoclip()
+            HRP.CFrame = passengerSeat.CFrame * CFrame.new(0, 2, 0)
+            HRP.AssemblyLinearVelocity = Vector3.zero
+            pcall(function() passengerSeat:Sit(Humanoid) end)
+            if Humanoid.SeatPart == passengerSeat then
+                SetState("SEATED_BEAST_HUNTER", "Sentado no Beast Hunter de " .. OwnerPlayer.Name)
+            end
+            return
+        end
+
+        -- Quatro assentos ocupados: contas excedentes continuam seguindo em voo.
+        if not FollowBodyVelocity or not FollowBodyVelocity.Parent then
+            ApplyFollowPhysics()
         end
 
         local now = os.clock()
@@ -4023,6 +4103,21 @@ local function StartBoatDrive(forceStart)
     if not boat then
         SetState("BOAT_DRIVE_WAIT", "Beast Hunter ainda não apareceu.")
         return
+    end
+
+    -- AutoFind só parte com quatro passageiros. Entrega do coração e testes
+    -- manuais não ficam bloqueados por esta fila de embarque.
+    if AccountBuyBoat and not forceStart and not SeaHuntState.ReturningHeart then
+        if SeaHuntState.WaitingCrew then return end
+        SeaHuntState.WaitingCrew = true
+        while Running and boat.Parent and CountBeastHunterPassengers(boat) < 4 do
+            local seated = CountBeastHunterPassengers(boat)
+            SetState("WAITING_BOAT_CREW", "Aguardando passageiros: " .. tostring(seated) .. "/4")
+            task.wait(0.5)
+            boat = GetBeastHunter() or boat
+        end
+        SeaHuntState.WaitingCrew = false
+        if not Running or not boat or not boat.Parent or SeaHuntState.Driving then return end
     end
 
     TrySeatMainAccount()
