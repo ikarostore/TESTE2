@@ -89,16 +89,15 @@ function M.Combat(eventKey, eventModel, context)
             local hitPart = eventModel:FindFirstChild("Head", true) or enemyRoot
 
             if isShark then
-                -- Método validado no Tyrant: centro a 40 studs e HRP 50x50x50.
-                -- A metade da hitbox (25) deixa a superfície a ~15 studs do
-                -- personagem, dentro do alcance em que o M1 real registra dano.
+                -- O trace confirmou RegisterAttack legítimo, mas nenhum
+                -- RegisterHit a 40 studs. Para Shark/Terrorshark o detector do
+                -- M1 precisa tocar a peça real; não usamos hitbox artificial.
                 enemyRoot.CanCollide = false
-                enemyRoot.Size = Vector3.new(50, 50, 50)
                 hitPart.CanCollide = false
                 local desired = Vector3.new(
-                    enemyRoot.Position.X,
-                    math.max(enemyRoot.Position.Y + 40, 18),
-                    enemyRoot.Position.Z
+                    hitPart.Position.X,
+                    hitPart.Position.Y + 8,
+                    hitPart.Position.Z
                 )
                 root.CFrame = CFrame.lookAt(desired, hitPart.Position)
             else
